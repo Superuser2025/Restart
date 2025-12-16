@@ -39,7 +39,7 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
         self.current_analysis = None  # Store current price action analysis for AI
 
         self.init_ui()
-        self.setup_ai_assist()
+        self.setup_ai_assist("price_action")
 
         # Auto-update timer (every 5 seconds for new commentary)
         self.update_timer = QTimer()

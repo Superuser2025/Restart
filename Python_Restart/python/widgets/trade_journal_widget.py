@@ -37,7 +37,7 @@ class TradeJournalWidget(AIAssistMixin, QWidget):
         self.current_journal_analysis = None  # Store for AI
 
         self.init_ui()
-        self.setup_ai_assist()
+        self.setup_ai_assist("trade_journal")
 
         # Auto-refresh every 5 seconds
         self.refresh_timer = QTimer()

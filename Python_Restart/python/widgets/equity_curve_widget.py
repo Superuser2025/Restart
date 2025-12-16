@@ -100,7 +100,7 @@ class EquityCurveWidget(AIAssistMixin, QWidget):
         self.current_analysis = None  # Store current equity analysis for AI
 
         self.init_ui()
-        self.setup_ai_assist()
+        self.setup_ai_assist("equity_curve")
 
         # Auto-refresh every 2 seconds
         self.refresh_timer = QTimer()
