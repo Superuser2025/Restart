@@ -104,7 +104,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
 
         self.using_real_data = False  # Track if we're using real or demo data
         self.init_ui()
-        self.setup_ai_assist()
+        self.setup_ai_assist("order_flow")
 
         # Auto-refresh every 3 seconds
         self.refresh_timer = QTimer()

@@ -27,6 +27,7 @@ from widgets.news_impact_widget import NewsImpactWidget
 from widgets.risk_reward_widget import RiskRewardWidget
 from widgets.equity_curve_widget import EquityCurveWidget
 from widgets.trade_journal_widget import TradeJournalWidget
+from widgets.dashboard_cards_widget import DashboardCardsWidget
 
 from core.mt5_connector import MT5Connector
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode
@@ -68,6 +69,12 @@ class EnhancedMainWindow(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(5)
+
+        # === DASHBOARD CARDS (Top Summary) ===
+        self.dashboard_cards = DashboardCardsWidget()
+        self.dashboard_cards.setMinimumHeight(90)
+        self.dashboard_cards.setMaximumHeight(120)
+        main_layout.addWidget(self.dashboard_cards)
 
         # === OPPORTUNITY SCANNER ===
         self.scanner_widget = OpportunityScannerWidget()
@@ -241,6 +248,10 @@ class EnhancedMainWindow(QMainWindow):
         """Handle symbol change - MUST UPDATE ALL WIDGETS"""
         self.current_symbol = symbol
         self.status_label.setText(f"Symbol changed to: {symbol}")
+
+        # Update dashboard cards with new symbol
+        if hasattr(self, 'dashboard_cards'):
+            self.dashboard_cards.set_symbol(symbol)
 
         # Update ALL analysis tab widgets with new symbol
         if hasattr(self, 'commentary_widget'):

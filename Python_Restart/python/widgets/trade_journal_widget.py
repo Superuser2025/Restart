@@ -5,16 +5,18 @@ PyQt6 widget for displaying automated trade journal with AI insights
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QGroupBox, QListWidget, QListWidgetItem,
-                            QPushButton, QTextEdit, QFrame, QTabWidget)
+                            QPushButton, QTextEdit, QFrame, QTabWidget, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from typing import Dict, List
 
 from widgets.trade_journal import (trade_journal, TradeJournalEntry,
                                    TradeSetupType)
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 
 
-class TradeJournalWidget(QWidget):
+class TradeJournalWidget(AIAssistMixin, QWidget):
     """
     Automated Trade Journal Display Widget
 
@@ -32,8 +34,10 @@ class TradeJournalWidget(QWidget):
 
         # CRITICAL: Initialize current_symbol BEFORE calling update_from_live_data
         self.current_symbol = "EURUSD"
+        self.current_journal_analysis = None  # Store for AI
 
         self.init_ui()
+        self.setup_ai_assist("trade_journal")
 
         # Auto-refresh every 5 seconds
         self.refresh_timer = QTimer()
@@ -57,6 +61,7 @@ class TradeJournalWidget(QWidget):
         header_layout.addWidget(title)
 
         header_layout.addStretch()
+        self.ai_checkbox_placeholder = header_layout
 
         # Export button
         self.export_btn = QPushButton("💾 Export CSV")
@@ -82,6 +87,9 @@ class TradeJournalWidget(QWidget):
         tabs.addTab(insights_tab, "AI Insights")
 
         layout.addWidget(tabs)
+
+        # AI suggestion frame placeholder
+        self.ai_suggestion_placeholder = layout
 
         # Apply dark theme
         self.apply_dark_theme()
@@ -385,6 +393,17 @@ class TradeJournalWidget(QWidget):
         self.weekly_profit_label.setText(f"${profit:+.2f}")
         self.weekly_profit_label.setStyleSheet(f"color: {profit_color}; border: none;")
 
+        # Store analysis data for AI
+        self.current_journal_analysis = {
+            'best_setup': self._get_best_setup(analysis.get('by_setup', {})),
+            'worst_setup': self._get_worst_setup(analysis.get('by_setup', {})),
+            'best_session': self._get_best_session(analysis.get('by_session', {})),
+            'total_trades': weekly.get('trades', 0),
+            'win_rate': weekly.get('win_rate', 0.0),
+            'avg_rr': analysis.get('avg_r_multiple', 0.0),
+            'trades_today': self._count_trades_today()
+        }
+
         # Update trades list
         self.trades_list.clear()
         recent_trades = trade_journal.get_recent_trades(20)
@@ -409,6 +428,52 @@ class TradeJournalWidget(QWidget):
 
         # Update analysis
         self.update_analysis_displays(analysis)
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_journal_analysis:
+            self.update_ai_suggestions()
+
+    def _get_best_setup(self, by_setup: Dict) -> Dict:
+        """Extract best performing setup"""
+        if not by_setup:
+            return {}
+        best = max(by_setup.items(), key=lambda x: x[1]['win_rate'])
+        return {
+            'name': best[0],
+            'win_rate': best[1]['win_rate'],
+            'count': best[1]['total_trades']
+        }
+
+    def _get_worst_setup(self, by_setup: Dict) -> Dict:
+        """Extract worst performing setup"""
+        if not by_setup:
+            return {}
+        worst = min(by_setup.items(), key=lambda x: x[1]['win_rate'])
+        return {
+            'name': worst[0],
+            'win_rate': worst[1]['win_rate'],
+            'count': worst[1]['total_trades'],
+            'total_loss': worst[1].get('total_profit', 0)  # Negative for losses
+        }
+
+    def _get_best_session(self, by_session: Dict) -> Dict:
+        """Extract best performing session"""
+        if not by_session:
+            return {}
+        best = max(by_session.items(), key=lambda x: x[1].get('profit', 0))
+        return {
+            'name': best[0],
+            'profit': best[1].get('profit', 0),
+            'win_rate': best[1]['win_rate']
+        }
+
+    def _count_trades_today(self) -> int:
+        """Count trades executed today"""
+        from datetime import datetime, date
+        today = date.today()
+        recent_trades = trade_journal.get_recent_trades(100)
+        count = sum(1 for t in recent_trades if t.entry_time.date() == today)
+        return count
 
     def update_analysis_displays(self, analysis: Dict):
         """Update analysis tab displays"""
@@ -488,6 +553,145 @@ class TradeJournalWidget(QWidget):
         self.weaknesses_text.setPlainText("No data")
         self.ai_text.setPlainText("No data")
         self.recommendations_text.setPlainText("No data")
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Load demo journal data
+            self.load_sample_trades()
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_journal_analysis:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Trade Journal switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Advanced AI analysis for trade journal patterns
+
+        Analyzes:
+        - Best/worst setup types
+        - Session performance patterns
+        - Overtrading tendencies
+        - Consistency and discipline
+        - Behavioral patterns and biases
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.current_journal_analysis:
+            return create_ai_suggestion(
+                widget_type="trade_journal",
+                text="Record trades to get AI coaching insights",
+                confidence=0.0
+            )
+
+        # Extract metrics
+        best_setup = self.current_journal_analysis.get('best_setup', {})
+        worst_setup = self.current_journal_analysis.get('worst_setup', {})
+        best_session = self.current_journal_analysis.get('best_session', {})
+        total_trades = self.current_journal_analysis.get('total_trades', 0)
+        win_rate = self.current_journal_analysis.get('win_rate', 0.0)
+        avg_rr = self.current_journal_analysis.get('avg_rr', 0.0)
+        trades_today = self.current_journal_analysis.get('trades_today', 0)
+
+        # OVERTRADING ALERT
+        if trades_today >= 8:
+            return create_ai_suggestion(
+                widget_type="trade_journal",
+                text=f"⚠️ OVERTRADING: {trades_today} trades today! Quality > Quantity. You're forcing trades. Stop for today - you've done enough.",
+                confidence=0.92,
+                emoji="⚠️",
+                color="orange"
+            )
+
+        # EXCELLENT PERFORMANCE PATTERN
+        if best_setup and best_setup.get('win_rate', 0) >= 70.0 and best_setup.get('count', 0) >= 10:
+            setup_name = best_setup.get('name', 'Unknown')
+            setup_wr = best_setup.get('win_rate', 0)
+            setup_count = best_setup.get('count', 0)
+
+            return create_ai_suggestion(
+                widget_type="trade_journal",
+                text=f"🔥 EDGE IDENTIFIED: {setup_name} setup = {setup_wr:.0f}% win rate ({setup_count} trades)! This is your A+ setup. ONLY trade this setup for next week. Ignore everything else!",
+                confidence=0.90,
+                emoji="🔥",
+                color="green"
+            )
+
+        # MAJOR WEAKNESS DETECTED
+        if worst_setup and worst_setup.get('win_rate', 100) < 30.0 and worst_setup.get('count', 0) >= 5:
+            setup_name = worst_setup.get('name', 'Unknown')
+            setup_wr = worst_setup.get('win_rate', 0)
+            setup_loss = worst_setup.get('total_loss', 0)
+
+            return create_ai_suggestion(
+                widget_type="trade_journal",
+                text=f"🛑 STOP TRADING {setup_name}: Only {setup_wr:.0f}% win rate, ${setup_loss:.0f} lost! This setup is costing you money. BAN it from your strategy immediately!",
+                confidence=0.95,
+                emoji="🛑",
+                color="red"
+            )
+
+        # SESSION PATTERN INSIGHT
+        if best_session and best_session.get('profit', 0) > 0:
+            session_name = best_session.get('name', 'Unknown')
+            session_profit = best_session.get('profit', 0)
+            session_wr = best_session.get('win_rate', 0)
+
+            return create_ai_suggestion(
+                widget_type="trade_journal",
+                text=f"✓ BEST SESSION: {session_name} - ${session_profit:.0f} profit, {session_wr:.0f}% WR. Focus trading during this session only. Avoid other times.",
+                confidence=0.85,
+                emoji="✓",
+                color="green"
+            )
+
+        # GOOD CONSISTENCY
+        if total_trades >= 20 and 52.0 <= win_rate <= 58.0 and avg_rr >= 1.8:
+            return create_ai_suggestion(
+                widget_type="trade_journal",
+                text=f"📈 SOLID CONSISTENCY: {total_trades} trades, {win_rate:.0f}% WR, {avg_rr:.1f}R avg. You're trading like a pro! Keep this exact routine.",
+                confidence=0.82,
+                emoji="📈",
+                color="green"
+            )
+
+        # INCONSISTENT RESULTS
+        if total_trades >= 15 and (win_rate < 45.0 or avg_rr < 1.2):
+            return create_ai_suggestion(
+                widget_type="trade_journal",
+                text=f"📉 STRUGGLING: {win_rate:.0f}% WR, {avg_rr:.1f}R avg after {total_trades} trades. Strategy needs work. Reduce size to 0.25% per trade while you fix your edge.",
+                confidence=0.80,
+                emoji="📉",
+                color="orange"
+            )
+
+        # EARLY STAGE
+        if total_trades < 10:
+            return create_ai_suggestion(
+                widget_type="trade_journal",
+                text=f"📊 BUILDING DATA: {total_trades} trades logged. Keep journaling every trade! Need 20+ trades to identify real patterns. Stay patient.",
+                confidence=0.72,
+                emoji="📊",
+                color="blue"
+            )
+
+        # DEFAULT
+        return create_ai_suggestion(
+            widget_type="trade_journal",
+            text=f"Journal: {total_trades} trades, {win_rate:.0f}% WR, {avg_rr:.1f}R avg. Continue logging all trades for pattern analysis.",
+            confidence=0.68,
+            emoji="📝",
+            color="blue"
+        )
 
 
 from datetime import datetime

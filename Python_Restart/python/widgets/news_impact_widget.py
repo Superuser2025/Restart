@@ -125,7 +125,7 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         self.current_events = []  # Store current news events for AI analysis
 
         self.init_ui()
-        self.setup_ai_assist()
+        self.setup_ai_assist("news_impact")
 
         # Auto-refresh every 60 seconds
         self.refresh_timer = QTimer()

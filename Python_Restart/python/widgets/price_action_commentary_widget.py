@@ -4,7 +4,7 @@ Real-time market narrative with predictive analysis
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                            QTextEdit, QFrame, QGroupBox, QPushButton)
+                            QTextEdit, QFrame, QGroupBox, QPushButton, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCharFormat, QColor, QTextCursor
 from datetime import datetime, timedelta
@@ -12,9 +12,11 @@ from typing import List, Dict
 import random
 
 from core.data_manager import data_manager
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 
 
-class PriceActionCommentaryWidget(QWidget):
+class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
     """
     Price Action Commentary Widget
 
@@ -34,8 +36,10 @@ class PriceActionCommentaryWidget(QWidget):
         self.commentary_history = []
         self.last_price = None
         self.price_direction = "NEUTRAL"
+        self.current_analysis = None  # Store current price action analysis for AI
 
         self.init_ui()
+        self.setup_ai_assist("price_action")
 
         # Auto-update timer (every 5 seconds for new commentary)
         self.update_timer = QTimer()
@@ -60,6 +64,9 @@ class PriceActionCommentaryWidget(QWidget):
         header_layout.addWidget(title)
 
         header_layout.addStretch()
+
+        # AI checkbox placeholder
+        self.ai_checkbox_placeholder = header_layout
 
         # Live indicator
         self.live_label = QLabel("🟢 LIVE")
@@ -156,6 +163,9 @@ class PriceActionCommentaryWidget(QWidget):
         levels_group.setLayout(levels_layout)
         layout.addWidget(levels_group)
 
+        # AI suggestion frame placeholder
+        self.ai_suggestion_placeholder = layout
+
         # Apply dark theme
         self.apply_dark_theme()
 
@@ -197,6 +207,19 @@ class PriceActionCommentaryWidget(QWidget):
             if not market_data:
                 return
 
+            # Store analysis data for AI
+            self.current_analysis = {
+                'symbol': market_data.get('symbol', self.current_symbol),
+                'timeframe': self.current_timeframe,
+                'price': market_data['price'],
+                'trend': market_data['trend'],
+                'volatility': market_data['volatility'],
+                'price_change_pct': market_data['price_change_pct'],
+                'high': market_data['high'],
+                'low': market_data['low'],
+                'sma_20': market_data['sma_20']
+            }
+
             # Generate current narrative
             narrative = self.generate_market_narrative(market_data)
             self.narrative_text.setHtml(narrative)
@@ -216,6 +239,10 @@ class PriceActionCommentaryWidget(QWidget):
 
             # Blink live indicator
             self.blink_live_indicator()
+
+            # Update AI if enabled
+            if self.ai_enabled and self.current_analysis:
+                self.update_ai_suggestions()
 
         except Exception as e:
             pass
@@ -446,3 +473,137 @@ class PriceActionCommentaryWidget(QWidget):
         """Update the symbol being analyzed"""
         self.current_symbol = symbol
         self.update_commentary()
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        # This widget uses get_market_data() which automatically handles demo/live
+        self.update_commentary()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_analysis:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Price Action Commentary switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Advanced AI analysis for price action patterns
+
+        Analyzes:
+        - Trend strength and direction
+        - Volatility-based opportunity assessment
+        - Support/resistance level trading strategies
+        - Price action patterns and setups
+        - Risk management for current conditions
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.current_analysis:
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text="Waiting for price data to provide trading insights",
+                confidence=0.0
+            )
+
+        symbol = self.current_analysis.get('symbol', 'EURUSD')
+        timeframe = self.current_analysis.get('timeframe', 'M15')
+        trend = self.current_analysis.get('trend', 'NEUTRAL')
+        volatility = self.current_analysis.get('volatility', 'NORMAL')
+        price_change_pct = self.current_analysis.get('price_change_pct', 0.0)
+        price = self.current_analysis.get('price', 0.0)
+        sma_20 = self.current_analysis.get('sma_20', 0.0)
+
+        # STRONG BULLISH TREND + HIGH VOLATILITY = HIGH CONVICTION ENTRY
+        if trend == "BULLISH" and volatility == "HIGH" and price_change_pct > 0.08:
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text=f"🔥 STRONG BULLISH MOMENTUM on {symbol} {timeframe}! Price +{price_change_pct:.2f}% with high volatility breakout. Wait for pullback to {sma_20:.5f} (20 SMA) then BUY. SL below recent low, TP at {price + 0.003:.5f}. High conviction setup!",
+                confidence=0.93,
+                emoji="🔥",
+                color="green"
+            )
+
+        # STRONG BEARISH TREND + HIGH VOLATILITY = SELL OPPORTUNITY
+        if trend == "BEARISH" and volatility == "HIGH" and price_change_pct < -0.08:
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text=f"🔻 STRONG BEARISH BREAKDOWN on {symbol} {timeframe}! Price {price_change_pct:.2f}% with strong selling pressure. Wait for rally to {sma_20:.5f} (20 SMA) then SELL. SL above recent high, TP at {price - 0.003:.5f}. High probability!",
+                confidence=0.93,
+                emoji="🔻",
+                color="red"
+            )
+
+        # BULLISH TREND + NORMAL VOLATILITY = PULLBACK ENTRY
+        if trend == "BULLISH" and volatility == "NORMAL" and price > sma_20:
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text=f"📈 BULLISH TREND on {symbol} {timeframe}: Price above 20 SMA ({sma_20:.5f}). Best entry: Wait for pullback to SMA, then BUY with tight SL. Trending market = follow the trend. Don't fight it!",
+                confidence=0.85,
+                emoji="📈",
+                color="green"
+            )
+
+        # BEARISH TREND + NORMAL VOLATILITY = RALLY SELL
+        if trend == "BEARISH" and volatility == "NORMAL" and price < sma_20:
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text=f"📉 BEARISH TREND on {symbol} {timeframe}: Price below 20 SMA ({sma_20:.5f}). Best entry: Wait for rally back to SMA resistance, then SELL. Trending down = sell strength. Stay with trend!",
+                confidence=0.85,
+                emoji="📉",
+                color="red"
+            )
+
+        # HIGH VOLATILITY + NEUTRAL TREND = BREAKOUT WATCH
+        if volatility == "HIGH" and trend == "NEUTRAL":
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text=f"⚡ HIGH VOLATILITY on {symbol} {timeframe} but NO CLEAR TREND. Range-bound with big moves = dangerous! Wait for clear breakout above/below range. Don't trade chop - wait for direction!",
+                confidence=0.78,
+                emoji="⚡",
+                color="orange"
+            )
+
+        # NEUTRAL TREND + NORMAL VOLATILITY = RANGE TRADING
+        if trend == "NEUTRAL" and volatility == "NORMAL":
+            support = price - 0.0015
+            resistance = price + 0.0015
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text=f"↔️ RANGE TRADING on {symbol} {timeframe}: Buy support ~{support:.5f}, Sell resistance ~{resistance:.5f}. Tight stops! Or wait for breakout. Range = patience required.",
+                confidence=0.72,
+                emoji="↔️",
+                color="blue"
+            )
+
+        # BULLISH TREND BUT PRICE BELOW SMA = CAUTION
+        if trend == "BULLISH" and price < sma_20:
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text=f"⚠️ {symbol} {timeframe}: Bullish trend BUT price below 20 SMA ({sma_20:.5f}). Pullback in progress. Wait for reclaim above SMA to confirm trend continuation. Don't chase!",
+                confidence=0.70,
+                emoji="⚠️",
+                color="orange"
+            )
+
+        # BEARISH TREND BUT PRICE ABOVE SMA = POTENTIAL REVERSAL
+        if trend == "BEARISH" and price > sma_20:
+            return create_ai_suggestion(
+                widget_type="price_action",
+                text=f"⚠️ {symbol} {timeframe}: Bearish trend BUT price above 20 SMA ({sma_20:.5f}). Possible trend reversal or bounce. Wait for confirmation - either rejection or breakout. No rush!",
+                confidence=0.70,
+                emoji="⚠️",
+                color="orange"
+            )
+
+        # DEFAULT
+        return create_ai_suggestion(
+            widget_type="price_action",
+            text=f"{symbol} {timeframe}: {trend} trend, {volatility.lower()} volatility. Price {price:.5f}, 20 SMA {sma_20:.5f}. Wait for clear setup before entry.",
+            confidence=0.65,
+            emoji="📊",
+            color="blue"
+        )

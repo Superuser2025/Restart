@@ -39,13 +39,13 @@ class FilterManager:
         self.regime_strategy = True
 
         # PROFESSIONAL THRESHOLDS (dynamic, not static)
-        self.min_quality_score = 60  # Minimum 60/100 quality score
-        self.min_pattern_strength = 5  # Minimum 5/10 pattern strength
-        self.max_spread_pct_of_atr = 0.30  # Spread must be < 30% of ATR
-        self.min_rr_ratio = 1.5  # Minimum 1.5:1 risk/reward
-        self.avoid_asian_session = True  # Avoid Asian chop by default
+        self.min_quality_score = 40  # RELAXED: Minimum 40/100 (was 60) to show more opportunities
+        self.min_pattern_strength = 3  # RELAXED: Minimum 3/10 (was 5) pattern strength
+        self.max_spread_pct_of_atr = 0.50  # RELAXED: Spread < 50% of ATR (was 30%)
+        self.min_rr_ratio = 1.2  # RELAXED: Minimum 1.2:1 (was 1.5:1) risk/reward
+        self.avoid_asian_session = False  # DISABLED: Show all sessions (was True)
         self.require_mtf_alignment = False  # Optional strict MTF requirement
-        self.min_session_quality = 5  # Minimum session quality (0-10)
+        self.min_session_quality = 0  # RELAXED: Accept all sessions (was 5)
 
     def set_filter(self, filter_name: str, enabled: bool):
         """Enable/disable a specific filter"""
@@ -98,9 +98,9 @@ class FilterManager:
         # VOLUME FILTER - Dynamic threshold (must be adequate)
         if self.volume_filter:
             volume = opportunity.get('volume', 0)
-            # Minimum volume: 100 for H4, 150 for H1, 200 for M5
+            # RELAXED: Lower minimum volumes to show more opportunities
             timeframe = opportunity.get('timeframe', 'H1')
-            min_volume = {'M5': 200, 'M15': 180, 'M30': 150, 'H1': 150, 'H4': 100}.get(timeframe, 100)
+            min_volume = {'M5': 50, 'M15': 50, 'M30': 50, 'H1': 50, 'H4': 50}.get(timeframe, 50)
             if volume < min_volume:
                 return False
 
