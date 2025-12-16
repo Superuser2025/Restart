@@ -11,17 +11,21 @@ from typing import Dict, Optional
 from datetime import datetime
 
 from widgets.mtf_structure_map import mtf_structure_map
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.multi_symbol_manager import get_all_symbols
 
 
-class MTFStructureWidget(QWidget):
+class MTFStructureWidget(QWidget, AIAssistMixin):
     """
-    Multi-Timeframe Structure Map Display Widget
+    Multi-Timeframe Structure Map Display Widget (AI-Enhanced)
 
     Shows:
     - Trend per timeframe (W1/D1/H4/H1/M15)
     - Key support/resistance levels
     - Confluence zones highlighted
     - Distance to nearest structure
+    - AI-powered structure analysis
     """
 
     structure_updated = pyqtSignal(dict)  # Emits structure data
@@ -30,15 +34,22 @@ class MTFStructureWidget(QWidget):
         super().__init__(parent)
         self.current_symbol = "EURUSD"
         self.structure_data = None
+
+        # Setup AI assistance
+        self.setup_ai_assist("mtf_structure")
+
         self.init_ui()
 
-        # Auto-refresh every 5 seconds with LIVE data
+        # Connect to demo mode changes
+        demo_mode_manager.mode_changed.connect(self.on_mode_changed)
+
+        # Auto-refresh every 5 seconds
         self.refresh_timer = QTimer()
-        self.refresh_timer.timeout.connect(self.update_from_live_data)
+        self.refresh_timer.timeout.connect(self.update_data)
         self.refresh_timer.start(5000)
 
-        # NO SAMPLE DATA - use live data from data_manager
-        self.update_from_live_data()
+        # Initial update
+        self.update_data()
 
     def update_from_live_data(self):
         """Update with live data from data_manager"""
@@ -59,6 +70,9 @@ class MTFStructureWidget(QWidget):
         header_layout.addWidget(title)
 
         header_layout.addStretch()
+
+        # AI Assist checkbox
+        self.create_ai_checkbox(header_layout)
 
         # Refresh button
         self.refresh_btn = QPushButton("🔄 Refresh")
@@ -109,6 +123,9 @@ class MTFStructureWidget(QWidget):
 
         confluence_group.setLayout(confluence_layout)
         layout.addWidget(confluence_group)
+
+        # === AI SUGGESTION FRAME ===
+        self.create_ai_suggestion_frame(layout)
 
         # === STATUS ===
         self.status_label = QLabel("Status: Ready")
@@ -262,6 +279,141 @@ class MTFStructureWidget(QWidget):
         if symbol != self.current_symbol:
             self.current_symbol = symbol
             self.on_refresh_requested()
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Get demo MTF structure data
+            demo_data = get_demo_data('mtf_structure', symbol=self.current_symbol)
+            if demo_data:
+                # Transform demo data to expected format
+                current_price = 1.0850
+                structure_data = {
+                    'trend_analysis': {
+                        'M15': demo_data.get('m15_trend', 'UNKNOWN'),
+                        'H1': demo_data.get('h1_trend', 'UNKNOWN'),
+                        'H4': demo_data.get('h4_trend', 'UNKNOWN'),
+                        'D1': demo_data.get('d1_trend', 'NEUTRAL'),
+                        'H4 ': demo_data.get('h4_trend', 'UNKNOWN')  # Duplicate for 5-item display
+                    },
+                    'nearest_support': {
+                        'price': demo_data.get('key_support', 1.0750),
+                        'timeframe': 'H4'
+                    },
+                    'nearest_resistance': {
+                        'price': demo_data.get('key_resistance', 1.0950),
+                        'timeframe': 'H1'
+                    },
+                    'current_price': current_price,
+                    'confluence_zones': []  # No confluence zones in demo
+                }
+                self.update_structure_data(structure_data)
+                self.status_label.setText(f"Demo Mode - {self.current_symbol}")
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.structure_data:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"MTF Structure widget switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Custom AI analysis for MTF structure
+
+        Args:
+            prediction: ML prediction data from ml_integration
+            widget_data: Current structure data
+
+        Returns:
+            Formatted suggestion dictionary
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.structure_data:
+            return create_ai_suggestion(
+                widget_type="mtf_structure",
+                text="No structure data available",
+                confidence=0.0
+            )
+
+        # Analyze trend alignment across timeframes
+        trends = self.structure_data.get('trends', {})
+        bullish_count = sum(1 for t in trends.values() if 'BULLISH' in str(t).upper())
+        bearish_count = sum(1 for t in trends.values() if 'BEARISH' in str(t).upper())
+        total_tfs = len(trends)
+
+        # Calculate alignment score
+        alignment_score = max(bullish_count, bearish_count) / total_tfs if total_tfs > 0 else 0
+
+        if alignment_score >= 0.8:
+            confidence = 0.90
+            alignment = "VERY STRONG"
+            action_emoji = "🔥"
+            action = f"{max(bullish_count, bearish_count)}/{total_tfs} timeframes aligned"
+            color = "green"
+        elif alignment_score >= 0.6:
+            confidence = 0.75
+            alignment = "STRONG"
+            action_emoji = "✓"
+            action = f"{max(bullish_count, bearish_count)}/{total_tfs} timeframes aligned"
+            color = "green"
+        elif alignment_score >= 0.4:
+            confidence = 0.55
+            alignment = "MODERATE"
+            action_emoji = "⚠️"
+            action = "Mixed timeframe structure"
+            color = "yellow"
+        else:
+            confidence = 0.35
+            alignment = "WEAK"
+            action_emoji = "❌"
+            action = "Conflicting timeframe signals"
+            color = "red"
+
+        # Determine direction
+        if bullish_count > bearish_count:
+            direction = "BULLISH"
+        elif bearish_count > bullish_count:
+            direction = "BEARISH"
+        else:
+            direction = "NEUTRAL"
+
+        # Build suggestion text
+        suggestion_text = f"{action}\n\n"
+        suggestion_text += f"📊 Trend Alignment: {alignment} ({alignment_score:.0%})\n"
+        suggestion_text += f"📈 Direction: {direction}\n"
+        suggestion_text += f"⏰ Bullish TFs: {bullish_count}/{total_tfs}\n"
+        suggestion_text += f"⏰ Bearish TFs: {bearish_count}/{total_tfs}\n\n"
+
+        # Add recommendation
+        if alignment_score >= 0.8:
+            suggestion_text += "💡 AI Recommendation:\n"
+            suggestion_text += f"✓ Excellent MTF alignment for {direction.lower()} trades\n"
+            suggestion_text += "✓ High probability directional moves\n"
+            suggestion_text += "✓ Trade with trend on all timeframes"
+        elif alignment_score >= 0.6:
+            suggestion_text += "💡 AI Recommendation:\n"
+            suggestion_text += f"✓ Good MTF alignment for {direction.lower()} bias\n"
+            suggestion_text += "⚠️ Watch for pullbacks on conflicting timeframes"
+        else:
+            suggestion_text += "💡 AI Recommendation:\n"
+            suggestion_text += "❌ Poor MTF alignment - avoid directional trades\n"
+            suggestion_text += "⚠️ Wait for timeframes to align or trade range"
+
+        return create_ai_suggestion(
+            widget_type="mtf_structure",
+            text=suggestion_text,
+            confidence=confidence,
+            emoji=action_emoji,
+            color=color
+        )
 
     def on_refresh_requested(self):
         """Handle refresh request - external handler should provide new data"""

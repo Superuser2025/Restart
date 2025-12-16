@@ -11,6 +11,9 @@ from PyQt6.QtGui import QFont, QColor
 from typing import Dict, List, Optional
 
 from widgets.risk_reward_optimizer import risk_reward_optimizer
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.multi_symbol_manager import get_all_symbols
 
 
 class TPLevelWidget(QWidget):
@@ -96,9 +99,9 @@ class TPLevelWidget(QWidget):
         """)
 
 
-class RiskRewardWidget(QWidget):
+class RiskRewardWidget(QWidget, AIAssistMixin):
     """
-    Risk-Reward Optimizer Display Widget
+    Risk-Reward Optimizer Display Widget (AI-Enhanced)
 
     Shows:
     - Optimized TP levels at structure
@@ -106,7 +109,7 @@ class RiskRewardWidget(QWidget):
     - Probability of reaching each level
     - Partial close percentages
     - Total expected value
-    - Trading recommendation
+    - AI-powered trade recommendations
     """
 
     tp_calculated = pyqtSignal(dict)  # Emits TP analysis
@@ -115,16 +118,23 @@ class RiskRewardWidget(QWidget):
         super().__init__(parent)
         self.current_symbol = "EURUSD"
         self.current_analysis = None
+
+        # Setup AI assistance
+        self.setup_ai_assist("risk_reward")
+
         self.init_ui()
+
+        # Connect to demo mode changes
+        demo_mode_manager.mode_changed.connect(self.on_mode_changed)
 
         # Auto-refresh timer
         from PyQt6.QtCore import QTimer
         self.refresh_timer = QTimer()
-        self.refresh_timer.timeout.connect(self.update_from_live_data)
+        self.refresh_timer.timeout.connect(self.update_data)
         self.refresh_timer.start(3000)
 
-        # Initial update with live data
-        self.update_from_live_data()
+        # Initial update
+        self.update_data()
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -133,9 +143,18 @@ class RiskRewardWidget(QWidget):
         layout.setSpacing(5)
 
         # === HEADER ===
+        header_layout = QHBoxLayout()
+
         title = QLabel("🎯 Risk-Reward Optimizer")
         title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        # AI Assist checkbox
+        self.create_ai_checkbox(header_layout)
+
+        layout.addLayout(header_layout)
 
         # === TRADE SETUP ===
         setup_group = QGroupBox("Trade Setup")
@@ -227,6 +246,9 @@ class RiskRewardWidget(QWidget):
 
         rec_group.setLayout(rec_layout)
         layout.addWidget(rec_group)
+
+        # === AI SUGGESTION FRAME ===
+        self.create_ai_suggestion_frame(layout)
 
         layout.addStretch()
 
@@ -431,6 +453,113 @@ class RiskRewardWidget(QWidget):
 
         # Update recommendation
         self.recommendation_text.setPlainText(analysis['recommendation'])
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # In demo mode, use preset values for demonstration
+            pass  # Risk/Reward uses manual inputs, no demo data needed
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_analysis:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Risk/Reward Optimizer widget switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Custom AI analysis for risk/reward optimization
+
+        Args:
+            prediction: ML prediction data from ml_integration
+            widget_data: Current TP analysis
+
+        Returns:
+            Formatted suggestion dictionary
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.current_analysis:
+            return create_ai_suggestion(
+                widget_type="risk_reward",
+                text="Calculate TPs to get AI analysis",
+                confidence=0.0
+            )
+
+        tp_levels = self.current_analysis.get('tp_levels', [])
+        total_ev = self.current_analysis.get('total_expected_value', 0)
+
+        if not tp_levels:
+            return create_ai_suggestion(
+                widget_type="risk_reward",
+                text="No TP levels calculated",
+                confidence=0.0
+            )
+
+        # Analyze TP quality
+        best_tp = max(tp_levels, key=lambda x: x['quality_stars'])
+        avg_quality = sum(tp['quality_stars'] for tp in tp_levels) / len(tp_levels)
+
+        if avg_quality >= 4.5:
+            confidence = 0.90
+            quality = "EXCELLENT"
+            action_emoji = "🔥"
+            action = f"Exceptional TP structure alignment"
+            color = "green"
+        elif avg_quality >= 3.5:
+            confidence = 0.80
+            quality = "GOOD"
+            action_emoji = "✓"
+            action = f"Good TP levels at key structure"
+            color = "green"
+        elif avg_quality >= 2.5:
+            confidence = 0.65
+            quality = "MODERATE"
+            action_emoji = "⚠️"
+            action = f"Moderate TP quality"
+            color = "yellow"
+        else:
+            confidence = 0.40
+            quality = "POOR"
+            action_emoji = "❌"
+            action = f"Weak TP structure alignment"
+            color = "red"
+
+        # Build suggestion text
+        suggestion_text = f"{action}\n\n"
+        suggestion_text += f"⭐ Average Quality: {avg_quality:.1f}/5 ({quality})\n"
+        suggestion_text += f"🎯 Best TP: {best_tp['r_multiple']:.1f}R ({best_tp['quality_stars']}⭐)\n"
+        suggestion_text += f"💰 Total EV: +{total_ev:.1f}R\n\n"
+
+        # Add recommendation
+        if avg_quality >= 4:
+            suggestion_text += "💡 AI Recommendation:\n"
+            suggestion_text += "✓ Excellent structure alignment - high confidence setup\n"
+            suggestion_text += "✓ Consider taking full position size\n"
+            suggestion_text += f"✓ Follow partial close plan ({len(tp_levels)} TPs)"
+        elif avg_quality >= 3:
+            suggestion_text += "💡 AI Recommendation:\n"
+            suggestion_text += "✓ Good TP structure - proceed with trade\n"
+            suggestion_text += "⚠️ Consider reducing size slightly for lower quality TPs"
+        else:
+            suggestion_text += "💡 AI Recommendation:\n"
+            suggestion_text += "❌ Weak structure - reconsider trade setup\n"
+            suggestion_text += "❌ Look for better entry or wait for structure to form"
+
+        return create_ai_suggestion(
+            widget_type="risk_reward",
+            text=suggestion_text,
+            confidence=confidence,
+            emoji=action_emoji,
+            color=color
+        )
 
     def set_direction(self, direction: str):
         """Set trade direction"""

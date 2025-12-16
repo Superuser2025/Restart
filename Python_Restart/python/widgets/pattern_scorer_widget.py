@@ -11,6 +11,9 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from widgets.pattern_scorer import pattern_scorer, PatternScore
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.multi_symbol_manager import get_all_symbols
 
 
 # Simple theme and settings (inline replacement for config module)
@@ -40,9 +43,9 @@ class SimpleSettings:
 settings = SimpleSettings()
 
 
-class PatternScorerWidget(QWidget):
+class PatternScorerWidget(QWidget, AIAssistMixin):
     """
-    Visual display widget for pattern quality scores
+    Visual display widget for pattern quality scores (AI-Enhanced)
 
     Shows:
     - Overall score (0-100)
@@ -50,6 +53,7 @@ class PatternScorerWidget(QWidget):
     - Score breakdown by factor
     - Historical win rate
     - Recommendation
+    - AI-powered pattern validation
     """
 
     def __init__(self):
@@ -58,16 +62,22 @@ class PatternScorerWidget(QWidget):
         self.current_symbol = "EURUSD"
         self.current_score: PatternScore = None
 
+        # Setup AI assistance
+        self.setup_ai_assist("pattern_scorer")
+
         self.init_ui()
+
+        # Connect to demo mode changes
+        demo_mode_manager.mode_changed.connect(self.on_mode_changed)
 
         # Auto-refresh timer
         from PyQt6.QtCore import QTimer
         self.refresh_timer = QTimer()
-        self.refresh_timer.timeout.connect(self.update_from_live_data)
+        self.refresh_timer.timeout.connect(self.update_data)
         self.refresh_timer.start(3000)
 
-        # Initial update with live data
-        self.update_from_live_data()
+        # Initial update
+        self.update_data()
 
     def init_ui(self):
         """Initialize user interface"""
@@ -79,6 +89,8 @@ class PatternScorerWidget(QWidget):
         # ============================================================
         # HEADER
         # ============================================================
+        header_layout = QHBoxLayout()
+
         header = QLabel("⭐ PATTERN QUALITY SCORER")
         header.setStyleSheet(f"""
             QLabel {{
@@ -89,7 +101,13 @@ class PatternScorerWidget(QWidget):
                 border: none;
             }}
         """)
-        layout.addWidget(header)
+        header_layout.addWidget(header)
+        header_layout.addStretch()
+
+        # AI Assist checkbox
+        self.create_ai_checkbox(header_layout)
+
+        layout.addLayout(header_layout)
 
         # ============================================================
         # PATTERN INFO
@@ -123,6 +141,11 @@ class PatternScorerWidget(QWidget):
         recommendation_frame = self.create_recommendation_section()
         layout.addWidget(recommendation_frame)
 
+        # ============================================================
+        # AI SUGGESTION FRAME
+        # ============================================================
+        self.create_ai_suggestion_frame(layout)
+
         layout.addStretch()
 
     def update_from_live_data(self):
@@ -131,6 +154,126 @@ class PatternScorerWidget(QWidget):
         symbol = self.current_symbol
         # Pattern scores are updated externally via update_score()
         self.current_symbol = symbol
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Get demo pattern data
+            demo_data = get_demo_data('pattern_scorer', symbols=[self.current_symbol])
+            if demo_data:
+                # Convert demo dict to PatternScore object
+                from datetime import datetime
+
+                total_score = demo_data.get('total_score', 75)
+                pattern_score = PatternScore(
+                    total_score=total_score,
+                    zone_alignment_score=int(total_score * 0.20),
+                    volume_score=int(total_score * 0.25),
+                    liquidity_score=int(total_score * 0.15),
+                    mtf_score=int(total_score * 0.15),
+                    session_score=int(total_score * 0.10),
+                    structure_score=int(total_score * 0.10),
+                    historical_score=int(total_score * 0.05),
+                    pattern_type=demo_data.get('pattern_type', 'Unknown'),
+                    price_level=demo_data.get('entry_price', 1.0850),
+                    timestamp=datetime.now(),
+                    historical_win_rate=demo_data.get('historical_win_rate', 65.0) / 100.0,
+                    historical_avg_rr=demo_data.get('risk_reward', 2.5),
+                    historical_sample_size=50,
+                    quality_tier="STRONG" if total_score >= 75 else "GOOD" if total_score >= 60 else "WEAK",
+                    stars=5 if total_score >= 90 else 4 if total_score >= 75 else 3 if total_score >= 60 else 2,
+                    recommendation=f"{demo_data.get('pattern_type', 'Pattern')} with {total_score}% confidence"
+                )
+                self.update_score(pattern_score)
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_score:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Pattern Scorer widget switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Custom AI analysis for pattern scoring
+
+        Args:
+            prediction: ML prediction data from ml_integration
+            widget_data: Current pattern score data
+
+        Returns:
+            Formatted suggestion dictionary
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.current_score:
+            return create_ai_suggestion(
+                widget_type="pattern_scorer",
+                text="No pattern detected yet",
+                confidence=0.0
+            )
+
+        score = self.current_score.total_score
+        pattern_type = self.current_score.pattern_type
+        win_rate = self.current_score.historical_win_rate
+
+        # Analyze pattern quality
+        if score >= 85:
+            confidence = 0.90
+            quality = "EXCELLENT"
+            action_emoji = "🔥"
+            action = f"{pattern_type} pattern is very high quality"
+            color = "green"
+        elif score >= 75:
+            confidence = 0.80
+            quality = "GOOD"
+            action_emoji = "✓"
+            action = f"{pattern_type} pattern quality is good"
+            color = "green"
+        elif score >= 60:
+            confidence = 0.65
+            quality = "MODERATE"
+            action_emoji = "⚠️"
+            action = f"{pattern_type} pattern quality is moderate"
+            color = "yellow"
+        else:
+            confidence = 0.40
+            quality = "POOR"
+            action_emoji = "❌"
+            action = f"{pattern_type} pattern quality is poor"
+            color = "red"
+
+        # Build suggestion text
+        suggestion_text = f"{action}\n\n"
+        suggestion_text += f"📊 Pattern Score: {score:.0f}/100 ({quality})\n"
+        suggestion_text += f"📈 Historical Win Rate: {win_rate:.1f}%\n"
+        suggestion_text += f"🎯 Pattern Type: {pattern_type}\n\n"
+
+        # Add recommendation
+        if score >= 75 and win_rate >= 60:
+            suggestion_text += "💡 Recommendation: Pattern confirms trade setup\n"
+            suggestion_text += "✓ High probability setup based on historical performance\n"
+            suggestion_text += "✓ Pattern quality supports entry decision"
+        elif score >= 60:
+            suggestion_text += "💡 Recommendation: Pattern provides moderate confirmation\n"
+            suggestion_text += "⚠️ Wait for additional confirmation signals"
+        else:
+            suggestion_text += "💡 Recommendation: Pattern unreliable for trading\n"
+            suggestion_text += "❌ Low quality - do not trade based on this pattern alone"
+
+        return create_ai_suggestion(
+            widget_type="pattern_scorer",
+            text=suggestion_text,
+            confidence=confidence,
+            emoji=action_emoji,
+            color=color
+        )
 
     def create_score_card(self) -> QFrame:
         """Create overall score display card"""
