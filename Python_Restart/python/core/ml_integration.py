@@ -3,6 +3,11 @@ ML Integration Layer - Connects Python Dashboard to EA ML System
 
 This module provides the bridge between the Python GUI and the EA's ML system.
 It reads predictions from ML_Data/ directory and provides them to widgets.
+
+Features:
+- Symbol-aware predictions (multi-symbol support)
+- Demo mode integration
+- Caches predictions per symbol
 """
 
 import json
@@ -132,13 +137,14 @@ class MLIntegration:
             logger.error(f"Error reading features: {e}")
             return None
 
-    def get_prediction_for_widget(self, widget_type: str) -> Optional[Dict[str, Any]]:
+    def get_prediction_for_widget(self, widget_type: str, symbol: str = None) -> Optional[Dict[str, Any]]:
         """
-        Get ML prediction specific to a widget type
+        Get ML prediction specific to a widget type and symbol
 
         Args:
             widget_type: Type of widget requesting prediction
                         (e.g., 'session_momentum', 'pattern_scorer', etc.)
+            symbol: Optional symbol to get prediction for
 
         Returns:
             Widget-specific prediction or None
@@ -148,12 +154,33 @@ class MLIntegration:
         if prediction is None:
             return None
 
+        # Try to get symbol-specific prediction first
+        if symbol and 'symbols' in prediction and symbol in prediction['symbols']:
+            symbol_pred = prediction['symbols'][symbol]
+
+            # Extract widget-specific data if available
+            if widget_type in symbol_pred:
+                return symbol_pred[widget_type]
+
+            # Return general symbol prediction
+            return {
+                'symbol': symbol,
+                'probability': symbol_pred.get('probability', 0.5),
+                'confidence': symbol_pred.get('confidence', 0.5),
+                'signal': symbol_pred.get('signal', 'NEUTRAL'),
+                'reasoning': symbol_pred.get('reasoning', f'ML analysis for {symbol}'),
+            }
+
         # Extract widget-specific prediction if available
         if widget_type in prediction:
-            return prediction[widget_type]
+            pred_data = prediction[widget_type]
+            if symbol:
+                pred_data['symbol'] = symbol
+            return pred_data
 
         # Return general prediction otherwise
         return {
+            'symbol': symbol or 'UNKNOWN',
             'probability': prediction.get('probability', 0.5),
             'confidence': prediction.get('confidence', 0.5),
             'signal': prediction.get('signal', 'NEUTRAL'),
@@ -243,10 +270,19 @@ ml_integration = MLIntegration()
 
 
 # Convenience functions for widgets
-def get_ml_prediction(widget_type: str = None) -> Optional[Dict[str, Any]]:
-    """Get ML prediction (widget-specific if type provided)"""
+def get_ml_prediction(widget_type: str = None, symbol: str = None) -> Optional[Dict[str, Any]]:
+    """
+    Get ML prediction (widget and symbol specific if provided)
+
+    Args:
+        widget_type: Optional widget type for specific predictions
+        symbol: Optional symbol for symbol-specific predictions
+
+    Returns:
+        Prediction dictionary or None
+    """
     if widget_type:
-        return ml_integration.get_prediction_for_widget(widget_type)
+        return ml_integration.get_prediction_for_widget(widget_type, symbol)
     return ml_integration.get_current_prediction()
 
 
