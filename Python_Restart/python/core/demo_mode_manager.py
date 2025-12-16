@@ -64,15 +64,20 @@ class DemoModeManager(QObject):
             symbols = self._symbols
 
         sessions = ["London", "NY", "Asian"]
+        directions = ["BULLISH", "BEARISH"]
         data = []
 
         for symbol in symbols:
+            momentum_score = random.randint(50, 95)
             data.append({
                 'symbol': symbol,
-                'momentum_score': random.randint(50, 95),
+                'momentum_score': momentum_score,
+                'session_range_pips': random.randint(30, 150),
+                'direction': random.choice(directions),
+                'trending_strength': random.randint(40, 95),
                 'session': random.choice(sessions),
-                'atr': round(random.uniform(0.0010, 0.0050), 5),
                 'volume_ratio': round(random.uniform(0.8, 2.5), 2),
+                'hourly_volatility': round(random.uniform(0.0010, 0.0050), 5),
             })
 
         # Sort by momentum score
