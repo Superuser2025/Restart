@@ -190,10 +190,16 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
             widget_data: Current widget data (leaderboard)
 
         Returns:
-            Formatted suggestion text
+            Formatted suggestion dictionary
         """
+        from core.ml_integration import create_ai_suggestion
+
         if not self.leaderboard_data:
-            return "No momentum data available for analysis"
+            return create_ai_suggestion(
+                widget_type="session_momentum",
+                text="No momentum data available for analysis",
+                confidence=0.0
+            )
 
         # Get top momentum pair
         top_pair = self.leaderboard_data[0]
@@ -206,39 +212,53 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
         if momentum >= 85:
             confidence = 0.85
             strength = "VERY STRONG"
-            action = f"🔥 Prime opportunity on {symbol}"
+            action_emoji = "🔥"
+            action = f"Prime opportunity on {symbol}"
+            color = "green"
         elif momentum >= 75:
             confidence = 0.75
             strength = "STRONG"
-            action = f"⚡ Good momentum on {symbol}"
+            action_emoji = "⚡"
+            action = f"Good momentum on {symbol}"
+            color = "green"
         elif momentum >= 65:
             confidence = 0.65
             strength = "MODERATE"
-            action = f"✓ Decent setup on {symbol}"
+            action_emoji = "✓"
+            action = f"Decent setup on {symbol}"
+            color = "yellow"
         else:
             confidence = 0.50
             strength = "WEAK"
-            action = f"⚠️ Low momentum on {symbol}"
+            action_emoji = "⚠️"
+            action = f"Low momentum on {symbol}"
+            color = "red"
 
         # Build suggestion text
-        suggestion = f"{action}\n\n"
-        suggestion += f"📊 Momentum: {momentum:.0f}% ({strength})\n"
-        suggestion += f"📈 Direction: {direction}\n"
-        suggestion += f"📏 Session Range: {pips:.0f} pips\n\n"
+        suggestion_text = f"{action}\n\n"
+        suggestion_text += f"📊 Momentum: {momentum:.0f}% ({strength})\n"
+        suggestion_text += f"📈 Direction: {direction}\n"
+        suggestion_text += f"📏 Session Range: {pips:.0f} pips\n\n"
 
         # Add recommendation
         if momentum >= 75:
-            suggestion += f"💡 Recommendation: Consider {direction.lower()} entry\n"
-            suggestion += f"✓ Strong trend + volume + session alignment\n"
-            suggestion += f"✓ Risk/Reward should be favorable"
+            suggestion_text += f"💡 Recommendation: Consider {direction.lower()} entry\n"
+            suggestion_text += f"✓ Strong trend + volume + session alignment\n"
+            suggestion_text += f"✓ Risk/Reward should be favorable"
         elif momentum >= 65:
-            suggestion += f"💡 Recommendation: Watch for confirmation\n"
-            suggestion += f"⚠️ Wait for pullback to key level"
+            suggestion_text += f"💡 Recommendation: Watch for confirmation\n"
+            suggestion_text += f"⚠️ Wait for pullback to key level"
         else:
-            suggestion += f"💡 Recommendation: Wait for better setup\n"
-            suggestion += f"⚠️ Momentum insufficient for entry"
+            suggestion_text += f"💡 Recommendation: Wait for better setup\n"
+            suggestion_text += f"⚠️ Momentum insufficient for entry"
 
-        return suggestion
+        return create_ai_suggestion(
+            widget_type="session_momentum",
+            text=suggestion_text,
+            confidence=confidence,
+            emoji=action_emoji,
+            color=color
+        )
 
     def init_ui(self):
         """Initialize the user interface"""

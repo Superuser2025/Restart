@@ -502,6 +502,7 @@ class ChartPanel(QWidget):
         self.demo_toggle_btn.setChecked(True)  # Start in demo mode
         self.demo_toggle_btn.clicked.connect(self.on_demo_mode_toggled)
         self.demo_toggle_btn.setMinimumWidth(130)
+        # Initial style (orange for demo mode) - colors updated by handler
         self.demo_toggle_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #F59E0B;
@@ -517,9 +518,6 @@ class ChartPanel(QWidget):
             }}
             QPushButton:pressed {{
                 background-color: #B45309;
-            }}
-            QPushButton:checked {{
-                background-color: #DC2626;
             }}
         """)
         layout.addWidget(self.demo_toggle_btn)
