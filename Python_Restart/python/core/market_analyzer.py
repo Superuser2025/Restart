@@ -5,7 +5,12 @@ Provides professional-grade market analysis for profitable trading M5-H4
 This module transforms amateur filtering into institutional-grade opportunity analysis.
 """
 
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    mt5 = None
 from datetime import datetime, time
 import numpy as np
 from typing import Dict, List, Optional, Tuple

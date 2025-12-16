@@ -5,7 +5,12 @@ Generates REAL opportunities based on actual market analysis, not random data
 This replaces the amateur random.randint() approach with institutional-grade analysis.
 """
 
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    mt5 = None
 import random
 from typing import List, Dict, Optional
 from datetime import datetime

@@ -15,7 +15,12 @@ from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 from datetime import datetime
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    mt5 = None
 
 from core.data_manager import data_manager
 from gui.chart_overlay_system import ChartOverlaySystem
