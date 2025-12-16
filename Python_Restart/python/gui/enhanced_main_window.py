@@ -69,10 +69,6 @@ class EnhancedMainWindow(QMainWindow):
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(5)
 
-        # === TOP TOOLBAR ===
-        toolbar_layout = self.create_toolbar()
-        main_layout.addLayout(toolbar_layout)
-
         # === OPPORTUNITY SCANNER ===
         self.scanner_widget = OpportunityScannerWidget()
         self.scanner_widget.setMinimumHeight(300)  # Increased from 260 to 300
@@ -123,87 +119,6 @@ class EnhancedMainWindow(QMainWindow):
 
         # Apply dark theme
         self.apply_dark_theme()
-
-    def create_toolbar(self) -> QHBoxLayout:
-        """Create top toolbar with Demo/Live toggle and Symbol selector"""
-        layout = QHBoxLayout()
-        layout.setSpacing(10)
-
-        # === DEMO/LIVE MODE TOGGLE ===
-        mode_label = QLabel("MODE:")
-        mode_label.setStyleSheet("color: #F8FAFC; font-weight: bold;")
-        layout.addWidget(mode_label)
-
-        self.demo_toggle_btn = QPushButton("🎮 DEMO MODE")
-        self.demo_toggle_btn.setCheckable(True)
-        self.demo_toggle_btn.setChecked(True)  # Start in demo mode
-        self.demo_toggle_btn.clicked.connect(self.on_demo_mode_toggled)
-        self.demo_toggle_btn.setMinimumWidth(150)
-        self.demo_toggle_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #F59E0B;
-                color: white;
-                font-weight: bold;
-                padding: 8px 15px;
-                border-radius: 5px;
-                border: 2px solid #D97706;
-            }
-            QPushButton:checked {
-                background-color: #10B981;
-                border: 2px solid #059669;
-            }
-            QPushButton:hover {
-                background-color: #FCD34D;
-            }
-            QPushButton:checked:hover {
-                background-color: #34D399;
-            }
-        """)
-        layout.addWidget(self.demo_toggle_btn)
-
-        layout.addSpacing(20)
-
-        # === SYMBOL SELECTOR ===
-        symbol_label = QLabel("SYMBOL:")
-        symbol_label.setStyleSheet("color: #F8FAFC; font-weight: bold;")
-        layout.addWidget(symbol_label)
-
-        self.symbol_combo = QComboBox()
-        self.symbol_combo.addItems(get_all_symbols())
-        self.symbol_combo.setCurrentText(self.current_symbol)
-        self.symbol_combo.currentTextChanged.connect(self.on_symbol_selector_changed)
-        self.symbol_combo.setMinimumWidth(120)
-        self.symbol_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #1E293B;
-                color: #F8FAFC;
-                font-weight: bold;
-                padding: 8px;
-                border: 2px solid #3B82F6;
-                border-radius: 5px;
-            }
-            QComboBox:hover {
-                border-color: #60A5FA;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #1E293B;
-                color: #F8FAFC;
-                selection-background-color: #3B82F6;
-            }
-        """)
-        layout.addWidget(self.symbol_combo)
-
-        layout.addStretch()
-
-        # === STATUS INDICATOR ===
-        self.mode_status_label = QLabel("⚠️ DEMO DATA - Safe Testing Mode")
-        self.mode_status_label.setStyleSheet("color: #F59E0B; font-weight: bold;")
-        layout.addWidget(self.mode_status_label)
-
-        return layout
 
     def create_center_panel(self) -> QWidget:
         """Create center panel with ORIGINAL excellent chart + analysis tabs"""
@@ -653,37 +568,6 @@ class EnhancedMainWindow(QMainWindow):
                 color: #ffffff;
             }
         """)
-
-    def on_demo_mode_toggled(self, checked: bool):
-        """Handle demo/live mode toggle"""
-        # Update global demo mode manager
-        demo_mode_manager.demo_mode = checked
-
-        # Update button appearance and text
-        if checked:
-            self.demo_toggle_btn.setText("🎮 DEMO MODE")
-            self.mode_status_label.setText("⚠️ DEMO DATA - Safe Testing Mode")
-            self.mode_status_label.setStyleSheet("color: #F59E0B; font-weight: bold;")
-            print("✅ DEMO MODE ACTIVATED - Using simulated data")
-        else:
-            self.demo_toggle_btn.setText("🔴 LIVE MODE")
-            self.mode_status_label.setText("🔴 LIVE DATA - Real MT5 Connection")
-            self.mode_status_label.setStyleSheet("color: #EF4444; font-weight: bold;")
-            print("🔴 LIVE MODE ACTIVATED - Using real MT5 data")
-
-        # Refresh all widgets to use new data source
-        self.update_all_data()
-
-    def on_symbol_selector_changed(self, symbol: str):
-        """Handle symbol selection from toolbar dropdown"""
-        if symbol != self.current_symbol:
-            # Update multi-symbol manager
-            symbol_manager.active_symbol = symbol
-
-            # Update internal state
-            self.on_symbol_changed(symbol)
-
-            print(f"✅ Symbol changed to: {symbol}")
 
     def closeEvent(self, event):
         """Handle window close event"""
