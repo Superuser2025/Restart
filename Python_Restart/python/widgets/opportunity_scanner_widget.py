@@ -206,6 +206,40 @@ class TimeframeGroup(QWidget):
                 widget.setParent(None)
                 widget.deleteLater()
 
+        # If no opportunities, show informative message
+        if len(self.opportunities) == 0:
+            timeframe_range = "/".join(self.timeframes)
+            no_opp_widget = QWidget()
+            no_opp_layout = QVBoxLayout(no_opp_widget)
+            no_opp_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            # Icon
+            icon_label = QLabel("📊")
+            icon_label.setFont(QFont("Arial", 32))
+            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_label.setStyleSheet("color: #475569; background: transparent; border: none;")
+            no_opp_layout.addWidget(icon_label)
+
+            # Main message
+            message_label = QLabel(f"No Opportunities ({timeframe_range})")
+            message_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            message_label.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+            no_opp_layout.addWidget(message_label)
+
+            # Explanation
+            reason_label = QLabel("Waiting for high-quality setups\nto meet filter criteria")
+            reason_label.setFont(QFont("Arial", 9))
+            reason_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            reason_label.setStyleSheet("color: #64748B; background: transparent; border: none;")
+            no_opp_layout.addWidget(reason_label)
+
+            no_opp_widget.setStyleSheet("background-color: transparent;")
+
+            # Add centered message spanning all 4 columns
+            self.grid_layout.addWidget(no_opp_widget, 0, 0, 3, 4)  # Span 3 rows, 4 cols
+            return
+
         # Add cards in 4-column grid (max 3 rows × 4 cols = 12 cards)
         for idx, opp in enumerate(self.opportunities):
             card = OpportunityCard(opp)
