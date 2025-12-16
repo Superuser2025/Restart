@@ -1,0 +1,38 @@
+# AppleTrader Pro - Python Dependencies
+# Expert Advisor with AI/ML Integration
+
+# Core GUI Framework
+PyQt6>=6.6.0
+PyQt6-Qt6>=6.6.0
+
+# Data Science & Analysis
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# Web Scraping (for calendar/news fetching)
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+requests>=2.31.0
+
+# MetaTrader 5 Integration
+# Note: MetaTrader5 module may need manual installation on Linux
+# or may not be needed if using file-based communication
+# MetaTrader5
+
+# Machine Learning (Phase 2+)
+scikit-learn>=1.3.0
+xgboost>=2.0.0
+
+# Optional: Deep Learning (Phase 5+)
+# tensorflow>=2.13.0
+# torch>=2.0.0
+
+# Optional: Reinforcement Learning (Phase 6+)
+# stable-baselines3>=2.0.0
+# gym>=0.26.0
+
+# Development Tools
+pytest>=7.4.0
