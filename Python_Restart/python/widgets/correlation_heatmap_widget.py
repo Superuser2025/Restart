@@ -1,0 +1,502 @@
+"""
+AppleTrader Pro - Multi-Symbol Correlation Heatmap Widget
+PyQt6 widget for displaying correlation matrix and divergence alerts
+"""
+
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                            QGroupBox, QTextEdit, QTableWidget, QTableWidgetItem,
+                            QPushButton, QHeaderView, QFrame)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont, QColor, QBrush
+from typing import Dict, List
+import pandas as pd
+
+from widgets.correlation_analyzer import correlation_analyzer
+
+
+class CorrelationHeatmapWidget(QWidget):
+    """
+    Multi-Symbol Correlation Heatmap Display Widget
+
+    Shows:
+    - Correlation matrix (color-coded heatmap)
+    - Strongest positive/negative correlations
+    - Divergence alerts (when correlations break)
+    - Historical average vs current
+    """
+
+    divergence_detected = pyqtSignal(dict)  # Emits divergence alert
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # CRITICAL: Initialize current_symbol BEFORE calling update_from_live_data
+        self.current_symbol = "EURUSD"
+
+        self.correlation_data = None
+        self.init_ui()
+
+        # Auto-refresh every 5 seconds with LIVE data
+        self.refresh_timer = QTimer()
+        self.refresh_timer.timeout.connect(self.update_from_live_data)
+        self.refresh_timer.start(5000)
+
+        # NO SAMPLE DATA - use live data from data_manager
+        self.update_from_live_data()
+
+    def update_from_live_data(self):
+        """Update with live data from data_manager"""
+        from core.data_manager import data_manager
+        symbol = self.current_symbol
+        self.status_label.setText(f"Live: {symbol}")
+
+    def init_ui(self):
+        """Initialize the user interface"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
+
+        # === HEADER ===
+        header_layout = QHBoxLayout()
+
+        title = QLabel("🔥 Multi-Symbol Correlation Heatmap")
+        title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        # Refresh button
+        self.refresh_btn = QPushButton("🔄 Refresh")
+        self.refresh_btn.clicked.connect(self.on_refresh_requested)
+        self.refresh_btn.setMaximumWidth(100)
+        header_layout.addWidget(self.refresh_btn)
+
+        layout.addLayout(header_layout)
+
+        # === DIVERGENCE ALERTS ===
+        alerts_group = QGroupBox("🚨 Divergence Opportunities")
+        alerts_layout = QVBoxLayout()
+
+        self.alerts_text = QTextEdit()
+        self.alerts_text.setReadOnly(True)
+        self.alerts_text.setMaximumHeight(120)
+        self.alerts_text.setFont(QFont("Courier", 9))
+        alerts_layout.addWidget(self.alerts_text)
+
+        alerts_group.setLayout(alerts_layout)
+        layout.addWidget(alerts_group)
+
+        # === CORRELATION MATRIX TABLE ===
+        matrix_group = QGroupBox("Correlation Matrix")
+        matrix_layout = QVBoxLayout()
+
+        self.correlation_table = QTableWidget()
+        self.correlation_table.setFont(QFont("Courier", 9))
+        self.correlation_table.verticalHeader().setVisible(True)
+        self.correlation_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self.correlation_table.setMaximumHeight(250)
+        matrix_layout.addWidget(self.correlation_table)
+
+        # Legend
+        legend_layout = QHBoxLayout()
+        legend_layout.addWidget(QLabel("Legend:"))
+
+        legend_items = [
+            ("Strong +", "#006400"),
+            ("Moderate +", "#90EE90"),
+            ("Neutral", "#808080"),
+            ("Moderate -", "#FFA500"),
+            ("Strong -", "#8B0000")
+        ]
+
+        for text, color in legend_items:
+            legend_label = QLabel(f"  {text}  ")
+            legend_label.setStyleSheet(f"""
+                background-color: {color};
+                color: white;
+                padding: 2px 5px;
+                border-radius: 3px;
+                font-size: 8pt;
+            """)
+            legend_layout.addWidget(legend_label)
+
+        legend_layout.addStretch()
+        matrix_layout.addLayout(legend_layout)
+
+        matrix_group.setLayout(matrix_layout)
+        layout.addWidget(matrix_group)
+
+        # === TOP CORRELATIONS ===
+        top_group = QGroupBox("🔝 Top Correlations")
+        top_layout = QHBoxLayout()
+
+        # Positive
+        positive_col = QVBoxLayout()
+        positive_col.addWidget(QLabel("🟢 Strongest Positive:"))
+        self.positive_text = QTextEdit()
+        self.positive_text.setReadOnly(True)
+        self.positive_text.setMaximumHeight(100)
+        self.positive_text.setFont(QFont("Courier", 9))
+        positive_col.addWidget(self.positive_text)
+        top_layout.addLayout(positive_col)
+
+        # Negative
+        negative_col = QVBoxLayout()
+        negative_col.addWidget(QLabel("🔴 Strongest Negative:"))
+        self.negative_text = QTextEdit()
+        self.negative_text.setReadOnly(True)
+        self.negative_text.setMaximumHeight(100)
+        self.negative_text.setFont(QFont("Courier", 9))
+        negative_col.addWidget(self.negative_text)
+        top_layout.addLayout(negative_col)
+
+        top_group.setLayout(top_layout)
+        layout.addWidget(top_group)
+
+        # === STATUS ===
+        self.status_label = QLabel("Status: Ready")
+        self.status_label.setFont(QFont("Arial", 8))
+        self.status_label.setStyleSheet("color: #888;")
+        layout.addWidget(self.status_label)
+
+        layout.addStretch()
+
+        # Apply dark theme
+        self.apply_dark_theme()
+
+    def apply_dark_theme(self):
+        """Apply modern dark theme"""
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #1e1e1e;
+                color: #ffffff;
+            }
+            QGroupBox {
+                border: 1px solid #444;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                color: #00aaff;
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+            QTextEdit {
+                background-color: #2b2b2b;
+                border: 1px solid #444;
+                border-radius: 3px;
+                color: #ffffff;
+            }
+            QTableWidget {
+                background-color: #2b2b2b;
+                border: 1px solid #444;
+                border-radius: 3px;
+                gridline-color: #444;
+            }
+            QTableWidget::item {
+                padding: 5px;
+            }
+            QHeaderView::section {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #444;
+                padding: 5px;
+                font-weight: bold;
+            }
+            QPushButton {
+                background-color: #0d7377;
+                border: none;
+                border-radius: 3px;
+                padding: 5px;
+                color: white;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #14b1b8;
+            }
+            QPushButton:pressed {
+                background-color: #0a5a5d;
+            }
+        """)
+
+    def update_correlation_data(self, correlation_report: Dict):
+        """
+        Update display with new correlation data
+
+        Args:
+            correlation_report: Report from correlation_analyzer
+        """
+        self.correlation_data = correlation_report
+
+        # Update divergence alerts
+        alerts = correlation_report.get('divergence_alerts', [])
+        if alerts:
+            alert_lines = []
+            for alert in alerts[:5]:  # Top 5
+                alert_lines.append(alert['message'])
+                alert_lines.append(f"→ {alert['recommendation']}")
+                alert_lines.append("")
+
+                # Emit signal for critical divergences
+                if alert['type'] in ['CORRELATION_BREAKDOWN', 'INVERSE_BREAKDOWN']:
+                    self.divergence_detected.emit(alert)
+
+            self.alerts_text.setPlainText('\n'.join(alert_lines))
+        else:
+            self.alerts_text.setPlainText("✓ No significant divergences detected")
+
+        # Update correlation matrix table
+        self.update_correlation_table(correlation_report)
+
+        # Update top correlations
+        strongest_positive = correlation_report.get('strongest_positive', [])
+        strongest_negative = correlation_report.get('strongest_negative', [])
+
+        if strongest_positive:
+            pos_lines = []
+            for item in strongest_positive[:5]:
+                # Handle both tuple formats: (s1, s2, corr) or ((s1, s2), corr)
+                if len(item) == 3:
+                    s1, s2, corr = item
+                else:
+                    (s1, s2), corr = item
+                pos_lines.append(f"{s1}/{s2}: {corr:+.3f}")
+            self.positive_text.setPlainText('\n'.join(pos_lines))
+        else:
+            self.positive_text.setPlainText("No data")
+
+        if strongest_negative:
+            neg_lines = []
+            for item in strongest_negative[:5]:
+                # Handle both tuple formats: (s1, s2, corr) or ((s1, s2), corr)
+                if len(item) == 3:
+                    s1, s2, corr = item
+                else:
+                    (s1, s2), corr = item
+                neg_lines.append(f"{s1}/{s2}: {corr:+.3f}")
+            self.negative_text.setPlainText('\n'.join(neg_lines))
+        else:
+            self.negative_text.setPlainText("No data")
+
+        # Update status
+        pairs_count = correlation_report.get('pairs_calculated', 0)
+        symbols_count = correlation_report.get('symbols_analyzed', 0)
+        last_update = correlation_report.get('last_update')
+
+        if last_update:
+            time_str = last_update.strftime("%H:%M:%S")
+            self.status_label.setText(
+                f"Updated: {time_str} | {pairs_count} pairs, {symbols_count} symbols"
+            )
+
+    def update_correlation_table(self, correlation_report: Dict):
+        """Update the correlation matrix table"""
+        correlation_matrix = correlation_report.get('correlation_matrix', None)
+
+        # Check if correlation_matrix is None or empty
+        if correlation_matrix is None:
+            self.correlation_table.setRowCount(0)
+            self.correlation_table.setColumnCount(0)
+            return
+
+        # Handle DataFrame format (from sample data)
+        if isinstance(correlation_matrix, pd.DataFrame):
+            if correlation_matrix.empty:
+                self.correlation_table.setRowCount(0)
+                self.correlation_table.setColumnCount(0)
+                return
+
+            symbols = list(correlation_matrix.index)[:8]  # Limit to 8 for display
+
+            # Setup table
+            self.correlation_table.setRowCount(len(symbols))
+            self.correlation_table.setColumnCount(len(symbols))
+            self.correlation_table.setHorizontalHeaderLabels(symbols)
+            self.correlation_table.setVerticalHeaderLabels(symbols)
+
+            # Fill table from DataFrame
+            for i, sym1 in enumerate(symbols):
+                for j, sym2 in enumerate(symbols):
+                    corr = correlation_matrix.loc[sym1, sym2]
+
+                    # Format value
+                    item = QTableWidgetItem(f"{corr:+.2f}")
+
+                    # Color code based on correlation strength
+                    if corr >= 0.7:
+                        color = '#00ff00'  # Strong positive - green
+                    elif corr >= 0.3:
+                        color = '#88ff88'  # Moderate positive - light green
+                    elif corr >= -0.3:
+                        color = '#808080'  # Weak - gray
+                    elif corr >= -0.7:
+                        color = '#ff8888'  # Moderate negative - light red
+                    else:
+                        color = '#ff0000'  # Strong negative - red
+
+                    item.setBackground(QBrush(QColor(color)))
+                    item.setForeground(QBrush(QColor("#ffffff")))
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
+                    self.correlation_table.setItem(i, j, item)
+
+        else:
+            # Handle dict format (original format)
+            if not correlation_matrix:
+                self.correlation_table.setRowCount(0)
+                self.correlation_table.setColumnCount(0)
+                return
+
+            # Get unique symbols
+            symbols_set = set()
+            for (s1, s2) in correlation_matrix.keys():
+                symbols_set.add(s1)
+                symbols_set.add(s2)
+
+            symbols = sorted(symbols_set)[:8]  # Limit to 8 for display
+
+            # Setup table
+            self.correlation_table.setRowCount(len(symbols))
+            self.correlation_table.setColumnCount(len(symbols))
+            self.correlation_table.setHorizontalHeaderLabels(symbols)
+            self.correlation_table.setVerticalHeaderLabels(symbols)
+
+            # Fill table
+            for i, sym1 in enumerate(symbols):
+                for j, sym2 in enumerate(symbols):
+                    if i == j:
+                        # Diagonal (self-correlation = 1.0)
+                        item = QTableWidgetItem("1.00")
+                        item.setBackground(QBrush(QColor("#808080")))
+                        item.setForeground(QBrush(QColor("#ffffff")))
+                    else:
+                        # Get correlation
+                        corr = correlation_analyzer.get_correlation(sym1, sym2)
+
+                        if corr is not None:
+                            # Format value
+                            item = QTableWidgetItem(f"{corr:+.2f}")
+
+                            # Color code
+                            color = correlation_analyzer.get_color_for_correlation(corr)
+                            item.setBackground(QBrush(QColor(color)))
+                            item.setForeground(QBrush(QColor("#ffffff")))
+                        else:
+                            item = QTableWidgetItem("--")
+                            item.setBackground(QBrush(QColor("#2b2b2b")))
+                            item.setForeground(QBrush(QColor("#888888")))
+
+                    # Center align
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+                    # Make read-only
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
+                    self.correlation_table.setItem(i, j, item)
+
+    def set_symbol(self, symbol: str):
+        """Update current symbol (triggers refresh)"""
+        # This widget shows ALL pairs correlation, but we refresh on symbol change
+        self.on_refresh_requested()
+
+    def on_refresh_requested(self):
+        """Handle refresh request"""
+        self.status_label.setText("Refreshing...")
+        # Actual data calculation done by parent/controller
+
+    def scan_and_update(self, market_data: Dict[str, pd.DataFrame],
+                       short_period: int = 20, long_period: int = 100):
+        """
+        Convenience method to scan and update in one call
+
+        Args:
+            market_data: {symbol: DataFrame} with OHLC data
+            short_period: Period for current correlation
+            long_period: Period for historical average
+        """
+        # Run analysis
+        report = correlation_analyzer.calculate_correlations(
+            market_data, short_period, long_period
+        )
+
+        # Update display
+        self.update_correlation_data(report)
+
+    def clear_display(self):
+        """Clear all displays"""
+        self.alerts_text.setPlainText("No data")
+        self.positive_text.setPlainText("No data")
+        self.negative_text.setPlainText("No data")
+        self.correlation_table.setRowCount(0)
+        self.correlation_table.setColumnCount(0)
+        self.status_label.setText("Status: Waiting for data")
+
+    def get_correlation(self, symbol1: str, symbol2: str) -> float:
+        """Get correlation between two symbols"""
+        return correlation_analyzer.get_correlation(symbol1, symbol2)
+
+    def get_correlated_pairs(self, symbol: str, threshold: float = 0.7) -> List:
+        """Get pairs correlated with given symbol"""
+        return correlation_analyzer.get_correlated_pairs(symbol, threshold)
+
+    def load_sample_data(self):
+        """Load sample correlation data for demonstration"""
+        import numpy as np
+
+        symbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'USDCAD']
+
+        # Create sample correlation matrix
+        corr_matrix = pd.DataFrame(
+            [
+                [1.00, 0.85, -0.72, 0.68, -0.91, -0.65],  # EURUSD
+                [0.85, 1.00, -0.68, 0.72, -0.88, -0.61],  # GBPUSD
+                [-0.72, -0.68, 1.00, -0.45, 0.74, 0.58],  # USDJPY
+                [0.68, 0.72, -0.45, 1.00, -0.71, -0.55],  # AUDUSD
+                [-0.91, -0.88, 0.74, -0.71, 1.00, 0.68],  # USDCHF
+                [-0.65, -0.61, 0.58, -0.55, 0.68, 1.00],  # USDCAD
+            ],
+            index=symbols,
+            columns=symbols
+        )
+
+        # Create sample divergence alerts
+        divergences = [
+            {
+                'pair1': 'EURUSD',
+                'pair2': 'GBPUSD',
+                'current_corr': 0.85,
+                'avg_corr': 0.92,
+                'divergence_score': 8.2,
+                'type': 'BREAKDOWN'
+            },
+            {
+                'pair1': 'USDJPY',
+                'pair2': 'USDCHF',
+                'current_corr': 0.74,
+                'avg_corr': 0.68,
+                'divergence_score': 6.5,
+                'type': 'STRENGTHENING'
+            }
+        ]
+
+        # Create report structure
+        report = {
+            'correlation_matrix': corr_matrix,
+            'divergences': divergences,
+            'strongest_positive': [
+                ('EURUSD', 'USDCHF', -0.91),
+                ('EURUSD', 'GBPUSD', 0.85)
+            ],
+            'strongest_negative': [
+                ('EURUSD', 'USDJPY', -0.72),
+                ('GBPUSD', 'USDJPY', -0.68)
+            ]
+        }
+
+        self.update_correlation_data(report)
