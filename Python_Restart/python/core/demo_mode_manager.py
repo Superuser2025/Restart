@@ -86,11 +86,16 @@ class DemoModeManager(QObject):
 
     def generate_demo_pattern_data(self, symbol: str) -> Dict:
         """Generate demo data for Pattern Scorer"""
-        patterns = ["Bullish Engulfing", "Bearish Pin Bar", "Double Bottom", "Head & Shoulders"]
+        patterns = ["Bullish Engulfing", "Bearish Pin Bar", "Double Bottom", "Head & Shoulders",
+                    "Bull Flag", "Bear Flag", "Ascending Triangle", "Descending Triangle"]
+
+        total_score = random.randint(50, 95)
 
         return {
             'symbol': symbol,
             'pattern_type': random.choice(patterns),
+            'total_score': total_score,
+            'historical_win_rate': random.uniform(45, 85),
             'confidence': random.randint(60, 95),
             'entry_price': 1.0850 + random.uniform(-0.01, 0.01),
             'stop_loss': 1.0800 + random.uniform(-0.01, 0.01),

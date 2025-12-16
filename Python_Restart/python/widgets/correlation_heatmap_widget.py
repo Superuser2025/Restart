@@ -12,17 +12,21 @@ from typing import Dict, List
 import pandas as pd
 
 from widgets.correlation_analyzer import correlation_analyzer
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.multi_symbol_manager import get_all_symbols
 
 
-class CorrelationHeatmapWidget(QWidget):
+class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
     """
-    Multi-Symbol Correlation Heatmap Display Widget
+    Multi-Symbol Correlation Heatmap Display Widget (AI-Enhanced)
 
     Shows:
     - Correlation matrix (color-coded heatmap)
     - Strongest positive/negative correlations
     - Divergence alerts (when correlations break)
     - Historical average vs current
+    - AI-powered correlation insights
     """
 
     divergence_detected = pyqtSignal(dict)  # Emits divergence alert
@@ -32,23 +36,136 @@ class CorrelationHeatmapWidget(QWidget):
 
         # CRITICAL: Initialize current_symbol BEFORE calling update_from_live_data
         self.current_symbol = "EURUSD"
-
         self.correlation_data = None
+
+        # Setup AI assistance
+        self.setup_ai_assist("correlation_heatmap")
+
         self.init_ui()
 
-        # Auto-refresh every 5 seconds with LIVE data
+        # Connect to demo mode changes
+        demo_mode_manager.mode_changed.connect(self.on_mode_changed)
+
+        # Auto-refresh every 5 seconds
         self.refresh_timer = QTimer()
-        self.refresh_timer.timeout.connect(self.update_from_live_data)
+        self.refresh_timer.timeout.connect(self.update_data)
         self.refresh_timer.start(5000)
 
-        # NO SAMPLE DATA - use live data from data_manager
-        self.update_from_live_data()
+        # Initial update
+        self.update_data()
 
     def update_from_live_data(self):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
         symbol = self.current_symbol
         self.status_label.setText(f"Live: {symbol}")
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Get demo correlation data
+            symbols = get_all_symbols()
+            demo_data = get_demo_data('correlation_heatmap', symbols=symbols)
+            if demo_data:
+                self.update_correlation_matrix(demo_data)
+                self.status_label.setText(f"Demo Mode - {len(symbols)} symbols")
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.correlation_data:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Correlation Heatmap widget switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Custom AI analysis for correlation heatmap
+
+        Args:
+            prediction: ML prediction data from ml_integration
+            widget_data: Current correlation data
+
+        Returns:
+            Formatted suggestion dictionary
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.correlation_data:
+            return create_ai_suggestion(
+                widget_type="correlation_heatmap",
+                text="No correlation data available",
+                confidence=0.0
+            )
+
+        # Find strongest correlations
+        strongest_pos = max(
+            [(k, v) for k, v in self.correlation_data.items() if v > 0],
+            key=lambda x: x[1],
+            default=(None, 0)
+        )
+        strongest_neg = min(
+            [(k, v) for k, v in self.correlation_data.items() if v < 0],
+            key=lambda x: x[1],
+            default=(None, 0)
+        )
+
+        # Analyze correlation strength
+        if strongest_pos[1] >= 0.8:
+            confidence = 0.85
+            action_emoji = "🔥"
+            action = f"Strong positive correlation detected"
+            color = "green"
+        elif strongest_neg[1] <= -0.8:
+            confidence = 0.85
+            action_emoji = "⚡"
+            action = f"Strong negative correlation detected"
+            color = "red"
+        elif strongest_pos[1] >= 0.6 or strongest_neg[1] <= -0.6:
+            confidence = 0.70
+            action_emoji = "✓"
+            action = f"Moderate correlations present"
+            color = "yellow"
+        else:
+            confidence = 0.50
+            action_emoji = "ℹ️"
+            action = f"Weak correlations across pairs"
+            color = "blue"
+
+        # Build suggestion text
+        suggestion_text = f"{action}\n\n"
+        if strongest_pos[0]:
+            suggestion_text += f"📈 Strongest Positive: {strongest_pos[0]} ({strongest_pos[1]:.2f})\n"
+        if strongest_neg[0]:
+            suggestion_text += f"📉 Strongest Negative: {strongest_neg[0]} ({strongest_neg[1]:.2f})\n"
+        suggestion_text += "\n"
+
+        # Add trading implications
+        if strongest_pos[1] >= 0.8:
+            suggestion_text += "💡 Trading Implication:\n"
+            suggestion_text += "✓ Pairs moving together - hedge or diversify\n"
+            suggestion_text += "✓ Consider portfolio risk concentration"
+        elif strongest_neg[1] <= -0.8:
+            suggestion_text += "💡 Trading Implication:\n"
+            suggestion_text += "✓ Pairs moving opposite - hedging opportunity\n"
+            suggestion_text += "✓ Consider mean reversion strategies"
+        else:
+            suggestion_text += "💡 Trading Implication:\n"
+            suggestion_text += "⚠️ Pairs moving independently\n"
+            suggestion_text += "⚠️ Diversification benefits may be limited"
+
+        return create_ai_suggestion(
+            widget_type="correlation_heatmap",
+            text=suggestion_text,
+            confidence=confidence,
+            emoji=action_emoji,
+            color=color
+        )
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -64,6 +181,9 @@ class CorrelationHeatmapWidget(QWidget):
         header_layout.addWidget(title)
 
         header_layout.addStretch()
+
+        # AI Assist checkbox
+        self.create_ai_checkbox(header_layout)
 
         # Refresh button
         self.refresh_btn = QPushButton("🔄 Refresh")
@@ -154,6 +274,9 @@ class CorrelationHeatmapWidget(QWidget):
 
         top_group.setLayout(top_layout)
         layout.addWidget(top_group)
+
+        # === AI SUGGESTION FRAME ===
+        self.create_ai_suggestion_frame(layout)
 
         # === STATUS ===
         self.status_label = QLabel("Status: Ready")
