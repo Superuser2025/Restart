@@ -475,19 +475,14 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
                     self.correlation_table.setItem(i, j, item)
 
         else:
-            # Handle dict format (original format)
+            # Handle dict format (nested dict: {sym1: {sym2: corr}})
             if not correlation_matrix:
                 self.correlation_table.setRowCount(0)
                 self.correlation_table.setColumnCount(0)
                 return
 
-            # Get unique symbols
-            symbols_set = set()
-            for (s1, s2) in correlation_matrix.keys():
-                symbols_set.add(s1)
-                symbols_set.add(s2)
-
-            symbols = sorted(symbols_set)[:8]  # Limit to 8 for display
+            # Get symbols from outer dictionary keys
+            symbols = sorted(list(correlation_matrix.keys()))[:8]  # Limit to 8 for display
 
             # Setup table
             self.correlation_table.setRowCount(len(symbols))
@@ -495,30 +490,34 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
             self.correlation_table.setHorizontalHeaderLabels(symbols)
             self.correlation_table.setVerticalHeaderLabels(symbols)
 
-            # Fill table
+            # Fill table from nested dictionary
             for i, sym1 in enumerate(symbols):
                 for j, sym2 in enumerate(symbols):
-                    if i == j:
-                        # Diagonal (self-correlation = 1.0)
-                        item = QTableWidgetItem("1.00")
-                        item.setBackground(QBrush(QColor("#808080")))
+                    # Get correlation value from nested dict
+                    corr = correlation_matrix.get(sym1, {}).get(sym2, None)
+
+                    if corr is not None:
+                        # Format value
+                        item = QTableWidgetItem(f"{corr:+.2f}")
+
+                        # Color code based on correlation strength
+                        if corr >= 0.7:
+                            color = '#00ff00'  # Strong positive - green
+                        elif corr >= 0.3:
+                            color = '#88ff88'  # Moderate positive - light green
+                        elif corr >= -0.3:
+                            color = '#808080'  # Weak - gray
+                        elif corr >= -0.7:
+                            color = '#ff8888'  # Moderate negative - light red
+                        else:
+                            color = '#ff0000'  # Strong negative - red
+
+                        item.setBackground(QBrush(QColor(color)))
                         item.setForeground(QBrush(QColor("#ffffff")))
                     else:
-                        # Get correlation
-                        corr = correlation_analyzer.get_correlation(sym1, sym2)
-
-                        if corr is not None:
-                            # Format value
-                            item = QTableWidgetItem(f"{corr:+.2f}")
-
-                            # Color code
-                            color = correlation_analyzer.get_color_for_correlation(corr)
-                            item.setBackground(QBrush(QColor(color)))
-                            item.setForeground(QBrush(QColor("#ffffff")))
-                        else:
-                            item = QTableWidgetItem("--")
-                            item.setBackground(QBrush(QColor("#2b2b2b")))
-                            item.setForeground(QBrush(QColor("#888888")))
+                        item = QTableWidgetItem("--")
+                        item.setBackground(QBrush(QColor("#2b2b2b")))
+                        item.setForeground(QBrush(QColor("#888888")))
 
                     # Center align
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
