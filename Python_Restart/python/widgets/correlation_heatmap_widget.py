@@ -67,7 +67,7 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
             symbols = get_all_symbols()
             demo_data = get_demo_data('correlation_heatmap', symbols=symbols)
             if demo_data:
-                self.update_correlation_matrix(demo_data)
+                self.update_correlation_data(demo_data)
                 self.status_label.setText(f"Demo Mode - {len(symbols)} symbols")
         else:
             # Get live data

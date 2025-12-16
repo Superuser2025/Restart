@@ -161,7 +161,30 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
             # Get demo pattern data
             demo_data = get_demo_data('pattern_scorer', symbols=[self.current_symbol])
             if demo_data:
-                self.update_score(demo_data)
+                # Convert demo dict to PatternScore object
+                from datetime import datetime
+
+                total_score = demo_data.get('total_score', 75)
+                pattern_score = PatternScore(
+                    total_score=total_score,
+                    zone_alignment_score=int(total_score * 0.20),
+                    volume_score=int(total_score * 0.25),
+                    liquidity_score=int(total_score * 0.15),
+                    mtf_score=int(total_score * 0.15),
+                    session_score=int(total_score * 0.10),
+                    structure_score=int(total_score * 0.10),
+                    historical_score=int(total_score * 0.05),
+                    pattern_type=demo_data.get('pattern_type', 'Unknown'),
+                    price_level=demo_data.get('entry_price', 1.0850),
+                    timestamp=datetime.now(),
+                    historical_win_rate=demo_data.get('historical_win_rate', 65.0) / 100.0,
+                    historical_avg_rr=demo_data.get('risk_reward', 2.5),
+                    historical_sample_size=50,
+                    quality_tier="STRONG" if total_score >= 75 else "GOOD" if total_score >= 60 else "WEAK",
+                    stars=5 if total_score >= 90 else 4 if total_score >= 75 else 3 if total_score >= 60 else 2,
+                    recommendation=f"{demo_data.get('pattern_type', 'Pattern')} with {total_score}% confidence"
+                )
+                self.update_score(pattern_score)
         else:
             # Get live data
             self.update_from_live_data()
