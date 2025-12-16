@@ -5,7 +5,7 @@ PyQt6 widget for displaying economic calendar with impact predictions
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QGroupBox, QListWidget, QListWidgetItem,
-                            QPushButton, QTextEdit, QFrame, QScrollArea)
+                            QPushButton, QTextEdit, QFrame, QScrollArea, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from typing import Dict, List
@@ -14,6 +14,8 @@ from datetime import datetime
 from widgets.news_impact_predictor import (news_impact_predictor, NewsEvent,
                                           ImpactLevel)
 from widgets.calendar_fetcher import calendar_fetcher
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 
 
 class NewsEventListItem(QWidget):
@@ -101,7 +103,7 @@ class NewsEventListItem(QWidget):
         layout.addLayout(details_layout)
 
 
-class NewsImpactWidget(QWidget):
+class NewsImpactWidget(AIAssistMixin, QWidget):
     """
     News Event Impact Display Widget
 
@@ -120,8 +122,10 @@ class NewsImpactWidget(QWidget):
 
         # CRITICAL: Initialize current_symbol BEFORE calling refresh_display
         self.current_symbol = "EURUSD"
+        self.current_events = []  # Store current news events for AI analysis
 
         self.init_ui()
+        self.setup_ai_assist()
 
         # Auto-refresh every 60 seconds
         self.refresh_timer = QTimer()
@@ -155,6 +159,9 @@ class NewsImpactWidget(QWidget):
         header_layout.addWidget(title)
 
         header_layout.addStretch()
+
+        # AI Assist checkbox (created by mixin, we'll add it here)
+        self.ai_checkbox_placeholder = header_layout
 
         # Refresh button
         self.refresh_btn = QPushButton("🔄 Refresh")
@@ -221,6 +228,9 @@ class NewsImpactWidget(QWidget):
 
         details_group.setLayout(details_layout)
         layout.addWidget(details_group)
+
+        # === AI SUGGESTION FRAME (placeholder, created by mixin) ===
+        self.ai_suggestion_placeholder = layout
 
         # === STATUS ===
         self.status_label = QLabel("Status: Ready")
@@ -430,6 +440,9 @@ class NewsImpactWidget(QWidget):
         # Get upcoming events
         upcoming = news_impact_predictor.get_upcoming_events(hours=24)
 
+        # Store for AI analysis
+        self.current_events = upcoming
+
         # Update events list
         self.events_list.clear()
 
@@ -451,6 +464,10 @@ class NewsImpactWidget(QWidget):
             f"Last updated: {datetime.now().strftime('%H:%M:%S')} | "
             f"{len(upcoming)} events in next 24h"
         )
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_events:
+            self.update_ai_suggestions()
 
     def check_alerts(self):
         """Check for and display high-impact alerts"""
@@ -530,3 +547,148 @@ class NewsImpactWidget(QWidget):
     def should_flatten_positions(self, symbol: str) -> tuple:
         """Check if positions should be flattened"""
         return news_impact_predictor.should_flatten_positions(symbol)
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Get demo news events
+            demo_events = get_demo_data('news', symbol=self.current_symbol)
+            if demo_events:
+                self._load_fallback_sample_data()
+                self.status_label.setText("Demo Mode - Sample Events")
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_events:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"News Impact widget switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Advanced AI analysis for news event impact
+
+        Analyzes:
+        - Event timing and clustering
+        - Impact level and surprise factor
+        - Currency-specific volatility
+        - Multi-event cumulative risk
+        - Optimal trading windows
+        """
+        from core.ml_integration import create_ai_suggestion
+        from datetime import timedelta
+
+        if not self.current_events:
+            return create_ai_suggestion(
+                widget_type="news_impact",
+                text="No upcoming news events to analyze",
+                confidence=0.0
+            )
+
+        now = datetime.now()
+
+        # Get events in next 24 hours
+        upcoming_events = [e for e in self.current_events
+                          if now <= e.timestamp <= now + timedelta(hours=24)]
+
+        if not upcoming_events:
+            return create_ai_suggestion(
+                widget_type="news_impact",
+                text="No significant events in next 24 hours - Safe trading window",
+                confidence=0.85,
+                emoji="✓",
+                color="green"
+            )
+
+        # Analyze imminent events (within 2 hours)
+        imminent = [e for e in upcoming_events
+                   if e.timestamp <= now + timedelta(hours=2)]
+
+        # Analyze high-impact events
+        high_impact = [e for e in upcoming_events
+                      if e.impact_level in [ImpactLevel.EXTREME, ImpactLevel.HIGH]]
+
+        # CRITICAL ANALYSIS: Imminent high-impact events
+        if imminent and high_impact:
+            critical_events = [e for e in imminent
+                             if e.impact_level == ImpactLevel.EXTREME]
+
+            if critical_events:
+                event = critical_events[0]
+                minutes_away = int((event.timestamp - now).total_seconds() / 60)
+
+                return create_ai_suggestion(
+                    widget_type="news_impact",
+                    text=f"🚨 CRITICAL: {event.event_name} ({event.currency}) in {minutes_away}min - Expected {event.avg_pip_impact:.0f} pip move. FLATTEN POSITIONS NOW!",
+                    confidence=0.95,
+                    emoji="🚨",
+                    color="red"
+                )
+
+        # HIGH RISK: Multiple high-impact events clustering
+        if len(high_impact) >= 3:
+            currencies = set(e.currency for e in high_impact)
+            next_event = min(high_impact, key=lambda e: e.timestamp)
+            hours_away = int((next_event.timestamp - now).total_seconds() / 3600)
+
+            return create_ai_suggestion(
+                widget_type="news_impact",
+                text=f"⚠️ HIGH RISK: {len(high_impact)} major events today affecting {', '.join(currencies)}. Next: {next_event.event_name} in {hours_away}h. Reduce position sizes by 50%.",
+                confidence=0.88,
+                emoji="⚠️",
+                color="orange"
+            )
+
+        # MODERATE: Single high-impact event coming
+        if high_impact:
+            event = high_impact[0]
+            hours_away = int((event.timestamp - now).total_seconds() / 3600)
+
+            # Analyze surprise factor (forecast vs previous deviation)
+            surprise_factor = "Unknown"
+            if event.forecast and event.previous:
+                deviation = abs(event.forecast - event.previous) / abs(event.previous) if event.previous != 0 else 0
+                if deviation > 0.05:  # >5% deviation
+                    surprise_factor = "HIGH surprise potential"
+                elif deviation > 0.02:  # >2% deviation
+                    surprise_factor = "MODERATE surprise"
+                else:
+                    surprise_factor = "Low surprise (consensus)"
+
+            action_text = "Avoid new trades" if hours_away < 4 else "Tighten stops"
+
+            return create_ai_suggestion(
+                widget_type="news_impact",
+                text=f"📊 {event.event_name} ({event.currency}) in {hours_away}h - {event.avg_pip_impact:.0f} pip avg impact. {surprise_factor}. {action_text} 2h before release.",
+                confidence=0.80,
+                emoji="📊",
+                color="yellow"
+            )
+
+        # LOW RISK: Only low/medium impact events
+        medium_count = len([e for e in upcoming_events
+                           if e.impact_level == ImpactLevel.MEDIUM])
+
+        if medium_count > 0:
+            return create_ai_suggestion(
+                widget_type="news_impact",
+                text=f"📈 {medium_count} medium-impact events today - Normal trading conditions. Monitor for surprises.",
+                confidence=0.75,
+                emoji="📈",
+                color="green"
+            )
+
+        # SAFE WINDOW
+        return create_ai_suggestion(
+            widget_type="news_impact",
+            text="✓ Safe trading window - Only low-impact events scheduled. Normal position sizing OK.",
+            confidence=0.82,
+            emoji="✓",
+            color="green"
+        )

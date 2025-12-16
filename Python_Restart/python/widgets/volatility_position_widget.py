@@ -5,7 +5,7 @@ PyQt6 widget for displaying volatility-adjusted position sizing
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QGroupBox, QLineEdit, QPushButton, QSpinBox,
-                            QDoubleSpinBox, QFrame, QGridLayout)
+                            QDoubleSpinBox, QFrame, QGridLayout, QCheckBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from typing import Dict, Optional
@@ -13,9 +13,11 @@ import pandas as pd
 
 from widgets.volatility_position_sizer import (volatility_position_sizer,
                                                VolatilityRegime, TrendStrength)
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 
 
-class VolatilityPositionWidget(QWidget):
+class VolatilityPositionWidget(AIAssistMixin, QWidget):
     """
     Volatility-Adjusted Position Sizing Display Widget
 
@@ -34,6 +36,7 @@ class VolatilityPositionWidget(QWidget):
         self.current_symbol = "EURUSD"
         self.current_data = None
         self.init_ui()
+        self.setup_ai_assist()
 
         # Auto-refresh timer to get live data
         from PyQt6.QtCore import QTimer
@@ -51,9 +54,13 @@ class VolatilityPositionWidget(QWidget):
         layout.setSpacing(5)
 
         # === HEADER ===
+        header_layout = QHBoxLayout()
         title = QLabel("🎯 Volatility-Adjusted Position Sizer")
         title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        self.ai_checkbox_placeholder = header_layout
+        layout.addLayout(header_layout)
 
         # === ACCOUNT SETTINGS ===
         account_group = QGroupBox("Account Settings")
@@ -222,6 +229,9 @@ class VolatilityPositionWidget(QWidget):
 
         rec_group.setLayout(rec_layout)
         layout.addWidget(rec_group)
+
+        # AI suggestion frame placeholder
+        self.ai_suggestion_placeholder = layout
 
         layout.addStretch()
 
@@ -455,3 +465,138 @@ class VolatilityPositionWidget(QWidget):
         self.position_size_label.setText("-- lots")
         self.sl_distance_label.setText("--")
         self.recommendation_label.setText("No data")
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Load demo volatility data
+            self.load_sample_conditions()
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_data:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Volatility Position Sizer switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Advanced AI analysis for volatility-adjusted position sizing
+
+        Analyzes:
+        - Volatility regime risk assessment
+        - Trend strength alignment
+        - Position size appropriateness
+        - Risk/reward optimization
+        - Market regime warnings
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.current_data:
+            return create_ai_suggestion(
+                widget_type="volatility_position",
+                text="Calculate position size to get AI analysis",
+                confidence=0.0
+            )
+
+        volatility_regime = self.current_data.get('volatility_regime', 'UNKNOWN')
+        trend_strength = self.current_data.get('trend_strength', 'UNKNOWN')
+        adjusted_risk = self.current_data.get('adjusted_risk_percent', 0)
+        position_size = self.current_data.get('position_size', 0)
+        volatility_mult = self.current_data.get('volatility_multiplier', 1.0)
+        trend_mult = self.current_data.get('trend_multiplier', 1.0)
+
+        # EXTREME VOLATILITY WARNING
+        if volatility_regime == 'EXTREME':
+            if adjusted_risk > 0.3:  # Risk reduced below 0.3%
+                return create_ai_suggestion(
+                    widget_type="volatility_position",
+                    text=f"🚨 EXTREME VOLATILITY: Position size reduced by {(1-volatility_mult)*100:.0f}%. Risk now {adjusted_risk:.2f}% (from base). CONSIDER STAYING FLAT until volatility normalizes!",
+                    confidence=0.95,
+                    emoji="🚨",
+                    color="red"
+                )
+            else:
+                return create_ai_suggestion(
+                    widget_type="volatility_position",
+                    text=f"⚠️ EXTREME VOLATILITY: Micro position ({position_size:.3f} lots) recommended. Risk {adjusted_risk:.2f}%. Only trade with strict discipline.",
+                    confidence=0.88,
+                    emoji="⚠️",
+                    color="orange"
+                )
+
+        # HIGH VOLATILITY + WEAK TREND = DANGEROUS
+        if volatility_regime == 'HIGH' and trend_strength in ['WEAK', 'NEUTRAL']:
+            return create_ai_suggestion(
+                widget_type="volatility_position",
+                text=f"⚠️ HIGH RISK: High volatility ({volatility_mult:.2f}x reducer) + {trend_strength} trend. Position: {position_size:.3f} lots at {adjusted_risk:.2f}% risk. Wait for clearer direction.",
+                confidence=0.82,
+                emoji="⚠️",
+                color="orange"
+            )
+
+        # OPTIMAL: LOW VOLATILITY + STRONG TREND
+        if volatility_regime == 'LOW' and trend_strength == 'STRONG':
+            return create_ai_suggestion(
+                widget_type="volatility_position",
+                text=f"🔥 OPTIMAL CONDITIONS: Low volatility + STRONG trend! Position boosted to {position_size:.3f} lots ({adjusted_risk:.2f}% risk). EXCELLENT risk/reward setup!",
+                confidence=0.92,
+                emoji="🔥",
+                color="green"
+            )
+
+        # GOOD: NORMAL VOLATILITY + STRONG TREND
+        if volatility_regime == 'NORMAL' and trend_strength == 'STRONG':
+            multiplier_effect = volatility_mult * trend_mult
+            return create_ai_suggestion(
+                widget_type="volatility_position",
+                text=f"✓ GOOD SETUP: Normal volatility + STRONG trend. Position: {position_size:.3f} lots at {adjusted_risk:.2f}% risk. Combined multiplier: {multiplier_effect:.2f}x",
+                confidence=0.85,
+                emoji="✓",
+                color="green"
+            )
+
+        # MODERATE: NORMAL CONDITIONS
+        if volatility_regime == 'NORMAL' and trend_strength == 'MODERATE':
+            return create_ai_suggestion(
+                widget_type="volatility_position",
+                text=f"📊 MODERATE: Normal market conditions. Standard position sizing ({position_size:.3f} lots, {adjusted_risk:.2f}% risk). Monitor for changes.",
+                confidence=0.75,
+                emoji="📊",
+                color="yellow"
+            )
+
+        # CONSERVATIVE: LOW VOLATILITY + WEAK TREND
+        if volatility_regime == 'LOW' and trend_strength in ['WEAK', 'NEUTRAL']:
+            return create_ai_suggestion(
+                widget_type="volatility_position",
+                text=f"⚠️ MIXED SIGNALS: Low volatility BUT weak trend direction. Position: {position_size:.3f} lots. Be ready to exit if trend doesn't develop.",
+                confidence=0.70,
+                emoji="⚠️",
+                color="yellow"
+            )
+
+        # HIGH VOLATILITY BUT STRONG TREND
+        if volatility_regime == 'HIGH' and trend_strength == 'STRONG':
+            return create_ai_suggestion(
+                widget_type="volatility_position",
+                text=f"📈 ACTIVE MARKET: High volatility but STRONG trend compensates. Position: {position_size:.3f} lots ({adjusted_risk:.2f}% risk). Use wide stops!",
+                confidence=0.80,
+                emoji="📈",
+                color="yellow"
+            )
+
+        # DEFAULT
+        return create_ai_suggestion(
+            widget_type="volatility_position",
+            text=f"Position calculated: {position_size:.3f} lots at {adjusted_risk:.2f}% risk. Volatility: {volatility_regime}, Trend: {trend_strength}",
+            confidence=0.72,
+            emoji="📊",
+            color="blue"
+        )

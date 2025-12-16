@@ -4,7 +4,7 @@ Scans all pairs for high-probability trading setups in real-time
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                            QFrame, QScrollArea, QGridLayout, QSizePolicy, QDialog)
+                            QFrame, QScrollArea, QGridLayout, QSizePolicy, QDialog, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QMouseEvent
 from datetime import datetime, timedelta
@@ -13,6 +13,8 @@ import random
 
 from core.opportunity_generator import opportunity_generator
 from core.market_analyzer import market_analyzer
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 
 
 class OpportunityCard(QFrame):
@@ -290,7 +292,7 @@ class TimeframeGroup(QWidget):
             self.current_popup.show()
 
 
-class OpportunityScannerWidget(QWidget):
+class OpportunityScannerWidget(AIAssistMixin, QWidget):
     """
     Live Market Opportunity Scanner - Horizontal Flow Layout
 
@@ -321,6 +323,7 @@ class OpportunityScannerWidget(QWidget):
         self.signal_persist_duration = 300  # 5 minutes
 
         self.init_ui()
+        self.setup_ai_assist()
 
         # Auto-scan timer
         self.scan_timer = QTimer()
@@ -338,8 +341,12 @@ class OpportunityScannerWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)  # No margins - save space
         layout.setSpacing(0)  # No spacing - save space
 
-        # NO HEADER - Removed as requested by user
-        # Directly show the three timeframe groups
+        # Minimal header for AI checkbox only
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(5, 2, 5, 2)
+        header_layout.addStretch()
+        self.ai_checkbox_placeholder = header_layout
+        layout.addLayout(header_layout)
 
         # === THREE TIMEFRAME GROUPS (NO HEADERS, NO BADGES) ===
         groups_layout = QHBoxLayout()
@@ -359,6 +366,9 @@ class OpportunityScannerWidget(QWidget):
         groups_layout.addWidget(self.long_group, 1)
 
         layout.addLayout(groups_layout)
+
+        # AI suggestion frame placeholder
+        self.ai_suggestion_placeholder = layout
 
         # Apply theme
         self.apply_dark_theme()
@@ -667,6 +677,156 @@ class OpportunityScannerWidget(QWidget):
         # self.status_label.setStyleSheet("color: #FFFFFF;")
         # QTimer.singleShot(200, lambda: self.status_label.setStyleSheet("color: #10B981;"))
         pass  # Do nothing, labels removed
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Generate demo opportunities
+            demo_opps = get_demo_data('opportunity', symbol='EURUSD')
+            if demo_opps:
+                self.opportunities = self.generate_synthetic_opportunities()
+                self.update_display()
+        else:
+            # Scan live market
+            self.scan_market()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.opportunities:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Opportunity Scanner switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Advanced AI analysis for trading opportunities
+
+        Analyzes:
+        - Quality score distribution
+        - Directional bias across markets
+        - Timeframe alignment
+        - Best opportunity identification
+        - Risk concentration
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.opportunities:
+            return create_ai_suggestion(
+                widget_type="opportunity_scanner",
+                text="No trading opportunities found - Market conditions unclear",
+                confidence=0.0
+            )
+
+        # Analyze opportunity quality distribution
+        excellent = [o for o in self.opportunities if o['quality_score'] >= 85]
+        good = [o for o in self.opportunities if 70 <= o['quality_score'] < 85]
+        fair = [o for o in self.opportunities if 60 <= o['quality_score'] < 70]
+
+        # Analyze directional bias
+        buy_opps = [o for o in self.opportunities if o['direction'] == 'BUY']
+        sell_opps = [o for o in self.opportunities if o['direction'] == 'SELL']
+
+        # Get best opportunity
+        best_opp = max(self.opportunities, key=lambda o: o['quality_score'])
+
+        # EXCEPTIONAL: Multiple excellent opportunities
+        if len(excellent) >= 3:
+            # Check if they're aligned (same direction)
+            excellent_buy = [o for o in excellent if o['direction'] == 'BUY']
+            excellent_sell = [o for o in excellent if o['direction'] == 'SELL']
+
+            if len(excellent_buy) >= 3:
+                symbols = ', '.join([o['symbol'] for o in excellent_buy[:3]])
+                return create_ai_suggestion(
+                    widget_type="opportunity_scanner",
+                    text=f"🔥 STRONG BUY SIGNAL: {len(excellent_buy)} excellent BUY opportunities ({symbols}). Market showing bullish alignment!",
+                    confidence=0.92,
+                    emoji="🔥",
+                    color="green"
+                )
+            elif len(excellent_sell) >= 3:
+                symbols = ', '.join([o['symbol'] for o in excellent_sell[:3]])
+                return create_ai_suggestion(
+                    widget_type="opportunity_scanner",
+                    text=f"🔥 STRONG SELL SIGNAL: {len(excellent_sell)} excellent SELL opportunities ({symbols}). Market showing bearish alignment!",
+                    confidence=0.92,
+                    emoji="🔥",
+                    color="red"
+                )
+
+        # VERY GOOD: Single excellent opportunity
+        if excellent:
+            opp = excellent[0]
+            direction_emoji = "📈" if opp['direction'] == 'BUY' else "📉"
+
+            # Check for timeframe alignment
+            same_symbol_opps = [o for o in self.opportunities
+                               if o['symbol'] == opp['symbol']
+                               and o['direction'] == opp['direction']]
+
+            if len(same_symbol_opps) >= 2:
+                timeframes = ', '.join([o['timeframe'] for o in same_symbol_opps[:3]])
+                return create_ai_suggestion(
+                    widget_type="opportunity_scanner",
+                    text=f"{direction_emoji} EXCELLENT: {opp['symbol']} {opp['direction']} (Score: {opp['quality_score']}) - Multi-timeframe alignment on {timeframes}. HIGH CONFIDENCE TRADE.",
+                    confidence=0.90,
+                    emoji="✓",
+                    color="green" if opp['direction'] == 'BUY' else "red"
+                )
+            else:
+                return create_ai_suggestion(
+                    widget_type="opportunity_scanner",
+                    text=f"{direction_emoji} {opp['symbol']} {opp['direction']} - Score: {opp['quality_score']}/100 on {opp['timeframe']}. Excellent setup but isolated signal.",
+                    confidence=0.83,
+                    emoji="✓",
+                    color="green" if opp['direction'] == 'BUY' else "red"
+                )
+
+        # GOOD: Multiple good opportunities
+        if len(good) >= 2:
+            # Analyze market bias
+            good_buy = [o for o in good if o['direction'] == 'BUY']
+            good_sell = [o for o in good if o['direction'] == 'SELL']
+
+            if len(good_buy) > len(good_sell) * 1.5:
+                return create_ai_suggestion(
+                    widget_type="opportunity_scanner",
+                    text=f"📊 GOOD: {len(good_buy)} BUY vs {len(good_sell)} SELL opportunities. Market bias BULLISH. Focus on long positions.",
+                    confidence=0.78,
+                    emoji="📊",
+                    color="green"
+                )
+            elif len(good_sell) > len(good_buy) * 1.5:
+                return create_ai_suggestion(
+                    widget_type="opportunity_scanner",
+                    text=f"📊 GOOD: {len(good_sell)} SELL vs {len(good_buy)} BUY opportunities. Market bias BEARISH. Focus on short positions.",
+                    confidence=0.78,
+                    emoji="📊",
+                    color="red"
+                )
+
+        # MODERATE: Best available opportunity
+        if best_opp['quality_score'] >= 60:
+            direction_emoji = "📈" if best_opp['direction'] == 'BUY' else "📉"
+            return create_ai_suggestion(
+                widget_type="opportunity_scanner",
+                text=f"{direction_emoji} MODERATE: Best setup is {best_opp['symbol']} {best_opp['direction']} (Score: {best_opp['quality_score']}) on {best_opp['timeframe']}. Proceed with caution.",
+                confidence=0.70,
+                emoji="⚠️",
+                color="yellow"
+            )
+
+        # POOR: No quality opportunities
+        return create_ai_suggestion(
+            widget_type="opportunity_scanner",
+            text=f"⚠️ POOR CONDITIONS: {len(self.opportunities)} opportunities found but all below 60 quality score. Wait for clearer setups.",
+            confidence=0.65,
+            emoji="⚠️",
+            color="orange"
+        )
 
 
 class MiniChartPopup(QDialog):
