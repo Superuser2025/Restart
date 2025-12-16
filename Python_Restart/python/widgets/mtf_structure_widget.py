@@ -286,7 +286,7 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
             # Get demo MTF structure data
             demo_data = get_demo_data('mtf_structure', symbols=[self.current_symbol])
             if demo_data:
-                self.update_structure_display(demo_data)
+                self.update_structure_data(demo_data)
                 self.status_label.setText(f"Demo Mode - {self.current_symbol}")
         else:
             # Get live data
