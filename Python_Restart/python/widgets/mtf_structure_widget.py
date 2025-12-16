@@ -284,9 +284,30 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
         """Update widget with data based on current mode (demo/live)"""
         if is_demo_mode():
             # Get demo MTF structure data
-            demo_data = get_demo_data('mtf_structure', symbols=[self.current_symbol])
+            demo_data = get_demo_data('mtf_structure', symbol=self.current_symbol)
             if demo_data:
-                self.update_structure_data(demo_data)
+                # Transform demo data to expected format
+                current_price = 1.0850
+                structure_data = {
+                    'trend_analysis': {
+                        'M15': demo_data.get('m15_trend', 'UNKNOWN'),
+                        'H1': demo_data.get('h1_trend', 'UNKNOWN'),
+                        'H4': demo_data.get('h4_trend', 'UNKNOWN'),
+                        'D1': demo_data.get('d1_trend', 'NEUTRAL'),
+                        'H4 ': demo_data.get('h4_trend', 'UNKNOWN')  # Duplicate for 5-item display
+                    },
+                    'nearest_support': {
+                        'price': demo_data.get('key_support', 1.0750),
+                        'timeframe': 'H4'
+                    },
+                    'nearest_resistance': {
+                        'price': demo_data.get('key_resistance', 1.0950),
+                        'timeframe': 'H1'
+                    },
+                    'current_price': current_price,
+                    'confluence_zones': []  # No confluence zones in demo
+                }
+                self.update_structure_data(structure_data)
                 self.status_label.setText(f"Demo Mode - {self.current_symbol}")
         else:
             # Get live data

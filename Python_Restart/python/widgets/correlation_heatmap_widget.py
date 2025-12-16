@@ -65,9 +65,14 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
         if is_demo_mode():
             # Get demo correlation data
             symbols = get_all_symbols()
-            demo_data = get_demo_data('correlation_heatmap', symbols=symbols)
-            if demo_data:
-                self.update_correlation_data(demo_data)
+            demo_matrix = get_demo_data('correlation', symbols=symbols)
+            if demo_matrix:
+                # Wrap demo matrix in expected report format
+                correlation_report = {
+                    'correlation_matrix': demo_matrix,
+                    'divergence_alerts': []  # No alerts in demo mode
+                }
+                self.update_correlation_data(correlation_report)
                 self.status_label.setText(f"Demo Mode - {len(symbols)} symbols")
         else:
             # Get live data
