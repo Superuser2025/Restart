@@ -5,13 +5,15 @@ PyQt6 widget for displaying detected institutional orders
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QGroupBox, QListWidget, QListWidgetItem,
-                            QPushButton, QTextEdit, QFrame)
+                            QPushButton, QTextEdit, QFrame, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from typing import Dict, List
 import pandas as pd
 
 from widgets.order_flow_detector import order_flow_detector, InstitutionalOrder
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 
 
 class OrderFlowListItem(QWidget):
@@ -79,7 +81,7 @@ class OrderFlowListItem(QWidget):
         layout.addWidget(time_label)
 
 
-class InstitutionalOrderFlowWidget(QWidget):
+class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
     """
     Institutional Order Flow Display Widget
 
@@ -98,9 +100,11 @@ class InstitutionalOrderFlowWidget(QWidget):
 
         # CRITICAL: Initialize current_symbol to default value
         self.current_symbol = "EURUSD"
+        self.current_orders = []  # Store orders for AI analysis
 
         self.using_real_data = False  # Track if we're using real or demo data
         self.init_ui()
+        self.setup_ai_assist()
 
         # Auto-refresh every 3 seconds
         self.refresh_timer = QTimer()
@@ -124,6 +128,9 @@ class InstitutionalOrderFlowWidget(QWidget):
         header_layout.addWidget(title)
 
         header_layout.addStretch()
+
+        # AI checkbox placeholder
+        self.ai_checkbox_placeholder = header_layout
 
         # Scan button
         self.scan_btn = QPushButton("🔍 Scan")
@@ -199,6 +206,9 @@ class InstitutionalOrderFlowWidget(QWidget):
 
         clusters_group.setLayout(clusters_layout)
         layout.addWidget(clusters_group)
+
+        # AI suggestion frame placeholder
+        self.ai_suggestion_placeholder = layout
 
         # === STATUS ===
         self.status_label = QLabel("Status: Ready")
@@ -293,6 +303,9 @@ class InstitutionalOrderFlowWidget(QWidget):
             self.current_symbol, hours=24
         )
 
+        # Store for AI analysis
+        self.current_orders = recent_orders
+
         # Update summary counts
         buy_count = sum(1 for o in recent_orders if o.direction == 'BUY')
         sell_count = sum(1 for o in recent_orders if o.direction == 'SELL')
@@ -348,6 +361,10 @@ class InstitutionalOrderFlowWidget(QWidget):
             self.status_label.setText(
                 f"{stats.get('total_orders', 0)} total orders in history"
             )
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_orders:
+            self.update_ai_suggestions()
 
     def on_scan_requested(self):
         """Handle scan request"""
@@ -487,3 +504,149 @@ class InstitutionalOrderFlowWidget(QWidget):
 
         # Refresh display
         self.refresh_display()
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Load sample order flow data
+            self.load_sample_orders()
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_orders:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Order Flow widget switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Advanced AI analysis for institutional order flow
+
+        Analyzes:
+        - Order clustering and concentration
+        - Directional bias (smart money direction)
+        - Order type significance
+        - Volume magnitude assessment
+        - Liquidity sweep patterns
+        """
+        from core.ml_integration import create_ai_suggestion
+        from datetime import datetime, timedelta
+
+        if not self.current_orders:
+            return create_ai_suggestion(
+                widget_type="order_flow",
+                text="No institutional orders detected yet",
+                confidence=0.0
+            )
+
+        # Analyze recent orders (last hour)
+        now = datetime.now()
+        recent_orders = [o for o in self.current_orders
+                        if now - o.timestamp <= timedelta(hours=1)]
+
+        if not recent_orders:
+            return create_ai_suggestion(
+                widget_type="order_flow",
+                text="No recent institutional activity - Market quiet",
+                confidence=0.75,
+                emoji="💤",
+                color="gray"
+            )
+
+        # Analyze directional bias
+        buy_orders = [o for o in recent_orders if o.direction == 'BUY']
+        sell_orders = [o for o in recent_orders if o.direction == 'SELL']
+
+        # Calculate total institutional volume
+        total_buy_volume = sum(o.estimated_size_usd for o in buy_orders)
+        total_sell_volume = sum(o.estimated_size_usd for o in sell_orders)
+
+        # Analyze order types
+        sweeps = [o for o in recent_orders if o.order_type == 'sweep']
+        absorptions = [o for o in recent_orders if o.order_type == 'absorption']
+        accumulations = [o for o in recent_orders if o.order_type == 'accumulation']
+
+        # Get average confidence
+        avg_confidence = sum(o.confidence for o in recent_orders) / len(recent_orders)
+
+        # CRITICAL: Strong directional bias with high-value sweeps
+        if sweeps and len(sweeps) >= 2:
+            sweep_direction = 'BUY' if len([s for s in sweeps if s.direction == 'BUY']) > len([s for s in sweeps if s.direction == 'SELL']) else 'SELL'
+            sweep_volume = sum(o.estimated_size_usd for o in sweeps)
+
+            if sweep_volume > 50_000_000:  # >$50M in sweeps
+                emoji = "🔥" if sweep_direction == 'BUY' else "❄️"
+                color = "green" if sweep_direction == 'BUY' else "red"
+                return create_ai_suggestion(
+                    widget_type="order_flow",
+                    text=f"{emoji} STRONG {sweep_direction} SIGNAL: {len(sweeps)} liquidity sweeps detected (${sweep_volume/1e6:.0f}M). Smart money is aggressively {sweep_direction}ING! High probability move incoming!",
+                    confidence=0.93,
+                    emoji=emoji,
+                    color=color
+                )
+
+        # STRONG: Clear directional imbalance
+        if total_buy_volume > total_sell_volume * 2:
+            return create_ai_suggestion(
+                widget_type="order_flow",
+                text=f"📈 STRONG BUY FLOW: ${total_buy_volume/1e6:.0f}M BUY vs ${total_sell_volume/1e6:.0f}M SELL ({len(buy_orders)} vs {len(sell_orders)} orders). Institutions accumulating! Avg confidence: {avg_confidence:.0f}%",
+                confidence=0.88,
+                emoji="📈",
+                color="green"
+            )
+        elif total_sell_volume > total_buy_volume * 2:
+            return create_ai_suggestion(
+                widget_type="order_flow",
+                text=f"📉 STRONG SELL FLOW: ${total_sell_volume/1e6:.0f}M SELL vs ${total_buy_volume/1e6:.0f}M BUY ({len(sell_orders)} vs {len(buy_orders)} orders). Institutions distributing! Avg confidence: {avg_confidence:.0f}%",
+                confidence=0.88,
+                emoji="📉",
+                color="red"
+            )
+
+        # MODERATE: Absorption detected (potential reversal)
+        if len(absorptions) >= 2:
+            absorption_direction = 'BUY' if len([a for a in absorptions if a.direction == 'BUY']) > len([a for a in absorptions if a.direction == 'SELL']) else 'SELL'
+            return create_ai_suggestion(
+                widget_type="order_flow",
+                text=f"⚠️ ABSORPTION DETECTED: {len(absorptions)} {absorption_direction} absorptions - Institutions stopping {('sellers' if absorption_direction == 'BUY' else 'buyers')}. Possible reversal zone!",
+                confidence=0.82,
+                emoji="⚠️",
+                color="yellow"
+            )
+
+        # GOOD: Accumulation pattern
+        if len(accumulations) >= 2:
+            accum_direction = 'BUY' if len([a for a in accumulations if a.direction == 'BUY']) > len([a for a in accumulations if a.direction == 'SELL']) else 'SELL'
+            accum_volume = sum(o.estimated_size_usd for o in accumulations)
+            return create_ai_suggestion(
+                widget_type="order_flow",
+                text=f"📊 ACCUMULATION: {len(accumulations)} {accum_direction} accumulation orders (${accum_volume/1e6:.0f}M). Smart money building {accum_direction} position slowly.",
+                confidence=0.78,
+                emoji="📊",
+                color="green" if accum_direction == 'BUY' else "red"
+            )
+
+        # BALANCED: Mixed signals
+        if abs(len(buy_orders) - len(sell_orders)) <= 1:
+            return create_ai_suggestion(
+                widget_type="order_flow",
+                text=f"⚖️ BALANCED FLOW: {len(buy_orders)} BUY vs {len(sell_orders)} SELL (${total_buy_volume/1e6:.0f}M vs ${total_sell_volume/1e6:.0f}M). No clear institutional bias. Wait for direction.",
+                confidence=0.70,
+                emoji="⚖️",
+                color="yellow"
+            )
+
+        # WEAK: Some activity but unclear
+        return create_ai_suggestion(
+            widget_type="order_flow",
+            text=f"📋 {len(recent_orders)} institutional orders detected. Total: ${(total_buy_volume + total_sell_volume)/1e6:.0f}M. Avg confidence: {avg_confidence:.0f}%. Monitor for clearer pattern.",
+            confidence=0.68,
+            emoji="📋",
+            color="blue"
+        )
