@@ -5,7 +5,7 @@ PyQt6 widget for displaying equity curve and drawdown analysis
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QGroupBox, QTextEdit, QFrame, QProgressBar,
-                            QPushButton, QGridLayout)
+                            QPushButton, QGridLayout, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from typing import Dict, List
@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 from widgets.equity_curve_analyzer import equity_curve_analyzer
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 
 
 class EquityCurveCanvas(FigureCanvasQTAgg):
@@ -75,7 +77,7 @@ class EquityCurveCanvas(FigureCanvasQTAgg):
         self.draw()
 
 
-class EquityCurveWidget(QWidget):
+class EquityCurveWidget(AIAssistMixin, QWidget):
     """
     Equity Curve & Drawdown Display Widget
 
@@ -95,8 +97,10 @@ class EquityCurveWidget(QWidget):
 
         # CRITICAL: Initialize current_symbol BEFORE starting timer
         self.current_symbol = "EURUSD"
+        self.current_analysis = None  # Store current equity analysis for AI
 
         self.init_ui()
+        self.setup_ai_assist()
 
         # Auto-refresh every 2 seconds
         self.refresh_timer = QTimer()
@@ -113,9 +117,13 @@ class EquityCurveWidget(QWidget):
         layout.setSpacing(5)
 
         # === HEADER ===
+        header_layout = QHBoxLayout()
         title = QLabel("📊 Equity Curve & Drawdown Analyzer")
         title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        self.ai_checkbox_placeholder = header_layout
+        layout.addLayout(header_layout)
 
         # === BALANCE OVERVIEW ===
         balance_frame = QFrame()
@@ -263,6 +271,9 @@ class EquityCurveWidget(QWidget):
         alerts_group.setLayout(alerts_layout)
         layout.addWidget(alerts_group)
 
+        # AI suggestion frame placeholder
+        self.ai_suggestion_placeholder = layout
+
         layout.addStretch()
 
         # Apply dark theme
@@ -372,6 +383,16 @@ class EquityCurveWidget(QWidget):
         # Update drawdown
         dd_analysis = equity_curve_analyzer.get_drawdown_analysis()
 
+        # Store analysis for AI
+        self.current_analysis = {
+            'current_drawdown': dd_analysis['current_drawdown_pct'],
+            'max_drawdown': dd_analysis['max_drawdown_pct'],
+            'total_return': return_pct,
+            'win_rate': stats.get('win_rate', 0.0),
+            'daily_loss': dd_analysis['daily_loss_pct'],
+            'weekly_loss': dd_analysis['weekly_loss_pct']
+        }
+
         current_dd = dd_analysis['current_drawdown_pct']
         self.current_dd_label.setText(f"{current_dd:.1f}%")
 
@@ -465,6 +486,10 @@ class EquityCurveWidget(QWidget):
         else:
             self.alerts_text.setPlainText("✓ No alerts - Trading normally")
 
+        # Update AI if enabled
+        if self.ai_enabled and self.current_analysis:
+            self.update_ai_suggestions()
+
     def clear_display(self):
         """Clear all displays"""
         self.balance_label.setText("$0.00")
@@ -473,3 +498,166 @@ class EquityCurveWidget(QWidget):
         self.current_dd_label.setText("0.0%")
         self.max_dd_label.setText("0.0%")
         self.alerts_text.setPlainText("No data")
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Load demo equity data
+            self.load_sample_data()
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI if enabled
+        if self.ai_enabled and self.current_analysis:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Equity Curve widget switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Advanced AI analysis for equity curve and drawdown
+
+        Analyzes:
+        - Drawdown severity and recovery patterns
+        - Account health and risk status
+        - Win rate and profitability trends
+        - Daily/weekly loss limit proximity
+        - Psychological state and trading recommendations
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.current_analysis:
+            return create_ai_suggestion(
+                widget_type="equity_curve",
+                text="No trading history to analyze yet",
+                confidence=0.0
+            )
+
+        # Extract key metrics
+        current_dd = self.current_analysis.get('current_drawdown', 0.0)
+        max_dd = self.current_analysis.get('max_drawdown', 0.0)
+        total_return = self.current_analysis.get('total_return', 0.0)
+        win_rate = self.current_analysis.get('win_rate', 0.0)
+        daily_loss = self.current_analysis.get('daily_loss', 0.0)
+        weekly_loss = self.current_analysis.get('weekly_loss', 0.0)
+
+        # CRITICAL: Severe drawdown or approaching limits
+        if current_dd >= 15.0:
+            return create_ai_suggestion(
+                widget_type="equity_curve",
+                text=f"🚨 CRITICAL DRAWDOWN: {current_dd:.1f}% - STOP TRADING IMMEDIATELY! Account severely damaged. Take mandatory break, review all trades, identify systematic issues.",
+                confidence=0.98,
+                emoji="🚨",
+                color="red"
+            )
+
+        # DANGER: Daily/weekly loss limits approaching
+        if daily_loss <= -3.0:
+            return create_ai_suggestion(
+                widget_type="equity_curve",
+                text=f"🛑 DAILY LOSS LIMIT HIT: {daily_loss:.1f}% - Stop trading for today! Close platform, walk away. Revenge trading will only deepen losses.",
+                confidence=0.95,
+                emoji="🛑",
+                color="red"
+            )
+
+        if weekly_loss <= -5.0:
+            return create_ai_suggestion(
+                widget_type="equity_curve",
+                text=f"⛔ WEEKLY LOSS LIMIT: {weekly_loss:.1f}% - Stop trading this week! Take 3-5 days off. Come back refreshed with clear mind.",
+                confidence=0.95,
+                emoji="⛔",
+                color="red"
+            )
+
+        # WARNING: High drawdown (10-15%)
+        if 10.0 <= current_dd < 15.0:
+            return create_ai_suggestion(
+                widget_type="equity_curve",
+                text=f"⚠️ HIGH DRAWDOWN: {current_dd:.1f}% - Reduce position sizes by 50%. Focus on capital preservation. Max DD: {max_dd:.1f}%. Win rate: {win_rate:.0f}%",
+                confidence=0.90,
+                emoji="⚠️",
+                color="orange"
+            )
+
+        # MODERATE WARNING: Drawdown 5-10%
+        if 5.0 <= current_dd < 10.0:
+            if win_rate < 45.0:
+                return create_ai_suggestion(
+                    widget_type="equity_curve",
+                    text=f"📉 STRUGGLING PHASE: {current_dd:.1f}% DD + {win_rate:.0f}% win rate - Strategy not working. Reduce risk to 0.25% per trade. Review edge.",
+                    confidence=0.85,
+                    emoji="📉",
+                    color="orange"
+                )
+            else:
+                return create_ai_suggestion(
+                    widget_type="equity_curve",
+                    text=f"⚠️ MODERATE DRAWDOWN: {current_dd:.1f}% - Still manageable but tighten discipline. Win rate {win_rate:.0f}% is acceptable. Cut losses faster.",
+                    confidence=0.80,
+                    emoji="⚠️",
+                    color="yellow"
+                )
+
+        # EXCELLENT: Profitable with low drawdown
+        if total_return > 10.0 and current_dd < 3.0:
+            if win_rate >= 55.0:
+                return create_ai_suggestion(
+                    widget_type="equity_curve",
+                    text=f"🔥 EXCELLENT PERFORMANCE: +{total_return:.1f}% return, {current_dd:.1f}% DD, {win_rate:.0f}% win rate! You're in the zone. Maintain discipline, don't over-trade!",
+                    confidence=0.92,
+                    emoji="🔥",
+                    color="green"
+                )
+            else:
+                return create_ai_suggestion(
+                    widget_type="equity_curve",
+                    text=f"✓ GOOD RUN: +{total_return:.1f}% return with low {current_dd:.1f}% DD. Win rate {win_rate:.0f}% could improve but R:R is strong. Keep it up!",
+                    confidence=0.85,
+                    emoji="✓",
+                    color="green"
+                )
+
+        # GOOD: Profitable
+        if total_return > 5.0:
+            return create_ai_suggestion(
+                widget_type="equity_curve",
+                text=f"📈 PROFITABLE: +{total_return:.1f}% return. Current DD: {current_dd:.1f}%, Win rate: {win_rate:.0f}%. Solid progress. Stay consistent!",
+                confidence=0.80,
+                emoji="📈",
+                color="green"
+            )
+
+        # EARLY STAGE: Small drawdown, learning phase
+        if current_dd < 5.0 and total_return < 2.0:
+            return create_ai_suggestion(
+                widget_type="equity_curve",
+                text=f"📊 STEADY START: {current_dd:.1f}% DD, +{total_return:.1f}% return. Good risk control. Win rate {win_rate:.0f}%. Focus on consistency over profits early on.",
+                confidence=0.75,
+                emoji="📊",
+                color="blue"
+            )
+
+        # SLIGHT LOSS: Manageable
+        if -3.0 < total_return < 0.0:
+            return create_ai_suggestion(
+                widget_type="equity_curve",
+                text=f"📉 SLIGHT LOSS: {total_return:.1f}% - Normal part of trading. DD: {current_dd:.1f}%, Win rate: {win_rate:.0f}%. Stay patient, follow plan.",
+                confidence=0.70,
+                emoji="📉",
+                color="yellow"
+            )
+
+        # DEFAULT
+        return create_ai_suggestion(
+            widget_type="equity_curve",
+            text=f"Account status: {total_return:+.1f}% return, {current_dd:.1f}% DD, {win_rate:.0f}% win rate. Monitor and adjust.",
+            confidence=0.68,
+            emoji="📊",
+            color="blue"
+        )
