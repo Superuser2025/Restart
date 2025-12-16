@@ -1,0 +1,1004 @@
+//+------------------------------------------------------------------+
+//|                                InstitutionalTradingRobot_v3.mq5  |
+//|                         Institutional-Grade Trading System v3.0   |
+//|                      Complete Rewrite - Pure MQL5 Implementation  |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2025, Institutional Grade Trading"
+#property link      "https://www.mql5.com"
+#property version   "3.00"
+#property description "Citadel-Level Trading Robot - 20 Professional Fixes"
+#property strict
+
+#include <Trade\Trade.mqh>
+#include <Trade\PositionInfo.mqh>
+#include <Trade\AccountInfo.mqh>
+
+//+------------------------------------------------------------------+
+//| INPUT PARAMETERS - INSTITUTIONAL CONFIGURATION                    |
+//+------------------------------------------------------------------+
+input group "═════════ CORE SETTINGS ═════════"
+input bool     EnableTrading = false;                   // Enable Auto Trading (START FALSE!)
+input bool     IndicatorMode = true;                    // Visual Analysis Mode
+input ENUM_TIMEFRAMES PreferredTimeframe = PERIOD_H4;   // Trading Timeframe (H4 Default)
+input double   MinLotSize = 0.01;                       // Minimum Lot Size
+input int      MagicNumber = 123456;                    // Magic Number
+
+input group "═════════ FIX #1-3: EXECUTION QUALITY ═════════"
+input bool     UseVolumeFilter = true;                  // Volume Confirmation Required
+input double   MinVolumeMultiplier = 1.5;               // Minimum Volume (× Average)
+input bool     UseSpreadFilter = true;                  // Spread Protection
+input double   MaxSpreadPercent = 0.3;                  // Max Spread (% of ATR)
+input bool     UseSlippageModel = true;                 // Slippage Modeling
+input double   ExpectedSlippagePercent = 0.1;           // Expected Slippage (% of ATR)
+
+input group "═════════ FIX #5-8: MULTI-DIMENSIONAL ANALYSIS ═════════"
+input bool     UseMTFConfirmation = true;               // Multi-Timeframe Confirmation
+input bool     UseSessionFilter = true;                 // Session Filtering
+input bool     TradeAsianSession = false;               // Trade Asian Session
+input bool     TradeLondonSession = true;               // Trade London Session
+input bool     TradeNYSession = true;                   // Trade NY Session
+input bool     UseCorrelationFilter = true;             // Portfolio Correlation Check
+input double   MaxCorrelationExposure = 0.7;            // Max Correlation Limit
+input bool     UseNewsFilter = true;                    // Economic Calendar Filter
+input int      NewsAvoidMinutes = 30;                   // Minutes Before/After News
+
+input group "═════════ FIX #9-12: ADAPTIVE RISK ═════════"
+input bool     UseVolatilityAdaptation = true;          // Volatility Regime Detection
+input bool     UseDynamicRisk = true;                   // Drawdown-Based Risk Adjustment
+input bool     UsePatternDecay = true;                  // Pattern Time Decay
+input int      PatternExpiryBars = 3;                   // Pattern Valid For (Bars)
+input bool     UsePositionCorrelation = true;           // Position Correlation Management
+
+input group "═════════ FIX #13-16: SMART MONEY CONCEPTS ═════════"
+input bool     UseLiquiditySweep = true;                // Liquidity Sweep Detection
+input bool     UseRetailTrap = true;                    // Retail Trap Detection
+input bool     UseOrderBlockInvalidation = true;        // Order Block Invalidation
+input int      MaxOBTests = 3;                          // Max Order Block Re-Tests
+input bool     UseMarketStructure = true;               // Market Structure Tracking
+
+input group "═════════ FIX #17-20: MACHINE LEARNING ═════════"
+input bool     UsePatternTracking = true;               // Pattern Performance Tracking
+input bool     UseParameterAdaptation = true;           // Self-Optimization
+input bool     UseRegimeStrategy = true;                // Regime-Specific Strategies
+input int      AdaptationPeriod = 20;                   // Learning Period (Trades)
+
+input group "═════════ RISK MANAGEMENT ═════════"
+input double   BaseRiskPercent = 0.5;                   // Base Risk Per Trade (%)
+input int      MaxOpenTrades = 3;                       // Max Concurrent Trades
+input double   DailyLossLimit = 2.0;                    // Daily Loss Limit (%)
+input double   WeeklyLossLimit = 5.0;                   // Weekly Loss Limit (%)
+input double   StopLossATR = 2.0;                       // Stop Loss (× ATR)
+
+input group "═════════ TAKE PROFIT SETTINGS ═════════"
+input double   TP1_RiskReward = 2.0;                    // Take Profit 1 (R:R)
+input double   TP2_RiskReward = 3.0;                    // Take Profit 2 (R:R)
+input double   TP3_RiskReward = 5.0;                    // Take Profit 3 (R:R)
+
+input group "═════════ VISUAL DASHBOARD ═════════"
+input bool     ShowDashboard = true;                    // Show Dashboard
+input bool     ShowCommentary = true;                   // Show Real-Time Commentary
+input int      Dashboard_X = 20;                        // Dashboard X Position
+input int      Dashboard_Y = 50;                        // Dashboard Y Position
+input color    ColorBackground = C'20,20,30';           // Background Color
+input color    ColorText = clrWhite;                    // Text Color
+input int      FontSize = 9;                            // Font Size
+
+//+------------------------------------------------------------------+
+//| GLOBAL TRADING OBJECTS                                            |
+//+------------------------------------------------------------------+
+CTrade         trade;
+CPositionInfo  position;
+CAccountInfo   account;
+
+//+------------------------------------------------------------------+
+//| INDICATOR HANDLES                                                 |
+//+------------------------------------------------------------------+
+int h_EMA_200;              // 200 EMA for regime detection
+int h_EMA_Higher;           // Higher timeframe EMA
+int h_ATR;                  // ATR for volatility
+int h_ATR_Higher;           // Higher timeframe ATR
+int h_Volume_MA;            // Volume moving average
+
+//+------------------------------------------------------------------+
+//| ENUMERATIONS                                                      |
+//+------------------------------------------------------------------+
+enum MARKET_REGIME
+{
+    REGIME_TREND,           // Strong trending market
+    REGIME_RANGE,           // Range-bound market
+    REGIME_TRANSITION       // Choppy/transitioning
+};
+
+enum MARKET_BIAS
+{
+    BIAS_BULLISH,           // Bullish bias
+    BIAS_BEARISH,           // Bearish bias
+    BIAS_NEUTRAL            // Neutral/uncertain
+};
+
+enum TRADING_SESSION
+{
+    SESSION_ASIAN,          // Asian session (00:00-08:00 GMT)
+    SESSION_LONDON,         // London session (08:00-13:00 GMT)
+    SESSION_OVERLAP,        // London-NY overlap (13:00-16:00 GMT)
+    SESSION_NY,             // NY session (16:00-21:00 GMT)
+    SESSION_CLOSED          // Market closed
+};
+
+enum VOLATILITY_REGIME
+{
+    VOL_LOW,                // Low volatility (compression)
+    VOL_NORMAL,             // Normal volatility
+    VOL_HIGH                // High volatility (expansion)
+};
+
+enum TRADE_DECISION
+{
+    DECISION_ENTER,         // Enter the trade
+    DECISION_SKIP,          // Skip this setup
+    DECISION_WAIT           // Wait for more confirmation
+};
+
+enum COMMENTARY_PRIORITY
+{
+    PRIORITY_CRITICAL = 1,  // Critical information
+    PRIORITY_IMPORTANT = 2, // Important updates
+    PRIORITY_INFO = 3       // General information
+};
+
+//+------------------------------------------------------------------+
+//| DATA STRUCTURES (MQL5 Compatible - NO DYNAMIC ARRAYS!)           |
+//+------------------------------------------------------------------+
+
+// Pattern Information
+struct PatternInfo
+{
+    string      name;
+    string      signal;                 // BUY or SELL
+    int         strength;               // 1-5 rating
+    datetime    detected_time;
+    double      price;
+    bool        is_bullish;
+    int         bar_index;
+};
+
+// Liquidity Zone
+struct LiquidityZone
+{
+    double      price;
+    bool        is_high;                // true = resistance, false = support
+    datetime    time;
+    int         touch_count;
+    bool        swept;
+};
+
+// Fair Value Gap
+struct FairValueGap
+{
+    double      top;
+    double      bottom;
+    datetime    time;
+    bool        is_bullish;
+    bool        filled;
+    double      fill_percentage;
+};
+
+// Order Block
+struct OrderBlock
+{
+    double      top;
+    double      bottom;
+    datetime    time;
+    bool        is_bullish;
+    int         test_count;
+    bool        invalidated;
+    datetime    last_test_time;
+};
+
+// Market Structure
+struct MarketStructure
+{
+    double      last_HH;                // Higher High
+    double      last_HL;                // Higher Low
+    double      last_LH;                // Lower High
+    double      last_LL;                // Lower Low
+    string      structure;              // "BULLISH", "BEARISH", "CHOPPY"
+    datetime    last_update;
+};
+
+// Volume Data (FIX #1)
+struct VolumeData
+{
+    double      current_volume;
+    double      average_volume;
+    double      volume_ratio;
+    bool        above_threshold;
+    bool        spike_detected;
+};
+
+// Spread Data (FIX #2)
+struct SpreadData
+{
+    double      current_pips;
+    double      max_allowed_pips;
+    bool        acceptable;
+};
+
+// Session Data (FIX #6)
+struct SessionData
+{
+    TRADING_SESSION current_session;
+    string      session_name;
+    bool        is_tradeable;
+    double      expected_volatility;
+};
+
+// Volatility Data (FIX #9)
+struct VolatilityData
+{
+    VOLATILITY_REGIME regime;
+    double      atr_current;
+    double      atr_average;
+    double      ratio;
+};
+
+// Pattern Performance (FIX #17)
+struct PatternPerformance
+{
+    string      pattern_name;
+    MARKET_REGIME regime;
+    int         total_trades;
+    int         winning_trades;
+    double      total_pnl;
+    double      avg_rr;
+    double      win_rate;
+};
+
+// News Event (FIX #8)
+struct NewsEvent
+{
+    datetime    event_time;
+    string      currency;
+    string      event_name;
+    int         importance;
+    bool        is_near;
+};
+
+// Trade Decision (NO DYNAMIC ARRAYS!)
+struct TradeDecision
+{
+    TRADE_DECISION  decision;
+    string          primary_reason;
+    string          explanation;
+    string          passed_filters[20];     // Fixed array
+    string          failed_filters[20];     // Fixed array
+    int             passed_count;
+    int             failed_count;
+    int             confluence_score;
+    string          advice;
+};
+
+// Commentary Line
+struct CommentaryLine
+{
+    string      text;
+    color       text_color;
+    datetime    timestamp;
+    int         priority;
+};
+
+// Dashboard Data
+struct DashboardData
+{
+    MARKET_REGIME       regime;
+    MARKET_BIAS         bias;
+    TRADING_SESSION     session;
+    VOLATILITY_REGIME   volatility;
+    bool                volume_ok;
+    bool                spread_ok;
+    bool                session_ok;
+    bool                news_ok;
+    bool                mtf_ok;
+    bool                correlation_ok;
+    double              current_risk;
+    double              daily_pnl;
+    int                 open_trades;
+    string              last_pattern;
+    int                 confluence_score;
+    double              win_rate;
+};
+
+//+------------------------------------------------------------------+
+//| GLOBAL STATE VARIABLES                                            |
+//+------------------------------------------------------------------+
+
+// Market State
+MARKET_REGIME       current_regime = REGIME_TREND;
+MARKET_BIAS         current_bias = BIAS_NEUTRAL;
+TRADING_SESSION     current_session = SESSION_ASIAN;
+VOLATILITY_REGIME   current_volatility = VOL_NORMAL;
+
+// Pattern & Zones
+PatternInfo         active_pattern;
+bool                has_active_pattern = false;
+LiquidityZone       liquidity_zones[100];
+int                 liquidity_count = 0;
+FairValueGap        fvg_zones[50];
+int                 fvg_count = 0;
+OrderBlock          order_blocks[50];
+int                 ob_count = 0;
+MarketStructure     market_structure;
+
+// Analysis Results
+VolumeData          volume_data;
+SpreadData          spread_data;
+SessionData         session_data;
+VolatilityData      volatility_data;
+DashboardData       dashboard;
+TradeDecision       last_decision;
+
+// Commentary System
+CommentaryLine      commentary_buffer[50];
+int                 commentary_count = 0;
+
+// Pattern Performance (FIX #17)
+PatternPerformance  pattern_performance[100];
+int                 performance_count = 0;
+
+// News Events (FIX #8)
+NewsEvent           upcoming_news[20];
+int                 news_count = 0;
+
+// Risk Management
+double              daily_start_balance;
+double              weekly_start_balance;
+datetime            last_daily_reset;
+datetime            last_weekly_reset;
+int                 consecutive_losses = 0;
+int                 consecutive_wins = 0;
+double              peak_balance = 0;
+
+// Adaptive Parameters (FIX #18)
+int                 dynamic_confluence_required = 3;
+double              dynamic_risk_percent = 0.5;
+double              dynamic_tp1 = 2.0;
+
+// Object prefix
+string              prefix = "IGTR3_";
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                    |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+    Print("╔═══════════════════════════════════════════════════════════╗");
+    Print("║  INSTITUTIONAL TRADING ROBOT v3.0                        ║");
+    Print("║  Complete MQL5 Rewrite - 20 Professional Fixes           ║");
+    Print("╚═══════════════════════════════════════════════════════════╝");
+
+    // Configure trade object
+    trade.SetExpertMagicNumber(MagicNumber);
+    trade.SetDeviationInPoints(10);
+    trade.SetTypeFilling(ORDER_FILLING_FOK);
+
+    // Initialize indicators
+    if(!InitializeIndicators())
+    {
+        Print("ERROR: Failed to initialize indicators");
+        return INIT_FAILED;
+    }
+
+    // Initialize risk management
+    InitializeRiskManagement();
+
+    // Initialize market structure
+    ZeroMemory(market_structure);
+    market_structure.structure = "INITIALIZING";
+
+    // Load historical pattern performance
+    LoadPatternPerformance();
+
+    // Initialize dashboard
+    ZeroMemory(dashboard);
+
+    // Initial commentary
+    AddComment("═══ SYSTEM INITIALIZED ═══", clrLime, PRIORITY_CRITICAL);
+    AddComment("Timeframe: " + EnumToString(PreferredTimeframe), clrYellow, PRIORITY_IMPORTANT);
+    AddComment("20 Institutional Filters Active", clrAqua, PRIORITY_IMPORTANT);
+
+    if(!EnableTrading)
+    {
+        AddComment("⚠ INDICATOR MODE - No Trading", clrOrange, PRIORITY_CRITICAL);
+        AddComment("ADVICE: Enable trading only after thorough testing", clrYellow, PRIORITY_IMPORTANT);
+    }
+    else
+    {
+        AddComment("✓ AUTO-TRADING ENABLED", clrLime, PRIORITY_CRITICAL);
+        AddComment("ADVICE: Monitor closely during first sessions", clrOrange, PRIORITY_IMPORTANT);
+    }
+
+    // Timeframe warning
+    if(_Period != PreferredTimeframe)
+    {
+        AddComment("⚠ Chart timeframe mismatch!", clrRed, PRIORITY_CRITICAL);
+        AddComment("ADVICE: Switch to " + EnumToString(PreferredTimeframe) + " for optimal results", clrYellow, PRIORITY_IMPORTANT);
+    }
+
+    Print("✓ All systems operational");
+    return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                  |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+    // Release indicators
+    if(h_EMA_200 != INVALID_HANDLE) IndicatorRelease(h_EMA_200);
+    if(h_EMA_Higher != INVALID_HANDLE) IndicatorRelease(h_EMA_Higher);
+    if(h_ATR != INVALID_HANDLE) IndicatorRelease(h_ATR);
+    if(h_ATR_Higher != INVALID_HANDLE) IndicatorRelease(h_ATR_Higher);
+    if(h_Volume_MA != INVALID_HANDLE) IndicatorRelease(h_Volume_MA);
+
+    // Save pattern performance
+    SavePatternPerformance();
+
+    // Clean up chart objects
+    ObjectsDeleteAll(0, prefix);
+
+    Print("═══════════════════════════════════════════════════");
+    Print("  Institutional Trading Robot v3.0 Stopped");
+    Print("═══════════════════════════════════════════════════");
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                              |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+    // Check for new bar on preferred timeframe
+    static datetime last_bar_time = 0;
+    datetime current_bar_time = iTime(_Symbol, PreferredTimeframe, 0);
+
+    if(current_bar_time == last_bar_time)
+        return;
+
+    last_bar_time = current_bar_time;
+
+    // Clear commentary for new bar
+    commentary_count = 0;
+    AddComment("═══ NEW BAR: " + TimeToString(current_bar_time) + " ═══", clrWhite, PRIORITY_IMPORTANT);
+
+    //═══════════════════════════════════════════════════════════════
+    // PHASE 0: PRE-FLIGHT CHECKS
+    //═══════════════════════════════════════════════════════════════
+
+    AddComment("─── Phase 0: Pre-Flight Checks ───", clrAqua, PRIORITY_IMPORTANT);
+
+    // FIX #2: Spread Check
+    if(UseSpreadFilter)
+    {
+        AnalyzeSpread();
+        if(!spread_data.acceptable)
+        {
+            AddComment("⛔ SPREAD TOO WIDE: " + DoubleToString(spread_data.current_pips, 1) + " pips", clrRed, PRIORITY_CRITICAL);
+            AddComment("ADVICE: Wait for spread to tighten (off hours/low liquidity)", clrOrange, PRIORITY_IMPORTANT);
+            dashboard.spread_ok = false;
+        }
+        else
+        {
+            AddComment("✓ Spread: " + DoubleToString(spread_data.current_pips, 1) + " pips (OK)", clrLime, PRIORITY_INFO);
+            dashboard.spread_ok = true;
+        }
+    }
+
+    // FIX #6: Session Check
+    if(UseSessionFilter)
+    {
+        AnalyzeSession();
+        if(!session_data.is_tradeable)
+        {
+            AddComment("⏸ " + session_data.session_name + " Session - Not Trading", clrYellow, PRIORITY_IMPORTANT);
+            AddComment("ADVICE: " + session_data.session_name + " has low volatility/liquidity", clrOrange, PRIORITY_INFO);
+            dashboard.session_ok = false;
+        }
+        else
+        {
+            AddComment("✓ " + session_data.session_name + " Session (Active)", clrLime, PRIORITY_INFO);
+            dashboard.session_ok = true;
+        }
+    }
+
+    // FIX #8: News Calendar Check
+    if(UseNewsFilter)
+    {
+        CheckEconomicCalendar();
+        bool news_clear = true;
+
+        for(int i = 0; i < news_count; i++)
+        {
+            if(upcoming_news[i].is_near)
+            {
+                int minutes_away = (int)((upcoming_news[i].event_time - TimeCurrent()) / 60);
+                AddComment("📰 HIGH IMPACT NEWS IN " + IntegerToString(minutes_away) + " MIN", clrRed, PRIORITY_CRITICAL);
+                AddComment("Event: " + upcoming_news[i].event_name, clrOrange, PRIORITY_IMPORTANT);
+                AddComment("ADVICE: Avoid trading around major economic events", clrYellow, PRIORITY_IMPORTANT);
+                news_clear = false;
+                break;
+            }
+        }
+
+        dashboard.news_ok = news_clear;
+        if(news_clear)
+            AddComment("✓ Economic Calendar Clear", clrLime, PRIORITY_INFO);
+    }
+
+    //═══════════════════════════════════════════════════════════════
+    // PHASE 1: MARKET REGIME & CONTEXT ANALYSIS
+    //═══════════════════════════════════════════════════════════════
+
+    AddComment("─── Phase 1: Market Context ───", clrAqua, PRIORITY_IMPORTANT);
+
+    // FIX #9: Volatility Regime
+    if(UseVolatilityAdaptation)
+    {
+        AnalyzeVolatilityRegime();
+
+        string vol_text = "Volatility: ";
+        color vol_color = clrWhite;
+
+        switch(current_volatility)
+        {
+            case VOL_LOW:
+                vol_text += "LOW (Compression)";
+                vol_color = clrYellow;
+                AddComment(vol_text, vol_color, PRIORITY_INFO);
+                AddComment("ADVICE: Expect expansion soon - Tighten stops, smaller targets", clrOrange, PRIORITY_IMPORTANT);
+                break;
+
+            case VOL_HIGH:
+                vol_text += "HIGH (Expansion)";
+                vol_color = clrOrange;
+                AddComment(vol_text, vol_color, PRIORITY_IMPORTANT);
+                AddComment("ADVICE: Reduce size, widen stops, be very selective", clrRed, PRIORITY_CRITICAL);
+                // Automatically adapt parameters
+                dynamic_risk_percent = BaseRiskPercent * 0.5;
+                dynamic_confluence_required = 5;
+                break;
+
+            case VOL_NORMAL:
+                vol_text += "NORMAL";
+                vol_color = clrLime;
+                AddComment(vol_text, vol_color, PRIORITY_INFO);
+                break;
+        }
+    }
+
+    // Detect Market Regime
+    DetectMarketRegime();
+
+    string regime_text = "Regime: ";
+    color regime_color = clrWhite;
+
+    switch(current_regime)
+    {
+        case REGIME_TREND:
+            regime_text += "TRENDING";
+            regime_color = clrLime;
+            AddComment(regime_text, regime_color, PRIORITY_IMPORTANT);
+            AddComment("ADVICE: Trade WITH momentum, let winners run", clrAqua, PRIORITY_IMPORTANT);
+            break;
+
+        case REGIME_RANGE:
+            regime_text += "RANGING";
+            regime_color = clrYellow;
+            AddComment(regime_text, regime_color, PRIORITY_IMPORTANT);
+            AddComment("ADVICE: Mean reversion - Buy dips, sell rallies at extremes", clrAqua, PRIORITY_IMPORTANT);
+            break;
+
+        case REGIME_TRANSITION:
+            regime_text += "CHOPPY/TRANSITION";
+            regime_color = clrOrange;
+            AddComment(regime_text, regime_color, PRIORITY_IMPORTANT);
+            AddComment("ADVICE: Stay out or wait for clear breakout", clrRed, PRIORITY_CRITICAL);
+            break;
+    }
+
+    // Determine Market Bias
+    DetermineBias();
+
+    string bias_text = "Bias: ";
+    color bias_color = clrWhite;
+
+    switch(current_bias)
+    {
+        case BIAS_BULLISH:
+            bias_text += "BULLISH (Look for longs)";
+            bias_color = clrLime;
+            break;
+        case BIAS_BEARISH:
+            bias_text += "BEARISH (Look for shorts)";
+            bias_color = clrRed;
+            break;
+        case BIAS_NEUTRAL:
+            bias_text += "NEUTRAL (Wait for direction)";
+            bias_color = clrGray;
+            break;
+    }
+    AddComment(bias_text, bias_color, PRIORITY_IMPORTANT);
+
+    // FIX #16: Market Structure
+    if(UseMarketStructure)
+    {
+        UpdateMarketStructure();
+        AddComment("Structure: " + market_structure.structure, clrWhite, PRIORITY_INFO);
+    }
+
+    //═══════════════════════════════════════════════════════════════
+    // PHASE 2: LIQUIDITY MAPPING
+    //═══════════════════════════════════════════════════════════════
+
+    AddComment("─── Phase 2: Liquidity Mapping ───", clrAqua, PRIORITY_IMPORTANT);
+
+    MapLiquidityZones();
+    AddComment("Liquidity Zones: " + IntegerToString(liquidity_count) + " identified", clrWhite, PRIORITY_INFO);
+
+    DetectFairValueGaps();
+    int unfilled_fvg = 0;
+    for(int i = 0; i < fvg_count; i++)
+        if(!fvg_zones[i].filled) unfilled_fvg++;
+
+    if(unfilled_fvg > 0)
+        AddComment("Fair Value Gaps: " + IntegerToString(unfilled_fvg) + " unfilled", clrAqua, PRIORITY_INFO);
+
+    DetectOrderBlocks();
+    int active_ob = 0;
+    for(int i = 0; i < ob_count; i++)
+        if(!order_blocks[i].invalidated) active_ob++;
+
+    if(active_ob > 0)
+        AddComment("Order Blocks: " + IntegerToString(active_ob) + " active", clrAqua, PRIORITY_INFO);
+
+    // Draw zones if in indicator mode
+    if(IndicatorMode || ShowDashboard)
+    {
+        DrawLiquidityZones();
+        DrawFVGZones();
+        DrawOrderBlocks();
+    }
+
+    //═══════════════════════════════════════════════════════════════
+    // PHASE 3: PATTERN DETECTION
+    //═══════════════════════════════════════════════════════════════
+
+    AddComment("─── Phase 3: Pattern Detection ───", clrAqua, PRIORITY_IMPORTANT);
+
+    ScanForCandlestickPatterns();
+
+    if(has_active_pattern)
+    {
+        AddComment("✓ PATTERN: " + active_pattern.name + " [Strength: " + IntegerToString(active_pattern.strength) + "/5]",
+                  active_pattern.is_bullish ? clrLime : clrRed, PRIORITY_CRITICAL);
+
+        // Draw pattern visualization
+        DrawPatternBox(active_pattern);
+        DrawPatternLabel(active_pattern);
+
+        // FIX #11: Pattern Decay Check
+        if(UsePatternDecay)
+        {
+            if(!IsPatternValid())
+            {
+                AddComment("⚠ Pattern EXPIRED (too old) - Waiting for fresh setup", clrOrange, PRIORITY_IMPORTANT);
+                AddComment("ADVICE: Stale patterns lose edge - Only trade fresh signals", clrYellow, PRIORITY_INFO);
+                has_active_pattern = false;
+            }
+        }
+    }
+    else
+    {
+        AddComment("No valid patterns detected - Waiting...", clrGray, PRIORITY_INFO);
+    }
+
+    //═══════════════════════════════════════════════════════════════
+    // PHASE 4: INSTITUTIONAL FILTERS & CONFLUENCE
+    //═══════════════════════════════════════════════════════════════
+
+    if(has_active_pattern)
+    {
+        AddComment("─── Phase 4: Institutional Filters ───", clrAqua, PRIORITY_IMPORTANT);
+
+        // FIX #1: Volume Analysis
+        if(UseVolumeFilter)
+        {
+            AnalyzeVolume();
+
+            if(volume_data.above_threshold)
+            {
+                AddComment("✓ Volume: " + DoubleToString(volume_data.volume_ratio, 1) + "x average (Strong)", clrLime, PRIORITY_INFO);
+                dashboard.volume_ok = true;
+            }
+            else
+            {
+                AddComment("⚠ Volume: Below threshold - Weak conviction", clrOrange, PRIORITY_IMPORTANT);
+                AddComment("ADVICE: Low volume patterns fail more often - Wait for confirmation", clrYellow, PRIORITY_INFO);
+                dashboard.volume_ok = false;
+            }
+        }
+
+        // FIX #5: Multi-Timeframe Confirmation
+        if(UseMTFConfirmation)
+        {
+            bool mtf_aligned = CheckMultiTimeframeAlignment();
+
+            if(mtf_aligned)
+            {
+                AddComment("✓ MTF: Higher timeframe confirms direction", clrLime, PRIORITY_INFO);
+                dashboard.mtf_ok = true;
+            }
+            else
+            {
+                AddComment("⚠ MTF: Higher timeframe CONFLICTS", clrOrange, PRIORITY_IMPORTANT);
+                AddComment("ADVICE: Counter-trend trades have lower win rate", clrYellow, PRIORITY_INFO);
+                dashboard.mtf_ok = false;
+            }
+        }
+
+        // FIX #7: Correlation Check
+        if(UseCorrelationFilter)
+        {
+            bool corr_ok = CheckPortfolioCorrelation();
+
+            if(!corr_ok)
+            {
+                AddComment("⛔ CORRELATION: Portfolio too concentrated", clrRed, PRIORITY_CRITICAL);
+                AddComment("ADVICE: Already exposed to this currency - Skip to manage risk", clrOrange, PRIORITY_IMPORTANT);
+                dashboard.correlation_ok = false;
+            }
+            else
+            {
+                AddComment("✓ Correlation: Portfolio exposure OK", clrLime, PRIORITY_INFO);
+                dashboard.correlation_ok = true;
+            }
+        }
+
+        // FIX #13: Liquidity Sweep Detection
+        if(UseLiquiditySweep)
+        {
+            bool sweep_detected = CheckLiquiditySweep(active_pattern.is_bullish);
+
+            if(sweep_detected)
+            {
+                AddComment("✓ LIQUIDITY SWEEP: Stop hunt confirmed!", clrLime, PRIORITY_IMPORTANT);
+                AddComment("ADVICE: Smart money entry - High probability setup", clrAqua, PRIORITY_IMPORTANT);
+            }
+        }
+
+        // FIX #14: Retail Trap Detection
+        if(UseRetailTrap)
+        {
+            bool is_trap = DetectRetailTrap();
+
+            if(is_trap)
+            {
+                AddComment("⛔ RETAIL TRAP: False breakout detected", clrRed, PRIORITY_CRITICAL);
+                AddComment("ADVICE: Smart money fading retail - SKIP THIS SETUP", clrOrange, PRIORITY_CRITICAL);
+                has_active_pattern = false;
+                // Skip further analysis
+                UpdateDashboard();
+                if(ShowDashboard) DrawDashboard();
+                if(ShowCommentary) DrawCommentary();
+                return;
+            }
+        }
+
+        // Evaluate Full Confluence
+        TradeDecision decision = EvaluateTradeDecision();
+        last_decision = decision;
+
+        AddComment("═══ CONFLUENCE: " + IntegerToString(decision.confluence_score) + "/" +
+                  IntegerToString(dynamic_confluence_required) + " ═══",
+                  decision.confluence_score >= dynamic_confluence_required ? clrLime : clrOrange,
+                  PRIORITY_CRITICAL);
+
+        // Show passed filters
+        if(decision.passed_count > 0)
+        {
+            AddComment("PASSED FILTERS:", clrLime, PRIORITY_IMPORTANT);
+            for(int i = 0; i < decision.passed_count; i++)
+                AddComment("  ✓ " + decision.passed_filters[i], clrLime, PRIORITY_INFO);
+        }
+
+        // Show failed filters
+        if(decision.failed_count > 0)
+        {
+            AddComment("FAILED FILTERS:", clrRed, PRIORITY_IMPORTANT);
+            for(int i = 0; i < decision.failed_count; i++)
+                AddComment("  ✗ " + decision.failed_filters[i], clrRed, PRIORITY_INFO);
+        }
+
+        // Decision & Advice
+        string decision_text = "";
+        color decision_color = clrWhite;
+
+        switch(decision.decision)
+        {
+            case DECISION_ENTER:
+                decision_text = "🎯 DECISION: ENTER TRADE";
+                decision_color = clrLime;
+                break;
+            case DECISION_SKIP:
+                decision_text = "⛔ DECISION: SKIP TRADE";
+                decision_color = clrRed;
+                break;
+            case DECISION_WAIT:
+                decision_text = "⏸ DECISION: WAIT FOR MORE CONFIRMATION";
+                decision_color = clrYellow;
+                break;
+        }
+
+        AddComment(decision_text, decision_color, PRIORITY_CRITICAL);
+        AddComment("REASON: " + decision.explanation, clrWhite, PRIORITY_IMPORTANT);
+
+        if(decision.advice != "")
+            AddComment("ADVICE: " + decision.advice, clrAqua, PRIORITY_IMPORTANT);
+
+        //═══════════════════════════════════════════════════════════
+        // PHASE 5: TRADE EXECUTION
+        //═══════════════════════════════════════════════════════════
+
+        if(decision.decision == DECISION_ENTER && EnableTrading && !IndicatorMode)
+        {
+            AddComment("─── Phase 5: Trade Execution ───", clrAqua, PRIORITY_IMPORTANT);
+
+            // Check risk limits
+            if(!CheckRiskLimits())
+            {
+                AddComment("⛔ RISK LIMIT REACHED - Cannot trade", clrRed, PRIORITY_CRITICAL);
+                AddComment("ADVICE: Daily/weekly loss limit hit - Stop trading now", clrOrange, PRIORITY_CRITICAL);
+            }
+            else
+            {
+                // FIX #10: Dynamic Risk Calculation
+                double risk_percent = UseDynamicRisk ? CalculateDynamicRisk() : BaseRiskPercent;
+                AddComment("Risk Allocation: " + DoubleToString(risk_percent, 2) + "%", clrYellow, PRIORITY_IMPORTANT);
+
+                // FIX #3: Slippage Modeling
+                double expected_slippage = 0;
+                if(UseSlippageModel)
+                {
+                    expected_slippage = CalculateExpectedSlippage();
+                    AddComment("Expected Slippage: " + DoubleToString(expected_slippage * 10000, 1) + " pips", clrYellow, PRIORITY_INFO);
+                }
+
+                // Execute trade
+                ExecuteTrade(risk_percent, expected_slippage);
+            }
+        }
+    }
+
+    //═══════════════════════════════════════════════════════════════
+    // PHASE 6: TRADE MANAGEMENT
+    //═══════════════════════════════════════════════════════════════
+
+    if(PositionsTotal() > 0)
+    {
+        ManageOpenTrades();
+    }
+
+    //═══════════════════════════════════════════════════════════════
+    // PHASE 7: LEARNING & ADAPTATION
+    //═══════════════════════════════════════════════════════════════
+
+    // FIX #18: Parameter Adaptation
+    if(UseParameterAdaptation)
+    {
+        AdaptParameters();
+    }
+
+    // Update & Draw Dashboard
+    UpdateDashboard();
+    if(ShowDashboard) DrawDashboard();
+
+    // Draw Commentary
+    if(ShowCommentary) DrawCommentary();
+}
+
+//+------------------------------------------------------------------+
+//| Initialize All Indicators                                         |
+//+------------------------------------------------------------------+
+bool InitializeIndicators()
+{
+    // Current timeframe indicators
+    h_EMA_200 = iMA(_Symbol, PreferredTimeframe, 200, 0, MODE_EMA, PRICE_CLOSE);
+    h_ATR = iATR(_Symbol, PreferredTimeframe, 14);
+    h_Volume_MA = iMA(_Symbol, PreferredTimeframe, 20, 0, MODE_SMA, VOLUME_TICK);
+
+    // Higher timeframe indicators for MTF confirmation
+    ENUM_TIMEFRAMES higher_tf = GetHigherTimeframe(PreferredTimeframe);
+    h_EMA_Higher = iMA(_Symbol, higher_tf, 200, 0, MODE_EMA, PRICE_CLOSE);
+    h_ATR_Higher = iATR(_Symbol, higher_tf, 14);
+
+    // Validate all handles
+    if(h_EMA_200 == INVALID_HANDLE || h_ATR == INVALID_HANDLE ||
+       h_Volume_MA == INVALID_HANDLE || h_EMA_Higher == INVALID_HANDLE ||
+       h_ATR_Higher == INVALID_HANDLE)
+    {
+        Print("ERROR: Failed to create indicator handles");
+        return false;
+    }
+
+    AddComment("✓ Indicators initialized successfully", clrLime, PRIORITY_INFO);
+    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Initialize Risk Management                                        |
+//+------------------------------------------------------------------+
+void InitializeRiskManagement()
+{
+    daily_start_balance = account.Balance();
+    weekly_start_balance = account.Balance();
+    peak_balance = account.Balance();
+    last_daily_reset = TimeCurrent();
+    last_weekly_reset = TimeCurrent();
+
+    AddComment("Risk: " + DoubleToString(BaseRiskPercent, 2) + "% per trade, Max " +
+              IntegerToString(MaxOpenTrades) + " positions", clrAqua, PRIORITY_INFO);
+}
+
+//+------------------------------------------------------------------+
+//| Get Higher Timeframe                                              |
+//+------------------------------------------------------------------+
+ENUM_TIMEFRAMES GetHigherTimeframe(ENUM_TIMEFRAMES current)
+{
+    switch(current)
+    {
+        case PERIOD_M1:  return PERIOD_M5;
+        case PERIOD_M5:  return PERIOD_M15;
+        case PERIOD_M15: return PERIOD_H1;
+        case PERIOD_H1:  return PERIOD_H4;
+        case PERIOD_H4:  return PERIOD_D1;
+        case PERIOD_D1:  return PERIOD_W1;
+        case PERIOD_W1:  return PERIOD_MN1;
+        default:         return PERIOD_D1;
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Add Commentary Line                                               |
+//+------------------------------------------------------------------+
+void AddComment(string text, color text_color, int priority)
+{
+    if(!ShowCommentary) return;
+
+    // Shift buffer if full
+    if(commentary_count >= 50)
+    {
+        for(int i = 0; i < 49; i++)
+            commentary_buffer[i] = commentary_buffer[i+1];
+        commentary_count = 49;
+    }
+
+    commentary_buffer[commentary_count].text = text;
+    commentary_buffer[commentary_count].text_color = text_color;
+    commentary_buffer[commentary_count].timestamp = TimeCurrent();
+    commentary_buffer[commentary_count].priority = priority;
+    commentary_count++;
+
+    // Print critical messages to terminal
+    if(priority == PRIORITY_CRITICAL)
+        Print(">>> ", text);
+}
+
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| INCLUDE SUPPORTING MODULES                                        |
+//+------------------------------------------------------------------+
+#include "InstitutionalTradingRobot_v3_Functions.mqh"
+#include "InstitutionalTradingRobot_v3_Trading.mqh"
+#include "InstitutionalTradingRobot_v3_Visual.mqh"
+
+//+------------------------------------------------------------------+
+//|                      END OF EA                                    |
+//+------------------------------------------------------------------+
