@@ -1,6 +1,6 @@
 """
-AppleTrader Pro - Session Momentum Scanner Widget
-PyQt6 widget for displaying real-time momentum leaderboard
+AppleTrader Pro - Session Momentum Scanner Widget (AI-Enhanced)
+PyQt6 widget for displaying real-time momentum leaderboard with AI assistance
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -13,6 +13,10 @@ from datetime import datetime
 import pandas as pd
 
 from widgets.session_momentum_scanner import session_momentum_scanner
+from core.ai_assist_base import AIAssistMixin
+from core.demo_mode_manager import is_demo_mode, get_demo_data, demo_mode_manager
+from core.multi_symbol_manager import get_all_symbols, get_active_symbol
+from core.ml_integration import create_ai_suggestion
 
 
 class MomentumListItem(QWidget):
@@ -109,15 +113,16 @@ class MomentumListItem(QWidget):
             layout.addWidget(trend_label)
 
 
-class SessionMomentumWidget(QWidget):
+class SessionMomentumWidget(QWidget, AIAssistMixin):
     """
-    Session Momentum Scanner Display Widget
+    Session Momentum Scanner Display Widget (AI-Enhanced)
 
     Shows real-time momentum leaderboard:
     - Top 10 pairs ranked by momentum
     - Visual bars showing momentum percentage
     - Pips moved and direction
-    - Alerts for high momentum situations
+    - AI-powered trade recommendations
+    - Demo/Live mode support
     """
 
     symbol_selected = pyqtSignal(str)  # Emits symbol when clicked
@@ -130,21 +135,130 @@ class SessionMomentumWidget(QWidget):
         # CRITICAL: Initialize current_symbol BEFORE calling update_from_live_data
         self.current_symbol = "EURUSD"
 
+        # Setup AI assistance
+        self.setup_ai_assist("session_momentum")
+
         self.init_ui()
 
-        # Auto-refresh every 3 seconds with LIVE data from data_manager
+        # Connect to demo mode changes
+        demo_mode_manager.mode_changed.connect(self.on_mode_changed)
+
+        # Auto-refresh every 3 seconds
         self.refresh_timer = QTimer()
-        self.refresh_timer.timeout.connect(self.update_from_live_data)
+        self.refresh_timer.timeout.connect(self.update_data)
         self.refresh_timer.start(3000)
 
-        # NO SAMPLE DATA - start with live data immediately
-        self.update_from_live_data()
+        # Initial data load
+        self.update_data()
 
     def update_from_live_data(self):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
         symbol = self.current_symbol
         self.status_label.setText(f"Live: {symbol}")
+
+    def update_data(self):
+        """Update widget with data based on current mode (demo/live)"""
+        if is_demo_mode():
+            # Get demo data for all symbols
+            symbols = get_all_symbols()
+            demo_data = get_demo_data('session_momentum', symbols=symbols)
+
+            if demo_data:
+                self.update_momentum_data(demo_data)
+                self.status_label.setText(f"Demo Mode - {len(symbols)} symbols")
+        else:
+            # Get live data
+            self.update_from_live_data()
+
+        # Update AI suggestions if enabled
+        if self.ai_enabled and self.leaderboard_data:
+            self.update_ai_suggestions()
+
+    def on_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode changes"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"Session Momentum widget switching to {mode_text} mode")
+        self.update_data()
+
+    def analyze_with_ai(self, prediction, widget_data):
+        """
+        Custom AI analysis for session momentum
+
+        Args:
+            prediction: ML prediction data from ml_integration
+            widget_data: Current widget data (leaderboard)
+
+        Returns:
+            Formatted suggestion dictionary
+        """
+        from core.ml_integration import create_ai_suggestion
+
+        if not self.leaderboard_data:
+            return create_ai_suggestion(
+                widget_type="session_momentum",
+                text="No momentum data available for analysis",
+                confidence=0.0
+            )
+
+        # Get top momentum pair
+        top_pair = self.leaderboard_data[0]
+        symbol = top_pair['symbol']
+        momentum = top_pair['momentum_score']
+        pips = top_pair['session_range_pips']
+        direction = top_pair['direction']
+
+        # Analyze momentum strength
+        if momentum >= 85:
+            confidence = 0.85
+            strength = "VERY STRONG"
+            action_emoji = "🔥"
+            action = f"Prime opportunity on {symbol}"
+            color = "green"
+        elif momentum >= 75:
+            confidence = 0.75
+            strength = "STRONG"
+            action_emoji = "⚡"
+            action = f"Good momentum on {symbol}"
+            color = "green"
+        elif momentum >= 65:
+            confidence = 0.65
+            strength = "MODERATE"
+            action_emoji = "✓"
+            action = f"Decent setup on {symbol}"
+            color = "yellow"
+        else:
+            confidence = 0.50
+            strength = "WEAK"
+            action_emoji = "⚠️"
+            action = f"Low momentum on {symbol}"
+            color = "red"
+
+        # Build suggestion text
+        suggestion_text = f"{action}\n\n"
+        suggestion_text += f"📊 Momentum: {momentum:.0f}% ({strength})\n"
+        suggestion_text += f"📈 Direction: {direction}\n"
+        suggestion_text += f"📏 Session Range: {pips:.0f} pips\n\n"
+
+        # Add recommendation
+        if momentum >= 75:
+            suggestion_text += f"💡 Recommendation: Consider {direction.lower()} entry\n"
+            suggestion_text += f"✓ Strong trend + volume + session alignment\n"
+            suggestion_text += f"✓ Risk/Reward should be favorable"
+        elif momentum >= 65:
+            suggestion_text += f"💡 Recommendation: Watch for confirmation\n"
+            suggestion_text += f"⚠️ Wait for pullback to key level"
+        else:
+            suggestion_text += f"💡 Recommendation: Wait for better setup\n"
+            suggestion_text += f"⚠️ Momentum insufficient for entry"
+
+        return create_ai_suggestion(
+            widget_type="session_momentum",
+            text=suggestion_text,
+            confidence=confidence,
+            emoji=action_emoji,
+            color=color
+        )
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -160,6 +274,9 @@ class SessionMomentumWidget(QWidget):
         header_layout.addWidget(title)
 
         header_layout.addStretch()
+
+        # AI Assist checkbox
+        self.create_ai_checkbox(header_layout)
 
         # Auto-focus toggle
         self.auto_focus_btn = QPushButton("🎯 Auto-Focus")
@@ -237,6 +354,9 @@ class SessionMomentumWidget(QWidget):
 
         alerts_group.setLayout(alerts_layout)
         layout.addWidget(alerts_group)
+
+        # === AI SUGGESTION FRAME ===
+        self.create_ai_suggestion_frame(layout)
 
         # === STATUS ===
         self.status_label = QLabel("Status: Ready")

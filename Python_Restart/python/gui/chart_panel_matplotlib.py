@@ -491,7 +491,37 @@ class ChartPanel(QWidget):
         """)
         layout.addWidget(self.levels_toggle_btn)
 
-        # Spacing between levels and connection
+        # Spacing between levels and demo mode
+        layout.addSpacing(20)
+
+        # === DEMO/LIVE MODE TOGGLE ===
+        from core.demo_mode_manager import demo_mode_manager, is_demo_mode
+
+        self.demo_toggle_btn = QPushButton("🎮 DEMO MODE")
+        self.demo_toggle_btn.setCheckable(True)
+        self.demo_toggle_btn.setChecked(True)  # Start in demo mode
+        self.demo_toggle_btn.clicked.connect(self.on_demo_mode_toggled)
+        self.demo_toggle_btn.setMinimumWidth(130)
+        # Initial style (orange for demo mode) - colors updated by handler
+        self.demo_toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #F59E0B;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: {settings.theme.font_size_sm}px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #D97706;
+            }}
+            QPushButton:pressed {{
+                background-color: #B45309;
+            }}
+        """)
+        layout.addWidget(self.demo_toggle_btn)
+
         layout.addSpacing(20)
 
         # MT5 Connection status (moved from top toolbar)
@@ -2111,3 +2141,50 @@ class ChartPanel(QWidget):
 
         # Redraw chart
         self.plot_candlesticks()
+
+    def on_demo_mode_toggled(self, checked: bool):
+        """Handle demo/live mode toggle"""
+        from core.demo_mode_manager import demo_mode_manager
+
+        demo_mode_manager.demo_mode = checked
+
+        if checked:
+            self.demo_toggle_btn.setText("🎮 DEMO MODE")
+            self.demo_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #F59E0B;
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-size: {settings.theme.font_size_sm}px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #D97706;
+                }}
+                QPushButton:pressed {{
+                    background-color: #B45309;
+                }}
+            """)
+            print("✅ DEMO MODE ACTIVATED - Using simulated data")
+        else:
+            self.demo_toggle_btn.setText("🔴 LIVE MODE")
+            self.demo_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #DC2626;
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-size: {settings.theme.font_size_sm}px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #B91C1C;
+                }}
+                QPushButton:pressed {{
+                    background-color: #991B1B;
+                }}
+            """)
+            print("🔴 LIVE MODE ACTIVATED - Using real MT5 data")

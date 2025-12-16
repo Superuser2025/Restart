@@ -4,7 +4,8 @@ Integrates the comprehensive institutional panel and enhanced chart system
 """
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QTabWidget, QLabel, QSplitter, QStatusBar, QMenu, QMessageBox)
+                             QTabWidget, QLabel, QSplitter, QStatusBar, QMenu, QMessageBox,
+                             QPushButton, QComboBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QAction
 from datetime import datetime
@@ -28,6 +29,8 @@ from widgets.equity_curve_widget import EquityCurveWidget
 from widgets.trade_journal_widget import TradeJournalWidget
 
 from core.mt5_connector import MT5Connector
+from core.demo_mode_manager import demo_mode_manager, is_demo_mode
+from core.multi_symbol_manager import symbol_manager, get_all_symbols
 
 
 class EnhancedMainWindow(QMainWindow):
@@ -65,10 +68,6 @@ class EnhancedMainWindow(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(5)
-
-        # === TOP TOOLBAR ===
-        toolbar_layout = self.create_toolbar()
-        main_layout.addLayout(toolbar_layout)
 
         # === OPPORTUNITY SCANNER ===
         self.scanner_widget = OpportunityScannerWidget()
@@ -120,19 +119,6 @@ class EnhancedMainWindow(QMainWindow):
 
         # Apply dark theme
         self.apply_dark_theme()
-
-    def create_toolbar(self) -> QHBoxLayout:
-        """Create top toolbar"""
-        layout = QHBoxLayout()
-
-        # Title REMOVED - user requested removal
-        # No green text needed, wasting space
-
-        # Time and connection status moved to chart toolbar (where "Chart Ready" was)
-        # No longer needed in top toolbar
-        layout.addStretch()
-
-        return layout
 
     def create_center_panel(self) -> QWidget:
         """Create center panel with ORIGINAL excellent chart + analysis tabs"""
