@@ -323,7 +323,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.signal_persist_duration = 300  # 5 minutes
 
         self.init_ui()
-        self.setup_ai_assist()
+        self.setup_ai_assist("opportunity_scanner")
 
         # Auto-scan timer
         self.scan_timer = QTimer()

@@ -36,7 +36,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.current_symbol = "EURUSD"
         self.current_data = None
         self.init_ui()
-        self.setup_ai_assist()
+        self.setup_ai_assist("volatility_position")
 
         # Auto-refresh timer to get live data
         from PyQt6.QtCore import QTimer
