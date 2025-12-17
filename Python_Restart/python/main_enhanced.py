@@ -35,6 +35,8 @@ def main():
     window = EnhancedMainWindow()
     window.show()
 
+    # Mode control: Use Settings → Enable/Disable Live Mode menu only
+
     print("=" * 60)
     print("  AppleTrader Pro - Enhanced Version")
     print("  Institutional Trading Robot v3.0 Features")

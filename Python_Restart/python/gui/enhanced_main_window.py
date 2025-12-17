@@ -50,6 +50,9 @@ class EnhancedMainWindow(QMainWindow):
         self.mt5_connector.data_updated.connect(self.on_mt5_data_updated)
         self.mt5_connector.error_occurred.connect(self.on_mt5_error)
 
+        # Connect to demo mode changes
+        demo_mode_manager.mode_changed.connect(self.on_demo_mode_changed)
+
         self.init_ui()
 
         # Start data update timer
@@ -445,6 +448,24 @@ class EnhancedMainWindow(QMainWindow):
         if 'timeframe' in data:
             self.current_timeframe = data['timeframe']
 
+        # CRITICAL: Update data_manager with MT5 data (this was missing!)
+        from core.data_manager import data_manager
+        data_manager.update_from_mt5_data(data)
+
+        # DEBUG: Print account data when received
+        if 'account_balance' in data:
+            print(f"[DEBUG] Account Balance: ${data['account_balance']:,.2f}")
+            print(f"[DEBUG] ✓ Data manager updated - dashboard should show balance now")
+        if 'account_equity' in data:
+            print(f"[DEBUG] Account Equity: ${data['account_equity']:,.2f}")
+        if 'total_pnl' in data:
+            print(f"[DEBUG] Total P&L: ${data['total_pnl']:,.2f}")
+
+        # Show what keys are in the data
+        account_keys = [k for k in data.keys() if 'account' in k.lower() or 'balance' in k.lower() or 'equity' in k.lower() or 'pnl' in k.lower()]
+        if account_keys:
+            print(f"[DEBUG] Account-related keys in data: {account_keys}")
+
         if hasattr(self, 'status_label'):
             self.status_label.setText(f"MT5 data received: {self.current_symbol} {self.current_timeframe}")
 
@@ -453,6 +474,23 @@ class EnhancedMainWindow(QMainWindow):
         if hasattr(self, 'status_label'):
             self.status_label.setText(f"MT5 Error: {error_message}")
         print(f"[MT5 ERROR] {error_message}")
+
+    def on_demo_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode change - refresh all widgets"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"[Main Window] Mode changed to {mode_text} - Refreshing all widgets")
+
+        # Update status bar color and text
+        if hasattr(self, 'status_label'):
+            self.status_label.setText(f"{mode_text} mode")
+            self.status_label.setStyleSheet(
+                f"color: {'#ffaa00' if is_demo else '#00ff00'}; font-weight: bold;"
+            )
+
+        # Force refresh all widgets with new data source
+        self.update_all_data()
+
+        print(f"[Main Window] All widgets refreshed with {mode_text} data")
 
     def create_menu_bar(self):
         """Create menu bar with File, View, Help menus"""
@@ -483,6 +521,23 @@ class EnhancedMainWindow(QMainWindow):
         manage_symbols_action = QAction("Manage Symbols...", self)
         manage_symbols_action.triggered.connect(self.on_manage_symbols)
         view_menu.addAction(manage_symbols_action)
+
+        # === SETTINGS MENU ===
+        settings_menu = menubar.addMenu("&Settings")
+
+        # Demo/Live Mode Toggle
+        self.mode_action = QAction("Enable Live Mode", self)
+        self.mode_action.setCheckable(True)
+        self.mode_action.setChecked(not is_demo_mode())  # Checked = Live Mode
+        self.mode_action.triggered.connect(self.on_toggle_mode)
+        settings_menu.addAction(self.mode_action)
+
+        settings_menu.addSeparator()
+
+        # MT5 Connection Status
+        mt5_status_action = QAction("Verify MT5 Connection...", self)
+        mt5_status_action.triggered.connect(self.on_verify_mt5_connection)
+        settings_menu.addAction(mt5_status_action)
 
         # === HELP MENU ===
         help_menu = menubar.addMenu("&Help")
@@ -529,6 +584,90 @@ class EnhancedMainWindow(QMainWindow):
         if hasattr(self, 'scanner_widget'):
             self.scanner_widget.pairs_to_scan = symbols
             self.scanner_widget.scan_market()
+
+    def on_toggle_mode(self, checked: bool):
+        """Toggle between Demo and Live mode"""
+        mode_text = "LIVE" if checked else "DEMO"
+
+        # Toggle demo mode (this will trigger mode_changed signal and refresh widgets)
+        demo_mode_manager.demo_mode = not checked  # Inverse: checked=Live, demo=False
+
+        # Update menu text
+        self.mode_action.setText("Disable Live Mode" if checked else "Enable Live Mode")
+
+        # Note: Status bar and widget refresh handled by on_demo_mode_changed signal
+        print(f"[Main Window] User toggled to {mode_text} mode via menu")
+
+    def on_verify_mt5_connection(self):
+        """Verify MT5 connection status"""
+        from core.mt5_connector import mt5_connector
+
+        # Check connection
+        is_connected = mt5_connector.is_connection_active()
+        data_dir = mt5_connector.get_data_directory()
+
+        # Build status message
+        status_lines = []
+        status_lines.append("MT5 Connection Status:")
+        status_lines.append("")
+
+        if data_dir:
+            status_lines.append(f"✓ Data Directory: {data_dir}")
+
+            market_data_file = data_dir / "market_data.json"
+            if market_data_file.exists():
+                status_lines.append(f"✓ market_data.json exists")
+
+                # Check file age
+                import datetime
+                modified_time = datetime.datetime.fromtimestamp(market_data_file.stat().st_mtime)
+                age_seconds = (datetime.datetime.now() - modified_time).total_seconds()
+
+                if age_seconds < 60:
+                    status_lines.append(f"✓ File is fresh ({age_seconds:.0f}s old)")
+                else:
+                    status_lines.append(f"⚠️ File is {age_seconds:.0f}s old")
+            else:
+                status_lines.append("✗ market_data.json NOT FOUND")
+        else:
+            status_lines.append("✗ Data Directory not found")
+
+        status_lines.append("")
+
+        if is_connected:
+            status_lines.append("✓ MT5 Connector: CONNECTED")
+
+            if mt5_connector.last_data:
+                status_lines.append(f"✓ Data received")
+                if 'symbol' in mt5_connector.last_data:
+                    status_lines.append(f"   Symbol: {mt5_connector.last_data['symbol']}")
+                if 'bid' in mt5_connector.last_data:
+                    status_lines.append(f"   Bid: {mt5_connector.last_data['bid']}")
+        else:
+            status_lines.append("✗ MT5 Connector: DISCONNECTED")
+            status_lines.append("")
+            status_lines.append("Troubleshooting:")
+            status_lines.append("1. Ensure MetaTrader 5 is running")
+            status_lines.append("2. Load Expert Advisor on a chart")
+            status_lines.append("3. Enable AutoTrading button")
+
+        status_lines.append("")
+        current_mode = "DEMO" if is_demo_mode() else "LIVE"
+        status_lines.append(f"Current Mode: {current_mode}")
+
+        # Show dialog
+        if is_connected:
+            QMessageBox.information(
+                self,
+                "MT5 Connection Status",
+                "\n".join(status_lines)
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "MT5 Connection Status",
+                "\n".join(status_lines)
+            )
 
     def apply_dark_theme(self):
         """Apply dark theme to main window"""
