@@ -509,7 +509,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
         """Update widget with data based on current mode (demo/live)"""
         if is_demo_mode():
             # Load sample order flow data
-            self.load_sample_orders()
+            self.load_sample_data()
         else:
             # Get live data
             self.update_from_live_data()
