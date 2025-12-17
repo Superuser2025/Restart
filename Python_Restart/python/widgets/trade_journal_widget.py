@@ -558,7 +558,7 @@ class TradeJournalWidget(AIAssistMixin, QWidget):
         """Update widget with data based on current mode (demo/live)"""
         if is_demo_mode():
             # Load demo journal data
-            self.load_sample_trades()
+            self.load_sample_data()
         else:
             # Get live data
             self.update_from_live_data()
