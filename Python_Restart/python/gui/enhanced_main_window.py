@@ -443,10 +443,13 @@ class EnhancedMainWindow(QMainWindow):
 
     def on_mt5_data_updated(self, data: dict):
         """Handle new data from MT5"""
-        if 'symbol' in data:
-            self.current_symbol = data['symbol']
-        if 'timeframe' in data:
-            self.current_timeframe = data['timeframe']
+        # CRITICAL FIX: Do NOT overwrite user's selected symbol!
+        # MT5 sends data for one symbol, but user may have selected a different symbol on chart
+        # Store MT5 symbol separately for reference
+        mt5_symbol = data.get('symbol', 'UNKNOWN')
+        mt5_timeframe = data.get('timeframe', 'UNKNOWN')
+
+        print(f"[MT5 Data] Received data for {mt5_symbol} {mt5_timeframe} - User chart shows: {self.current_symbol}")
 
         # CRITICAL: Update data_manager with MT5 data (this was missing!)
         from core.data_manager import data_manager
