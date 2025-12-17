@@ -50,6 +50,9 @@ class EnhancedMainWindow(QMainWindow):
         self.mt5_connector.data_updated.connect(self.on_mt5_data_updated)
         self.mt5_connector.error_occurred.connect(self.on_mt5_error)
 
+        # Connect to demo mode changes
+        demo_mode_manager.mode_changed.connect(self.on_demo_mode_changed)
+
         self.init_ui()
 
         # Start data update timer
@@ -454,6 +457,23 @@ class EnhancedMainWindow(QMainWindow):
             self.status_label.setText(f"MT5 Error: {error_message}")
         print(f"[MT5 ERROR] {error_message}")
 
+    def on_demo_mode_changed(self, is_demo: bool):
+        """Handle demo/live mode change - refresh all widgets"""
+        mode_text = "DEMO" if is_demo else "LIVE"
+        print(f"[Main Window] Mode changed to {mode_text} - Refreshing all widgets")
+
+        # Update status bar color and text
+        if hasattr(self, 'status_label'):
+            self.status_label.setText(f"{mode_text} mode")
+            self.status_label.setStyleSheet(
+                f"color: {'#ffaa00' if is_demo else '#00ff00'}; font-weight: bold;"
+            )
+
+        # Force refresh all widgets with new data source
+        self.update_all_data()
+
+        print(f"[Main Window] All widgets refreshed with {mode_text} data")
+
     def create_menu_bar(self):
         """Create menu bar with File, View, Help menus"""
         menubar = self.menuBar()
@@ -563,19 +583,15 @@ class EnhancedMainWindow(QMainWindow):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            # Toggle demo mode
+            # Toggle demo mode (this will trigger mode_changed signal and refresh widgets)
             demo_mode_manager.demo_mode = not checked  # Inverse: checked=Live, demo=False
 
             # Update menu text
             self.mode_action.setText("Disable Live Mode" if checked else "Enable Live Mode")
 
-            # Update status bar
-            self.status_label.setText(f"Switched to {mode_text} mode")
-            self.status_label.setStyleSheet(
-                f"color: {'#00ff00' if checked else '#ffaa00'}; font-weight: bold;"
-            )
+            # Note: Status bar and widget refresh handled by on_demo_mode_changed signal
 
-            # Notify user
+            # Notify user AFTER signal processing
             QMessageBox.information(
                 self,
                 f"{mode_text} Mode Active",
@@ -583,7 +599,7 @@ class EnhancedMainWindow(QMainWindow):
                 f"{'All widgets are now showing REAL MT5 data' if checked else 'All widgets are now showing DEMO data'}"
             )
 
-            print(f"[Main Window] Switched to {mode_text} mode")
+            print(f"[Main Window] User toggled to {mode_text} mode via menu")
         else:
             # User canceled - revert checkbox
             self.mode_action.setChecked(not checked)
