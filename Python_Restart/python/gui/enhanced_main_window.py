@@ -448,9 +448,14 @@ class EnhancedMainWindow(QMainWindow):
         if 'timeframe' in data:
             self.current_timeframe = data['timeframe']
 
+        # CRITICAL: Update data_manager with MT5 data (this was missing!)
+        from core.data_manager import data_manager
+        data_manager.update_from_mt5_data(data)
+
         # DEBUG: Print account data when received
         if 'account_balance' in data:
             print(f"[DEBUG] Account Balance: ${data['account_balance']:,.2f}")
+            print(f"[DEBUG] ✓ Data manager updated - dashboard should show balance now")
         if 'account_equity' in data:
             print(f"[DEBUG] Account Equity: ${data['account_equity']:,.2f}")
         if 'total_pnl' in data:
