@@ -435,7 +435,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             self.scan_market()
 
     def scan_market(self):
-        """Scan all pairs for opportunities"""
+        """Scan all pairs for opportunities - LIVE MODE USES REAL DATA ONLY"""
+        print("🔴 [Opportunity Scanner] Scanning market...")
         self.blink_status()
 
         current_time = datetime.now()
@@ -449,12 +450,17 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         # Get new opportunities
         new_opportunities = []
-        if self.using_real_data and self.mt5_connector:
-            new_opportunities = self.scan_real_market_data()
-            if len(new_opportunities) == 0:
-                new_opportunities = self.generate_opportunities()
-        else:
+
+        if is_demo_mode():
+            print("    🟡 DEMO MODE - Generating fake opportunities")
             new_opportunities = self.generate_opportunities()
+        else:
+            print("    🔴 LIVE MODE - Scanning REAL MT5 data from data_manager")
+            new_opportunities = self.scan_real_market_data_from_data_manager()
+            print(f"    ✓ Found {len(new_opportunities)} REAL opportunities from live data")
+
+            # CRITICAL: DO NOT fallback to fake data in live mode
+            # If no opportunities, that's reality - show "No Opportunities"
 
         # Add timestamps
         for opp in new_opportunities:
@@ -598,24 +604,38 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         }
         return base_prices.get(pair, 1.0000)
 
-    def scan_real_market_data(self) -> List[Dict]:
-        """Scan real MT5 data"""
+    def scan_real_market_data_from_data_manager(self) -> List[Dict]:
+        """Scan REAL MT5 data from data_manager - NO FAKE DATA"""
+        from core.data_manager import data_manager
+        import pandas as pd
+
         opportunities = []
 
-        all_timeframes = ['M1', 'M5', 'M15', 'M30', 'H1', 'H2', 'H4', 'H8', 'D1']
+        # Get candles from data_manager (real MT5 data)
+        candles = data_manager.get_candles()
 
-        for pair in self.pairs_to_scan[:8]:
-            for timeframe in random.sample(all_timeframes, 3):
-                df = self.mt5_connector.get_candles(pair, timeframe, 100)
+        if not candles or len(candles) < 50:
+            print("    ⚠️ Not enough real candle data yet")
+            return []
 
-                if df is None or len(df) < 50:
-                    continue
+        # Convert to DataFrame for analysis
+        df = pd.DataFrame(candles)
+        current_symbol = data_manager.current_price.get('symbol', 'EURUSD')
+        current_timeframe = data_manager.candle_buffer.timeframe or 'M15'
 
-                opp = self.analyze_opportunity(pair, timeframe, df)
-                if opp:
-                    opportunities.append(opp)
+        print(f"    → Analyzing {len(candles)} REAL candles for {current_symbol} {current_timeframe}")
+
+        # Analyze current symbol for opportunities
+        opp = self.analyze_opportunity(current_symbol, current_timeframe, df)
+        if opp:
+            opportunities.append(opp)
+            print(f"    ✓ REAL opportunity found: {opp['setup_type']} (quality: {opp['quality_score']})")
 
         return opportunities
+
+    def scan_real_market_data(self) -> List[Dict]:
+        """OLD METHOD - Keep for compatibility but redirect to data_manager"""
+        return self.scan_real_market_data_from_data_manager()
 
     def analyze_opportunity(self, symbol: str, timeframe: str, df) -> Optional[Dict]:
         """Analyze for opportunity"""

@@ -224,9 +224,59 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
     def update_from_live_data(self):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
-        symbol = self.current_symbol
+
+        print("🔴 [Order Flow] LIVE MODE - Attempting to fetch real order flow data")
+
+        # Get real candle data to analyze for institutional activity
+        candles = data_manager.get_candles()
+
+        if not candles or len(candles) < 20:
+            print("    ⚠️ Not enough candle data for order flow analysis")
+            if hasattr(self, 'status_label'):
+                self.status_label.setText(f"Live: Waiting for data...")
+            return
+
+        # Analyze candles for institutional order flow patterns
+        # Look for volume spikes, large candles, liquidity sweeps
+        self.analyze_real_order_flow(candles)
+
         if hasattr(self, 'status_label'):
-            self.status_label.setText(f"Live: {symbol}")
+            self.status_label.setText(f"Live: {self.current_symbol} - {len(self.current_orders)} orders detected")
+
+    def analyze_real_order_flow(self, candles):
+        """Analyze real candle data for institutional order flow"""
+        from widgets.institutional_order_flow_detector import order_flow_detector
+
+        print(f"    → Analyzing {len(candles)} REAL candles for order flow patterns")
+
+        # Clear old orders
+        self.current_orders = []
+
+        # Analyze last 50 candles for institutional activity
+        recent_candles = candles[-50:] if len(candles) >= 50 else candles
+
+        for i, candle in enumerate(recent_candles):
+            # Look for large volume moves (proxy for institutional activity)
+            candle_range = candle['high'] - candle['low']
+
+            # Calculate average range
+            avg_range = sum([c['high'] - c['low'] for c in recent_candles]) / len(recent_candles)
+
+            # If this candle is significantly larger, it might be institutional
+            if candle_range > avg_range * 1.5:
+                order = {
+                    'type': 'BUY' if candle['close'] > candle['open'] else 'SELL',
+                    'price': candle['close'],
+                    'volume': candle_range,  # Using range as proxy for volume
+                    'timestamp': candle.get('time', ''),
+                    'confidence': min(95, (candle_range / avg_range) * 30)
+                }
+                self.current_orders.append(order)
+
+        print(f"    ✓ Found {len(self.current_orders)} potential institutional orders from REAL data")
+
+        # Update display
+        self.refresh_display()
 
     def apply_dark_theme(self):
         """Apply modern dark theme"""
