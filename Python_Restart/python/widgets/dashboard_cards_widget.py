@@ -87,6 +87,10 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
         self.init_ui()
         self.setup_ai_assist("dashboard_cards")
 
+        # Connect to mode changes
+        from core.demo_mode_manager import demo_mode_manager
+        demo_mode_manager.mode_changed.connect(self.on_mode_changed)
+
         # Auto-refresh timer (every 2 seconds)
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self.update_data)
@@ -219,10 +223,86 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
         }
 
     def load_live_data(self):
-        """Load live data (placeholder for now)"""
-        # For now, use demo data format
-        # In production, this would fetch real account data from MT5
-        self.load_demo_data()
+        """Load live MT5 account data"""
+        # Get real account data from data_manager
+        account = data_manager.get_account_summary()
+        market_state = data_manager.get_market_state()
+
+        # Account card - REAL DATA
+        balance = account.get('balance', 0)
+        equity = account.get('equity', 0)
+        profit = account.get('profit', 0)
+        daily_pnl = account.get('daily_pnl', 0)
+
+        pnl_pct = (daily_pnl / balance * 100) if balance > 0 else 0
+        win_rate = 0  # TODO: Calculate from trade history
+
+        pnl_color = "#00ff00" if daily_pnl >= 0 else "#ff0000"
+        self.account_card.update_value(
+            f"${balance:,.2f}",
+            f"P&L: ${daily_pnl:+.2f} ({pnl_pct:+.1f}%) | Equity: ${equity:,.2f}",
+            "#00aaff"
+        )
+
+        # Market card - REAL DATA
+        trend = market_state.get('bias', 'NEUTRAL')
+        volatility = market_state.get('volatility', 'NORMAL')
+        session = market_state.get('session', 'UNKNOWN')
+
+        trend_color = "#00ff00" if trend == "BULLISH" else "#ff0000" if trend == "BEARISH" else "#ffaa00"
+        self.market_card.update_value(
+            trend,
+            f"{volatility} Vol | {session} Session",
+            trend_color
+        )
+
+        # Risk card - REAL DATA
+        margin_level = account.get('margin_level', 0)
+        margin_used_pct = 100 - margin_level if margin_level > 0 else 0
+
+        # Calculate drawdown
+        drawdown = 0
+        if balance > 0 and equity < balance:
+            drawdown = ((balance - equity) / balance) * 100
+
+        exposure = abs(profit / balance * 100) if balance > 0 else 0
+
+        risk_color = "#00ff00" if drawdown < 5.0 else "#ffaa00" if drawdown < 10.0 else "#ff0000"
+        self.risk_card.update_value(
+            f"{drawdown:.1f}%",
+            f"Exposure: {exposure:.1f}% | Margin: {margin_used_pct:.0f}%",
+            risk_color
+        )
+
+        # AI Scenario card - Based on real data
+        if drawdown >= 10.0:
+            action, reason, color = "STOP", "High drawdown!", "#ff0000"
+        elif daily_pnl < -100:
+            action, reason, color = "REDUCE", "Daily loss limit", "#ff6600"
+        elif trend == "BULLISH" and volatility == "HIGH":
+            action, reason, color = "BUY DIP", "Strong trend", "#00ff00"
+        elif trend == "BEARISH" and volatility == "HIGH":
+            action, reason, color = "SELL RALLY", "Strong trend", "#ff0000"
+        else:
+            action, reason, color = "WAIT", "No clear setup", "#ffaa00"
+
+        self.scenario_card.update_value(action, reason, color)
+
+        # Store for AI analysis
+        self.current_data = {
+            'balance': balance,
+            'equity': equity,
+            'pnl': daily_pnl,
+            'pnl_pct': pnl_pct,
+            'win_rate': win_rate,
+            'trend': trend,
+            'volatility': volatility,
+            'session': session,
+            'exposure': exposure,
+            'margin_used': margin_used_pct,
+            'drawdown': drawdown,
+            'scenario_action': action
+        }
 
     def analyze_with_ai(self, prediction, widget_data):
         """
