@@ -605,13 +605,57 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         return base_prices.get(pair, 1.0000)
 
     def scan_real_market_data_from_data_manager(self) -> List[Dict]:
-        """Scan REAL MT5 data from data_manager - NO FAKE DATA"""
+        """Scan REAL MT5 data - MULTI-SYMBOL support via direct MT5 calls"""
         from core.data_manager import data_manager
+        from core.mt5_connector import mt5_connector
         import pandas as pd
 
         opportunities = []
 
-        # Get candles from data_manager (real MT5 data)
+        # STRATEGY 1: Try to fetch multi-symbol data directly from MT5
+        multi_symbol_data = self.fetch_multi_symbol_data_from_mt5()
+
+        if multi_symbol_data and len(multi_symbol_data) > 0:
+            # SUCCESS: We have multi-symbol data from MT5!
+            print(f"    ✓ Fetched REAL data for {len(multi_symbol_data)} symbols from MT5")
+
+            # Scan each symbol for opportunities
+            for symbol, df in multi_symbol_data.items():
+                if df is None or len(df) < 20:
+                    continue
+
+                # Extract timeframe from df metadata or use default
+                timeframe = getattr(df, 'timeframe', 'H4')
+
+                opp = self.analyze_opportunity(symbol, timeframe, df)
+                if opp:
+                    opportunities.append(opp)
+                    print(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
+
+            print(f"    ✓ Found {len(opportunities)} REAL opportunities across {len(multi_symbol_data)} symbols")
+            return opportunities
+
+        # STRATEGY 2: Try mt5_connector (JSON file approach)
+        all_symbols_data = mt5_connector.get_all_symbols_data()
+
+        if all_symbols_data and len(all_symbols_data) > 0:
+            print(f"    ✓ Got REAL data for {len(all_symbols_data)} symbols from MT5 JSON")
+
+            for symbol, df in all_symbols_data.items():
+                if df is None or len(df) < 20:
+                    continue
+
+                for timeframe in ['M5', 'M15', 'M30', 'H1', 'H4']:
+                    opp = self.analyze_opportunity(symbol, timeframe, df)
+                    if opp:
+                        opportunities.append(opp)
+                        print(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
+
+            print(f"    ✓ Found {len(opportunities)} REAL opportunities from JSON")
+            return opportunities
+
+        # FALLBACK: Use data_manager for single symbol (current chart symbol)
+        print("    ⚠️ MT5 multi-symbol data not available, using data_manager for current symbol only")
         candles = data_manager.get_candles()
 
         if not candles or len(candles) < 50:
@@ -633,6 +677,58 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             print(f"    ✓ REAL opportunity found: {opp['direction']} {setup_desc} (quality: {opp['quality_score']})")
 
         return opportunities
+
+    def fetch_multi_symbol_data_from_mt5(self) -> Dict[str, pd.DataFrame]:
+        """Fetch data for multiple symbols directly from MT5"""
+        try:
+            import MetaTrader5 as mt5
+            import pandas as pd
+
+            # Check if MT5 is initialized
+            if not mt5.initialize():
+                return {}
+
+            symbols_data = {}
+
+            # Scan subset of pairs (top 10 most liquid for performance)
+            priority_pairs = [
+                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+                'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY'
+            ]
+
+            print(f"    → Fetching data from MT5 for {len(priority_pairs)} symbols...")
+
+            for symbol in priority_pairs:
+                try:
+                    # Fetch H4 candles (good balance for opportunity scanning)
+                    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, 100)
+
+                    if rates is not None and len(rates) > 0:
+                        # Convert to DataFrame
+                        df = pd.DataFrame(rates)
+
+                        # Add required columns
+                        if 'time' in df.columns:
+                            df['time'] = pd.to_datetime(df['time'], unit='s')
+
+                        # Store timeframe metadata
+                        df.timeframe = 'H4'
+
+                        symbols_data[symbol] = df
+                        print(f"    ✓ {symbol}: Got {len(df)} candles")
+
+                except Exception as e:
+                    print(f"    ✗ {symbol}: Failed ({str(e)[:50]})")
+                    continue
+
+            return symbols_data
+
+        except ImportError:
+            print("    ⚠️ MetaTrader5 module not available")
+            return {}
+        except Exception as e:
+            print(f"    ⚠️ MT5 fetch error: {e}")
+            return {}
 
     def scan_real_market_data(self) -> List[Dict]:
         """OLD METHOD - Keep for compatibility but redirect to data_manager"""

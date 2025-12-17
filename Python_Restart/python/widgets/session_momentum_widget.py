@@ -152,84 +152,128 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
         self.update_data()
 
     def update_from_live_data(self):
-        """Update with live data from data_manager"""
+        """Update with live data - MULTI-SYMBOL support via MT5"""
         from core.data_manager import data_manager
 
-        print("    → update_from_live_data() called - fetching from data_manager")
+        print("    → update_from_live_data() called - fetching multi-symbol data")
 
         try:
-            # Get all symbols
-            symbols = get_all_symbols()
+            # STRATEGY 1: Fetch multi-symbol data directly from MT5
+            multi_symbol_data = self.fetch_multi_symbol_data_from_mt5()
 
-            # Build market data dictionary for scanner
-            market_data = {}
+            if multi_symbol_data and len(multi_symbol_data) > 0:
+                # SUCCESS: We have real multi-symbol data!
+                print(f"    ✓ Got REAL data for {len(multi_symbol_data)} symbols from MT5")
 
-            for symbol in symbols:
-                # Get candles for this symbol from data_manager
-                # Note: data_manager currently tracks one symbol, so we'll work with what we have
-                candles = data_manager.get_candles()
-
-                if candles and len(candles) > 0:
-                    # Convert to DataFrame format expected by scanner
-                    import pandas as pd
-                    df = pd.DataFrame(candles)
-
-                    # Ensure required columns exist
-                    if all(col in df.columns for col in ['open', 'high', 'low', 'close']):
-                        market_data[symbol] = df
-                        print(f"    ✓ Got {len(candles)} REAL candles for {symbol} - Last close: {candles[-1]['close']:.5f}")
-
-            # If we have data, run momentum scan
-            if market_data:
-                print(f"    → Running REAL momentum scan on {len(market_data)} symbols")
-                leaderboard = session_momentum_scanner.scan_momentum(market_data)
+                # Run momentum scan
+                leaderboard = session_momentum_scanner.scan_momentum(multi_symbol_data)
                 print(f"    ✓ LIVE MOMENTUM DATA: Top pair = {leaderboard[0]['symbol']} ({leaderboard[0]['momentum_score']:.0f}% momentum)")
                 self.update_momentum_data(leaderboard)
-                self.status_label.setText(f"Live: {len(market_data)} symbols scanned")
-            else:
-                # Fallback to single symbol if no multi-symbol data available
-                candles = data_manager.get_candles()
-                if candles and len(candles) > 20:
-                    print(f"    → Using single symbol fallback with {len(candles)} REAL candles")
-                    # Create simple momentum data for current symbol
-                    current = candles[-1]
-                    prev = candles[-20]
+                self.status_label.setText(f"Live: {len(multi_symbol_data)} symbols scanned")
+                return
 
-                    price_change = current['close'] - prev['close']
-                    session_range = current['high'] - current['low']
+            # STRATEGY 2: Try mt5_connector (JSON file approach)
+            from core.mt5_connector import mt5_connector
+            all_symbols_data = mt5_connector.get_all_symbols_data()
 
-                    # Determine pip size (rough estimate)
-                    if 'JPY' in self.current_symbol:
-                        pip_multiplier = 100
-                    else:
-                        pip_multiplier = 10000
+            if all_symbols_data and len(all_symbols_data) > 0:
+                print(f"    ✓ Got data for {len(all_symbols_data)} symbols from MT5 JSON")
+                leaderboard = session_momentum_scanner.scan_momentum(all_symbols_data)
+                self.update_momentum_data(leaderboard)
+                self.status_label.setText(f"Live: {len(all_symbols_data)} symbols scanned")
+                return
 
-                    pips_moved = abs(price_change) * pip_multiplier
-                    direction = 'BULLISH' if price_change > 0 else 'BEARISH'
+            # FALLBACK: Use data_manager for single symbol
+            print("    ⚠️ MT5 multi-symbol data not available, using single symbol fallback")
+            candles = data_manager.get_candles()
 
-                    # Calculate simple momentum score (0-100)
-                    momentum_score = min(100, (pips_moved / 50) * 100) if pips_moved > 0 else 30
+            if candles and len(candles) > 20:
+                print(f"    → Using single symbol fallback with {len(candles)} REAL candles")
+                # Create simple momentum data for current symbol
+                current = candles[-1]
+                prev = candles[-20]
 
-                    leaderboard = [{
-                        'symbol': self.current_symbol,
-                        'momentum_score': momentum_score,
-                        'session_range_pips': pips_moved,
-                        'direction': direction,
-                        'trending_strength': momentum_score * 0.8,
-                        'hourly_volatility': session_range,
-                        'volume_ratio': 1.0,
-                        'session': 'Active',
-                        'recommendation': 'LIVE DATA'
-                    }]
+                price_change = current['close'] - prev['close']
+                session_range = current['high'] - current['low']
 
-                    self.update_momentum_data(leaderboard)
-                    self.status_label.setText(f"Live: {self.current_symbol}")
+                # Determine pip size (rough estimate)
+                if 'JPY' in self.current_symbol:
+                    pip_multiplier = 100
                 else:
-                    self.status_label.setText("Live: Waiting for data...")
+                    pip_multiplier = 10000
+
+                pips_moved = abs(price_change) * pip_multiplier
+                direction = 'BULLISH' if price_change > 0 else 'BEARISH'
+
+                # Calculate simple momentum score (0-100)
+                momentum_score = min(100, (pips_moved / 50) * 100) if pips_moved > 0 else 30
+
+                leaderboard = [{
+                    'symbol': self.current_symbol,
+                    'momentum_score': momentum_score,
+                    'session_range_pips': pips_moved,
+                    'direction': direction,
+                    'trending_strength': momentum_score * 0.8,
+                    'hourly_volatility': session_range,
+                    'volume_ratio': 1.0,
+                    'session': 'Active',
+                    'recommendation': 'LIVE DATA'
+                }]
+
+                self.update_momentum_data(leaderboard)
+                self.status_label.setText(f"Live: {self.current_symbol}")
+            else:
+                self.status_label.setText("Live: Waiting for data...")
 
         except Exception as e:
             print(f"[Session Momentum] Error fetching live data: {e}")
             self.status_label.setText("Live: Error fetching data")
+
+    def fetch_multi_symbol_data_from_mt5(self) -> Dict[str, pd.DataFrame]:
+        """Fetch data for multiple symbols directly from MT5"""
+        try:
+            import MetaTrader5 as mt5
+            import pandas as pd
+
+            # Check if MT5 is initialized
+            if not mt5.initialize():
+                return {}
+
+            symbols_data = {}
+
+            # Get all symbols
+            symbols = get_all_symbols()
+
+            print(f"    → Fetching data from MT5 for {len(symbols)} symbols...")
+
+            for symbol in symbols:
+                try:
+                    # Fetch H4 candles for momentum analysis
+                    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, 100)
+
+                    if rates is not None and len(rates) > 0:
+                        # Convert to DataFrame
+                        df = pd.DataFrame(rates)
+
+                        # Add required columns
+                        if 'time' in df.columns:
+                            df['time'] = pd.to_datetime(df['time'], unit='s')
+
+                        symbols_data[symbol] = df
+                        print(f"    ✓ {symbol}: Got {len(df)} candles - Last close: {df['close'].iloc[-1]:.5f}")
+
+                except Exception as e:
+                    print(f"    ✗ {symbol}: Failed ({str(e)[:50]})")
+                    continue
+
+            return symbols_data
+
+        except ImportError:
+            print("    ⚠️ MetaTrader5 module not available")
+            return {}
+        except Exception as e:
+            print(f"    ⚠️ MT5 fetch error: {e}")
+            return {}
 
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""
