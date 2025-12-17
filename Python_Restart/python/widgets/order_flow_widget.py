@@ -245,8 +245,6 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
 
     def analyze_real_order_flow(self, candles):
         """Analyze real candle data for institutional order flow"""
-        from widgets.institutional_order_flow_detector import order_flow_detector
-
         print(f"    → Analyzing {len(candles)} REAL candles for order flow patterns")
 
         # Clear old orders
