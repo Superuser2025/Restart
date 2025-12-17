@@ -448,6 +448,19 @@ class EnhancedMainWindow(QMainWindow):
         if 'timeframe' in data:
             self.current_timeframe = data['timeframe']
 
+        # DEBUG: Print account data when received
+        if 'account_balance' in data:
+            print(f"[DEBUG] Account Balance: ${data['account_balance']:,.2f}")
+        if 'account_equity' in data:
+            print(f"[DEBUG] Account Equity: ${data['account_equity']:,.2f}")
+        if 'total_pnl' in data:
+            print(f"[DEBUG] Total P&L: ${data['total_pnl']:,.2f}")
+
+        # Show what keys are in the data
+        account_keys = [k for k in data.keys() if 'account' in k.lower() or 'balance' in k.lower() or 'equity' in k.lower() or 'pnl' in k.lower()]
+        if account_keys:
+            print(f"[DEBUG] Account-related keys in data: {account_keys}")
+
         if hasattr(self, 'status_label'):
             self.status_label.setText(f"MT5 data received: {self.current_symbol} {self.current_timeframe}")
 
