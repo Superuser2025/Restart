@@ -545,6 +545,9 @@ class ChartPanel(QWidget):
             # If no symbol specified, use current_symbol (user's choice)
             if symbol is None:
                 symbol = self.current_symbol
+                print(f"[Chart] load_historical_data: Using current_symbol = {symbol}")
+            else:
+                print(f"[Chart] load_historical_data: Symbol parameter provided = {symbol}")
 
             timeframe = timeframe or self.current_timeframe
             mt5_timeframe = self.get_mt5_timeframe(timeframe)
@@ -1925,12 +1928,16 @@ class ChartPanel(QWidget):
 
     def on_symbol_changed(self, symbol: str):
         """Handle symbol change - allows viewing any symbol independent of EA"""
+        print(f"=" * 80)
+        print(f"[Chart] on_symbol_changed CALLED: {symbol}")
+        print(f"[Chart] Previous symbol was: {self.current_symbol}")
+        print(f"=" * 80)
 
         # Set loading flag to prevent update_chart from interfering
         self.is_loading = True
 
         self.current_symbol = symbol
-        print(f"[Chart] Symbol changed to: {symbol}")
+        print(f"[Chart] current_symbol set to: {self.current_symbol}")
 
         # Emit signal to notify main window
         self.symbol_changed.emit(symbol)
