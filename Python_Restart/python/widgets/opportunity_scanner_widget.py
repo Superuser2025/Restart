@@ -629,7 +629,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         opp = self.analyze_opportunity(current_symbol, current_timeframe, df)
         if opp:
             opportunities.append(opp)
-            print(f"    ✓ REAL opportunity found: {opp['setup_type']} (quality: {opp['quality_score']})")
+            setup_desc = ', '.join(opp.get('confluence_reasons', ['Technical Setup']))
+            print(f"    ✓ REAL opportunity found: {opp['direction']} {setup_desc} (quality: {opp['quality_score']})")
 
         return opportunities
 
@@ -683,6 +684,16 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             if not reasons:
                 reasons = ['Price Action', 'Technical Setup']
 
+            # Determine setup type from reasons
+            if 'Trend Alignment' in reasons and 'High R:R' in reasons:
+                setup_type = f"{trend} Trend + High R:R"
+            elif 'Trend Alignment' in reasons:
+                setup_type = f"{trend} Trend Continuation"
+            elif 'High R:R' in reasons:
+                setup_type = f"{trend} High R:R Setup"
+            else:
+                setup_type = f"{trend} Price Action"
+
             return {
                 'symbol': symbol,
                 'direction': trend,
@@ -692,7 +703,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'take_profit': float(take_profit),
                 'risk_reward': float(rr),
                 'quality_score': quality_score,
-                'confluence_reasons': reasons
+                'confluence_reasons': reasons,
+                'setup_type': setup_type  # Add this for display
             }
 
         except Exception as e:
