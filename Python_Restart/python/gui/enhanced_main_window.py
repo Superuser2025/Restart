@@ -589,38 +589,14 @@ class EnhancedMainWindow(QMainWindow):
         """Toggle between Demo and Live mode"""
         mode_text = "LIVE" if checked else "DEMO"
 
-        # Confirm mode change
-        reply = QMessageBox.question(
-            self,
-            f"Switch to {mode_text} Mode?",
-            f"Are you sure you want to switch to {mode_text} mode?\n\n"
-            f"{'LIVE Mode will use real MT5 data from your trading account.' if checked else 'DEMO Mode will use simulated data for testing.'}\n\n"
-            f"This will refresh all widgets.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
+        # Toggle demo mode (this will trigger mode_changed signal and refresh widgets)
+        demo_mode_manager.demo_mode = not checked  # Inverse: checked=Live, demo=False
 
-        if reply == QMessageBox.StandardButton.Yes:
-            # Toggle demo mode (this will trigger mode_changed signal and refresh widgets)
-            demo_mode_manager.demo_mode = not checked  # Inverse: checked=Live, demo=False
+        # Update menu text
+        self.mode_action.setText("Disable Live Mode" if checked else "Enable Live Mode")
 
-            # Update menu text
-            self.mode_action.setText("Disable Live Mode" if checked else "Enable Live Mode")
-
-            # Note: Status bar and widget refresh handled by on_demo_mode_changed signal
-
-            # Notify user AFTER signal processing
-            QMessageBox.information(
-                self,
-                f"{mode_text} Mode Active",
-                f"✓ Successfully switched to {mode_text} mode\n\n"
-                f"{'All widgets are now showing REAL MT5 data' if checked else 'All widgets are now showing DEMO data'}"
-            )
-
-            print(f"[Main Window] User toggled to {mode_text} mode via menu")
-        else:
-            # User canceled - revert checkbox
-            self.mode_action.setChecked(not checked)
+        # Note: Status bar and widget refresh handled by on_demo_mode_changed signal
+        print(f"[Main Window] User toggled to {mode_text} mode via menu")
 
     def on_verify_mt5_connection(self):
         """Verify MT5 connection status"""
