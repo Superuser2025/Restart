@@ -41,11 +41,11 @@ class TradeJournalWidget(AIAssistMixin, QWidget):
 
         # Auto-refresh every 5 seconds
         self.refresh_timer = QTimer()
-        self.refresh_timer.timeout.connect(self.update_from_live_data)
+        self.refresh_timer.timeout.connect(self.update_data)
         self.refresh_timer.start(5000)
 
-        # Initial update with live data
-        self.update_from_live_data()
+        # Initial update
+        self.update_data()
 
     def init_ui(self):
         """Initialize the user interface"""

@@ -53,8 +53,118 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
 
     def update_from_live_data(self):
         """Update with live data from data_manager"""
-        # Use self.current_symbol, don't overwrite it from data_manager!
-        self.status_label.setText(f"Live: {self.current_symbol}")
+        from core.data_manager import data_manager
+
+        try:
+            # Get candle data
+            candles = data_manager.get_candles()
+
+            if not candles or len(candles) < 50:
+                self.status_label.setText(f"Live: {self.current_symbol} (waiting for data...)")
+                return
+
+            # Get current price
+            current_price = candles[-1]['close']
+
+            # Build data by timeframe dictionary
+            # Note: data_manager tracks one timeframe, so we'll use what we have
+            # and extrapolate trend across timeframes from longer period analysis
+            import pandas as pd
+            df = pd.DataFrame(candles)
+
+            # Use the available data as the base timeframe
+            current_timeframe = data_manager.candle_buffer.timeframe or 'M15'
+
+            # Analyze trends at different lookback periods to simulate MTF analysis
+            trends = {}
+
+            # M15: Last 15 candles (15-60 min)
+            if len(candles) >= 15:
+                recent = candles[-15:]
+                m15_trend = self._analyze_trend(recent)
+                trends['M15'] = m15_trend
+
+            # H1: Last 60 candles (4 hours if M15)
+            if len(candles) >= 60:
+                h1_candles = candles[-60:]
+                h1_trend = self._analyze_trend(h1_candles)
+                trends['H1'] = h1_trend
+
+            # H4: Last 100 candles
+            if len(candles) >= 100:
+                h4_candles = candles[-100:]
+                h4_trend = self._analyze_trend(h4_candles)
+                trends['H4'] = h4_trend
+
+            # D1: All available candles
+            d1_trend = self._analyze_trend(candles)
+            trends['D1'] = d1_trend
+            trends['W1'] = d1_trend  # Use same as D1 for simplicity
+
+            # Find nearest support/resistance from recent swing highs/lows
+            highs = [c['high'] for c in candles[-50:]]
+            lows = [c['low'] for c in candles[-50:]]
+
+            # Find nearest resistance (high above current price)
+            resistances = [h for h in highs if h > current_price]
+            nearest_resistance = None
+            if resistances:
+                nearest_res_price = min(resistances)
+                nearest_resistance = {
+                    'price': nearest_res_price,
+                    'timeframe': current_timeframe
+                }
+
+            # Find nearest support (low below current price)
+            supports = [l for l in lows if l < current_price]
+            nearest_support = None
+            if supports:
+                nearest_sup_price = max(supports)
+                nearest_support = {
+                    'price': nearest_sup_price,
+                    'timeframe': current_timeframe
+                }
+
+            # Build structure data
+            structure_data = {
+                'trend_analysis': trends,
+                'nearest_support': nearest_support,
+                'nearest_resistance': nearest_resistance,
+                'current_price': current_price,
+                'confluence_zones': [],  # Would require multi-timeframe data
+                'last_update': datetime.now()
+            }
+
+            self.update_structure_data(structure_data)
+            self.status_label.setText(f"Live: {self.current_symbol}")
+
+        except Exception as e:
+            print(f"[MTF Structure] Error fetching live data: {e}")
+            self.status_label.setText(f"Live: Error - {str(e)[:30]}")
+
+    def _analyze_trend(self, candles) -> str:
+        """Analyze trend from candle data"""
+        if not candles or len(candles) < 10:
+            return 'UNKNOWN'
+
+        # Simple SMA trend analysis
+        closes = [c['close'] for c in candles]
+        current_price = closes[-1]
+
+        # Calculate moving average
+        ma_period = min(20, len(closes) // 2)
+        if ma_period < 3:
+            return 'UNKNOWN'
+
+        sma = sum(closes[-ma_period:]) / ma_period
+
+        # Determine trend
+        if current_price > sma * 1.002:  # 0.2% above
+            return 'BULLISH'
+        elif current_price < sma * 0.998:  # 0.2% below
+            return 'BEARISH'
+        else:
+            return 'NEUTRAL'
 
     def init_ui(self):
         """Initialize the user interface"""

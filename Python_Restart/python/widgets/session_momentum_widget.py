@@ -154,8 +154,76 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
     def update_from_live_data(self):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
-        symbol = self.current_symbol
-        self.status_label.setText(f"Live: {symbol}")
+
+        try:
+            # Get all symbols
+            symbols = get_all_symbols()
+
+            # Build market data dictionary for scanner
+            market_data = {}
+
+            for symbol in symbols:
+                # Get candles for this symbol from data_manager
+                # Note: data_manager currently tracks one symbol, so we'll work with what we have
+                candles = data_manager.get_candles()
+
+                if candles and len(candles) > 0:
+                    # Convert to DataFrame format expected by scanner
+                    import pandas as pd
+                    df = pd.DataFrame(candles)
+
+                    # Ensure required columns exist
+                    if all(col in df.columns for col in ['open', 'high', 'low', 'close']):
+                        market_data[symbol] = df
+
+            # If we have data, run momentum scan
+            if market_data:
+                leaderboard = session_momentum_scanner.scan_momentum(market_data)
+                self.update_momentum_data(leaderboard)
+                self.status_label.setText(f"Live: {len(market_data)} symbols scanned")
+            else:
+                # Fallback to single symbol if no multi-symbol data available
+                candles = data_manager.get_candles()
+                if candles and len(candles) > 20:
+                    # Create simple momentum data for current symbol
+                    current = candles[-1]
+                    prev = candles[-20]
+
+                    price_change = current['close'] - prev['close']
+                    session_range = current['high'] - current['low']
+
+                    # Determine pip size (rough estimate)
+                    if 'JPY' in self.current_symbol:
+                        pip_multiplier = 100
+                    else:
+                        pip_multiplier = 10000
+
+                    pips_moved = abs(price_change) * pip_multiplier
+                    direction = 'BULLISH' if price_change > 0 else 'BEARISH'
+
+                    # Calculate simple momentum score (0-100)
+                    momentum_score = min(100, (pips_moved / 50) * 100) if pips_moved > 0 else 30
+
+                    leaderboard = [{
+                        'symbol': self.current_symbol,
+                        'momentum_score': momentum_score,
+                        'session_range_pips': pips_moved,
+                        'direction': direction,
+                        'trending_strength': momentum_score * 0.8,
+                        'hourly_volatility': session_range,
+                        'volume_ratio': 1.0,
+                        'session': 'Active',
+                        'recommendation': 'LIVE DATA'
+                    }]
+
+                    self.update_momentum_data(leaderboard)
+                    self.status_label.setText(f"Live: {self.current_symbol}")
+                else:
+                    self.status_label.setText("Live: Waiting for data...")
+
+        except Exception as e:
+            print(f"[Session Momentum] Error fetching live data: {e}")
+            self.status_label.setText("Live: Error fetching data")
 
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""

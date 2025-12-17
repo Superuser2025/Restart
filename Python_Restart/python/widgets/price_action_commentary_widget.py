@@ -43,11 +43,11 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
 
         # Auto-update timer (every 5 seconds for new commentary)
         self.update_timer = QTimer()
-        self.update_timer.timeout.connect(self.update_commentary)
+        self.update_timer.timeout.connect(self.update_data)  # FIXED: Call update_data() to respect mode
         self.update_timer.start(5000)
 
         # Initial load
-        self.update_commentary()
+        self.update_data()  # FIXED: Call update_data() to respect mode
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -263,6 +263,10 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
 
     def get_market_data(self) -> Dict:
         """Get current market data for analysis"""
+        # FIXED: Check demo mode first
+        if is_demo_mode():
+            return self.get_sample_market_data()
+
         try:
             # Get data from data manager (uses currently loaded symbol in buffer)
             candles = data_manager.get_candles()

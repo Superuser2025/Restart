@@ -41,11 +41,11 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         # Auto-refresh timer to get live data
         from PyQt6.QtCore import QTimer
         self.refresh_timer = QTimer()
-        self.refresh_timer.timeout.connect(self.update_from_live_data)
+        self.refresh_timer.timeout.connect(self.update_data)
         self.refresh_timer.start(3000)  # Refresh every 3 seconds
 
-        # Initial update with live data
-        self.update_from_live_data()
+        # Initial update
+        self.update_data()
 
     def init_ui(self):
         """Initialize the user interface"""
