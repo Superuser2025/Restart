@@ -26,8 +26,11 @@ class DemoModeManager(QObject):
 
     def __init__(self):
         super().__init__()
-        self._demo_mode = True  # Start in demo mode for safety
+        self._demo_mode = False  # DEFAULT TO LIVE MODE - user can switch to demo if needed
         self._symbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"]
+        print("=" * 80)
+        print("🔴 LIVE MODE IS DEFAULT - Application starts in LIVE data mode")
+        print("=" * 80)
 
     @property
     def demo_mode(self) -> bool:

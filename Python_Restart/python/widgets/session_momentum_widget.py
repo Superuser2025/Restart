@@ -155,6 +155,8 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
 
+        print("    → update_from_live_data() called - fetching from data_manager")
+
         try:
             # Get all symbols
             symbols = get_all_symbols()
@@ -175,16 +177,20 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
                     # Ensure required columns exist
                     if all(col in df.columns for col in ['open', 'high', 'low', 'close']):
                         market_data[symbol] = df
+                        print(f"    ✓ Got {len(candles)} REAL candles for {symbol} - Last close: {candles[-1]['close']:.5f}")
 
             # If we have data, run momentum scan
             if market_data:
+                print(f"    → Running REAL momentum scan on {len(market_data)} symbols")
                 leaderboard = session_momentum_scanner.scan_momentum(market_data)
+                print(f"    ✓ LIVE MOMENTUM DATA: Top pair = {leaderboard[0]['symbol']} ({leaderboard[0]['momentum_score']:.0f}% momentum)")
                 self.update_momentum_data(leaderboard)
                 self.status_label.setText(f"Live: {len(market_data)} symbols scanned")
             else:
                 # Fallback to single symbol if no multi-symbol data available
                 candles = data_manager.get_candles()
                 if candles and len(candles) > 20:
+                    print(f"    → Using single symbol fallback with {len(candles)} REAL candles")
                     # Create simple momentum data for current symbol
                     current = candles[-1]
                     prev = candles[-20]
@@ -228,6 +234,7 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""
         if is_demo_mode():
+            print("🟡 [Session Momentum] DEMO MODE - Using fake generated data")
             # Get demo data for all symbols
             symbols = get_all_symbols()
             demo_data = get_demo_data('session_momentum', symbols=symbols)
@@ -236,6 +243,7 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
                 self.update_momentum_data(demo_data)
                 self.status_label.setText(f"Demo Mode - {len(symbols)} symbols")
         else:
+            print("🔴 [Session Momentum] LIVE MODE - Fetching REAL MT5 data from data_manager")
             # Get live data
             self.update_from_live_data()
 

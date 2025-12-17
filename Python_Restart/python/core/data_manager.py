@@ -209,6 +209,16 @@ class DataManager:
         Args:
             data: Market data dictionary from MT5
         """
+        print("=" * 80)
+        print("📊 [DATA MANAGER] RECEIVING REAL MT5 DATA")
+        if 'symbol' in data:
+            print(f"   Symbol: {data['symbol']}")
+        if 'account_balance' in data:
+            print(f"   ✓ REAL Account Balance: ${data['account_balance']:,.2f}")
+        if 'account_equity' in data:
+            print(f"   ✓ REAL Account Equity: ${data['account_equity']:,.2f}")
+        print("=" * 80)
+
         try:
             timestamp = data.get('timestamp')
             if timestamp:
