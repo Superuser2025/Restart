@@ -31,6 +31,14 @@ def main():
     app.setApplicationName("AppleTrader Pro - Enhanced")
     app.setOrganizationName("AppleTrader")
 
+    # FORCE LIVE MODE ON STARTUP (user requested)
+    from core.demo_mode_manager import demo_mode_manager
+    demo_mode_manager.demo_mode = False  # False = LIVE MODE
+    print("\n🔴 FORCING LIVE MODE ON STARTUP 🔴")
+    print(f"demo_mode = {demo_mode_manager.demo_mode}")
+    print(f"is_demo_mode() = {demo_mode_manager.is_demo()}")
+    print(f"is_live_mode() = {demo_mode_manager.is_live()}\n")
+
     # Create and show enhanced main window
     window = EnhancedMainWindow()
     window.show()
