@@ -617,23 +617,28 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         multi_symbol_data = self.fetch_multi_symbol_data_from_mt5()
 
         if multi_symbol_data and len(multi_symbol_data) > 0:
-            # SUCCESS: We have multi-symbol data from MT5!
-            print(f"    ✓ Fetched REAL data for {len(multi_symbol_data)} symbols from MT5")
+            # SUCCESS: We have multi-symbol + multi-timeframe data from MT5!
+            print(f"    ✓ Fetched REAL data for {len(multi_symbol_data)} symbol-timeframe pairs from MT5")
 
-            # Scan each symbol for opportunities
-            for symbol, df in multi_symbol_data.items():
+            # Scan each symbol-timeframe combination for opportunities
+            for key, df in multi_symbol_data.items():
                 if df is None or len(df) < 20:
                     continue
 
-                # Extract timeframe from df metadata or use default
-                timeframe = getattr(df, 'timeframe', 'H4')
+                # Parse key: "SYMBOL_TIMEFRAME" (e.g., "EURUSD_M5")
+                if '_' in key:
+                    symbol, timeframe = key.rsplit('_', 1)
+                else:
+                    # Fallback: single symbol key (old format)
+                    symbol = key
+                    timeframe = getattr(df, 'timeframe', 'H4')
 
                 opp = self.analyze_opportunity(symbol, timeframe, df)
                 if opp:
                     opportunities.append(opp)
                     print(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
 
-            print(f"    ✓ Found {len(opportunities)} REAL opportunities across {len(multi_symbol_data)} symbols")
+            print(f"    ✓ Found {len(opportunities)} REAL opportunities across {len(multi_symbol_data)} symbol-timeframe pairs")
             return opportunities
 
         # STRATEGY 2: Try mt5_connector (JSON file approach)
@@ -680,13 +685,14 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         return opportunities
 
     def fetch_multi_symbol_data_from_mt5(self) -> Dict[str, pd.DataFrame]:
-        """Fetch data for multiple symbols directly from MT5"""
+        """Fetch data for multiple symbols AND timeframes from MT5 (CRITICAL FIX)"""
         try:
             import MetaTrader5 as mt5
             import pandas as pd
 
             # Check if MT5 is initialized
             if not mt5.initialize():
+                print("    ⚠️ MT5 not initialized")
                 return {}
 
             symbols_data = {}
@@ -697,31 +703,47 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY'
             ]
 
-            print(f"    → Fetching data from MT5 for {len(priority_pairs)} symbols...")
+            # CRITICAL: Fetch MULTIPLE timeframes (not just H4!)
+            # Cards expect: Short (M5/M15), Medium (M30/H1), Long (H4)
+            timeframes_to_fetch = {
+                'M5': mt5.TIMEFRAME_M5,
+                'M15': mt5.TIMEFRAME_M15,
+                'M30': mt5.TIMEFRAME_M30,
+                'H1': mt5.TIMEFRAME_H1,
+                'H4': mt5.TIMEFRAME_H4
+            }
+
+            print(f"    → Fetching {len(priority_pairs)} symbols × {len(timeframes_to_fetch)} timeframes from MT5...")
 
             for symbol in priority_pairs:
-                try:
-                    # Fetch H4 candles (good balance for opportunity scanning)
-                    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, 100)
+                for tf_name, tf_constant in timeframes_to_fetch.items():
+                    try:
+                        # Fetch candles for this specific timeframe
+                        rates = mt5.copy_rates_from_pos(symbol, tf_constant, 0, 100)
 
-                    if rates is not None and len(rates) > 0:
-                        # Convert to DataFrame
-                        df = pd.DataFrame(rates)
+                        if rates is not None and len(rates) > 0:
+                            # Convert to DataFrame
+                            df = pd.DataFrame(rates)
 
-                        # Add required columns
-                        if 'time' in df.columns:
-                            df['time'] = pd.to_datetime(df['time'], unit='s')
+                            # Add required columns
+                            if 'time' in df.columns:
+                                df['time'] = pd.to_datetime(df['time'], unit='s')
 
-                        # Store timeframe metadata
-                        df.timeframe = 'H4'
+                            # Store timeframe metadata
+                            df.timeframe = tf_name
 
-                        symbols_data[symbol] = df
-                        print(f"    ✓ {symbol}: Got {len(df)} candles")
+                            # Store with key: "SYMBOL_TIMEFRAME" (e.g., "EURUSD_M5")
+                            key = f"{symbol}_{tf_name}"
+                            symbols_data[key] = df
 
-                except Exception as e:
-                    print(f"    ✗ {symbol}: Failed ({str(e)[:50]})")
-                    continue
+                            if tf_name == 'M5':  # Print once per symbol
+                                print(f"    ✓ {symbol}: Fetched {len(timeframes_to_fetch)} timeframes (100 candles each)")
 
+                    except Exception as e:
+                        print(f"    ✗ {symbol} {tf_name}: Failed ({str(e)[:30]})")
+                        continue
+
+            print(f"    → Total symbol-timeframe combinations: {len(symbols_data)}")
             return symbols_data
 
         except ImportError:
