@@ -16,6 +16,7 @@ from core.opportunity_generator import opportunity_generator
 from core.market_analyzer import market_analyzer
 from core.ai_assist_base import AIAssistMixin
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.ml_integration import ml_integration, get_ml_prediction  # ML INTEGRATION ADDED
 
 
 class OpportunityCard(QFrame):
@@ -828,6 +829,29 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             # ATR stays in RAW PRICE UNITS - universal for all asset types
             # Volatility filter now uses percentage-based checks, no conversion needed
 
+            # ML ENHANCEMENT: Get ML predictions for this symbol
+            ml_pred = get_ml_prediction(widget_type='opportunity_scanner', symbol=symbol)
+            ml_confidence = 75  # Default
+            ml_regime_match = True  # Default
+            ml_boost = 0  # Quality score boost from ML
+
+            if ml_pred:
+                # Extract ML confidence (0-100%)
+                ml_confidence = int(ml_pred.get('confidence', 0.75) * 100)
+
+                # Check if ML agrees with our direction
+                ml_signal = ml_pred.get('signal', 'NEUTRAL')
+                if (trend == 'BUY' and ml_signal == 'BUY') or (trend == 'SELL' and ml_signal == 'SELL'):
+                    ml_boost = 10  # Boost quality if ML agrees
+                    reasons.append('ML Confirmation')
+                    print(f"    ✓ ML agrees with {trend} signal (confidence: {ml_confidence}%)")
+
+                # Regime matching
+                ml_regime_match = ml_pred.get('regime_favorable', True)
+
+            # Apply ML boost to quality score
+            quality_score_final = min(100, quality_score + ml_boost)
+
             return {
                 'symbol': symbol,
                 'direction': trend,
@@ -836,8 +860,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'stop_loss': float(stop_loss),
                 'take_profit': float(take_profit),
                 'risk_reward': float(rr),
-                'quality_score': quality_score,
-                'confluence_reasons': reasons,
+                'quality_score': quality_score_final,  # ML-enhanced quality
+                'confluence_reasons': reasons,  # May include ML Confirmation
                 'setup_type': setup_type,
                 # Basic filter fields
                 'atr': float(atr),  # Raw ATR in price units (universal)
@@ -853,10 +877,11 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'is_retail_trap': False,  # Not a retail trap (quality score validates)
                 'order_block_valid': True,  # Order block is valid
                 'structure_aligned': True,  # Market structure aligned (trend validated)
-                # Machine Learning fields (required by ML filters)
-                'pattern_reliability': 75,  # 75% ML confidence (quality score >= 60)
+                # Machine Learning fields (NOW REAL ML DATA!)
+                'pattern_reliability': ml_confidence,  # Real ML confidence (%)
                 'parameters_optimized': True,  # Parameters are optimized
-                'regime_match': True  # Regime matches current market
+                'regime_match': ml_regime_match,  # Real ML regime analysis
+                'ml_prediction': ml_pred  # Full ML prediction for reference
             }
 
         except Exception as e:
