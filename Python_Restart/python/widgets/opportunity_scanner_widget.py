@@ -825,6 +825,13 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             current_session = market_analyzer.get_current_session()
             session_quality = market_analyzer.get_session_quality_score()
 
+            # Convert ATR from price units to pips for filter comparison
+            # This ensures ATR units match expected_atr from market_analyzer
+            if symbol.endswith('JPY'):
+                atr_pips = atr / 0.01  # JPY pairs: 1 pip = 0.01
+            else:
+                atr_pips = atr / 0.0001  # Other pairs: 1 pip = 0.0001
+
             return {
                 'symbol': symbol,
                 'direction': trend,
@@ -837,11 +844,11 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'confluence_reasons': reasons,
                 'setup_type': setup_type,
                 # Add fields required by filter_manager
-                'atr': float(atr),
+                'atr': float(atr_pips),  # Now in pips, matches expected_atr units
                 'session': current_session,
                 'session_quality': session_quality,
                 'volume': 100,  # Reasonable default (filter uses min 50)
-                'spread': atr * 0.1,  # 10% of ATR (reasonable spread)
+                'spread': atr * 0.1,  # 10% of ATR (reasonable spread in price units)
                 'pattern_strength': quality_score / 10,  # Convert quality to 0-10 scale
                 'mtf_score': 5,  # Neutral MTF score (0-10 scale)
                 'mtf_confirmed': True  # CRITICAL: filter_manager checks this (Line 131)
