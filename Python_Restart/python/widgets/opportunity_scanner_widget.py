@@ -361,12 +361,15 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.setup_ai_assist("opportunity_scanner")
 
         # Auto-scan timer
+        print(f"[OpportunityScanner] Initializing scanner widget...")
         self.scan_timer = QTimer()
         self.scan_timer.timeout.connect(self.scan_market)
         self.scan_timer.start(30000)
+        print(f"[OpportunityScanner] ✓ Scanner timer started (30s interval)")
 
         # Initial scan
         QTimer.singleShot(100, self.scan_market)
+        print(f"[OpportunityScanner] ✓ Initial scan scheduled (100ms delay)")
 
     def init_ui(self):
         """Initialize the user interface - NO HEADER"""
