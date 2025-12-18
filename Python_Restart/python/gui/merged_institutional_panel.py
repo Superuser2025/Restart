@@ -285,18 +285,21 @@ class MergedInstitutionalPanel(QWidget):
         group = QGroupBox("📊 INSTITUTIONAL FILTERS")
         layout = QVBoxLayout()
 
-        # Define all filters
+        # Import filter_manager to sync with backend state
+        from core.filter_manager import filter_manager
+
+        # Define all filters - SYNC with filter_manager defaults!
         filter_list = [
-            ("Volume Filter", True),
-            ("Spread Filter", True),
-            ("Strong Price Model", True),
-            ("Multi-Timeframe", True),
-            ("Volatility Filter", True),
-            ("Sentiment Filter", True),
-            ("Correlation Filter", True),
-            ("Volatility Adaptation", True),
-            ("Dynamic Risk", True),
-            ("Pattern Decay", True)
+            ("Volume Filter", filter_manager.volume_filter),
+            ("Spread Filter", filter_manager.spread_filter),  # Now syncs with backend (False)
+            ("Strong Price Model", filter_manager.strong_price_model),
+            ("Multi-Timeframe", filter_manager.multi_timeframe),
+            ("Volatility Filter", filter_manager.volatility_filter),
+            ("Sentiment Filter", filter_manager.sentiment_filter),
+            ("Correlation Filter", filter_manager.correlation_filter),
+            ("Volatility Adaptation", filter_manager.volatility_adaptation),
+            ("Dynamic Risk", filter_manager.dynamic_risk),
+            ("Pattern Decay", filter_manager.pattern_decay)
         ]
 
         for filter_name, enabled in filter_list:
@@ -348,11 +351,14 @@ class MergedInstitutionalPanel(QWidget):
         group = QGroupBox("💰 SMART MONEY CONCEPTS")
         layout = QVBoxLayout()
 
+        # Import filter_manager to sync with backend state
+        from core.filter_manager import filter_manager
+
         smc_list = [
-            ("Liquidity Sweep", True),
-            ("Retail Trap Detection", True),
-            ("Order Block Invalidation", True),
-            ("Market Structure", True)
+            ("Liquidity Sweep", filter_manager.liquidity_sweep),
+            ("Retail Trap Detection", filter_manager.retail_trap_detection),
+            ("Order Block Invalidation", filter_manager.order_block_invalidation),
+            ("Market Structure", filter_manager.market_structure)
         ]
 
         for smc_name, enabled in smc_list:
@@ -367,10 +373,13 @@ class MergedInstitutionalPanel(QWidget):
         group = QGroupBox("🤖 MACHINE LEARNING")
         layout = QVBoxLayout()
 
+        # Import filter_manager to sync with backend state
+        from core.filter_manager import filter_manager
+
         ml_list = [
-            ("Pattern Tracking", True),
-            ("Parameter Adaptation", True),
-            ("Regime Strategy", True)
+            ("Pattern Tracking", filter_manager.pattern_tracking),
+            ("Parameter Adaptation", filter_manager.parameter_adaptation),
+            ("Regime Strategy", filter_manager.regime_strategy)
         ]
 
         for ml_name, enabled in ml_list:
