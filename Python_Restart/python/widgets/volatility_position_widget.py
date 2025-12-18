@@ -299,6 +299,28 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         # Update market conditions display
         self.update_market_conditions()
 
+        # Auto-update entry price to current market price
+        if 'close' in df.columns and len(df) > 0:
+            current_price = df['close'].iloc[-1]
+            self.entry_input.setValue(current_price)
+
+            # Auto-set stop loss at a reasonable distance (50 pips for forex)
+            if symbol.endswith('JPY'):
+                sl_distance = 0.50  # 50 pips for JPY pairs
+            else:
+                sl_distance = 0.0050  # 50 pips for other pairs
+
+            # Set SL based on current direction
+            if self.buy_btn.isChecked():
+                self.sl_input.setValue(current_price - sl_distance)
+            else:
+                self.sl_input.setValue(current_price + sl_distance)
+
+            print(f"[VolatilityPosition]   → Auto-set Entry: {current_price:.5f}, SL: {self.sl_input.value():.5f}")
+
+            # Auto-calculate position with updated prices
+            self.auto_calculate_position()
+
     def set_symbol(self, symbol: str):
         """Update current symbol and refresh with live data from data_manager"""
         if symbol != self.current_symbol:
@@ -310,54 +332,133 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         """Get live data from data_manager and update position sizing"""
         from core.data_manager import data_manager
 
+        print(f"\n[VolatilityPosition] update_from_live_data() called for {self.current_symbol}")
+
         # Get candles from data_manager (uses currently loaded symbol)
         candles = data_manager.get_candles(count=100)
 
         if not candles:
-            print(f"[VolatilityPosition] No data available from data_manager")
+            print(f"[VolatilityPosition] ❌ No data available from data_manager")
+            self.clear_display()
             return
 
         # Convert to DataFrame
         df = pd.DataFrame(candles)
 
+        print(f"[VolatilityPosition] ✓ Got {len(df)} candles for {self.current_symbol}")
+
+        # Show last close price for verification
+        if 'close' in df.columns:
+            last_close = df['close'].iloc[-1]
+            print(f"[VolatilityPosition]   → Last close: {last_close:.5f}")
+
         # Set the market data (this will trigger calculations)
         self.set_market_data(self.current_symbol, df)
 
-        print(f"[VolatilityPosition] Updated with {len(candles)} candles for {self.current_symbol}")
+        print(f"[VolatilityPosition] ✓ Market data updated successfully")
 
     def update_market_conditions(self):
         """Update volatility and trend displays"""
         if self.current_symbol is None or self.current_data is None:
+            print(f"[VolatilityPosition] ❌ Cannot update - missing symbol or data")
             return
 
-        # Get risk summary
-        summary = volatility_position_sizer.get_risk_summary(
-            self.current_symbol, self.current_data
-        )
+        print(f"[VolatilityPosition] Calculating market conditions...")
 
-        # Update volatility
-        vol_regime = summary['volatility_regime']
-        vol_mult = summary['volatility_multiplier']
+        try:
+            # Get risk summary
+            summary = volatility_position_sizer.get_risk_summary(
+                self.current_symbol, self.current_data
+            )
 
-        vol_color = self._get_volatility_color(vol_regime)
-        self.volatility_label.setText(vol_regime.replace('_', ' '))
-        self.volatility_label.setStyleSheet(f"color: {vol_color};")
-        self.volatility_multiplier_label.setText(f"×{vol_mult:.2f}")
+            # Update volatility
+            vol_regime = summary['volatility_regime']
+            vol_mult = summary['volatility_multiplier']
 
-        # Update trend
-        trend_strength = summary['trend_strength']
-        trend_mult = summary['trend_multiplier']
+            print(f"[VolatilityPosition]   → Volatility: {vol_regime} (×{vol_mult:.2f})")
 
-        trend_color = self._get_trend_color(trend_strength)
-        self.trend_label.setText(trend_strength.replace('_', ' '))
-        self.trend_label.setStyleSheet(f"color: {trend_color};")
-        self.trend_multiplier_label.setText(f"×{trend_mult:.2f}")
+            vol_color = self._get_volatility_color(vol_regime)
+            self.volatility_label.setText(vol_regime.replace('_', ' '))
+            self.volatility_label.setStyleSheet(f"color: {vol_color};")
+            self.volatility_multiplier_label.setText(f"×{vol_mult:.2f}")
 
-        # Update recommendation
-        self.recommendation_label.setText(summary['recommendation'])
+            # Update trend
+            trend_strength = summary['trend_strength']
+            trend_mult = summary['trend_multiplier']
+
+            print(f"[VolatilityPosition]   → Trend: {trend_strength} (×{trend_mult:.2f})")
+
+            trend_color = self._get_trend_color(trend_strength)
+            self.trend_label.setText(trend_strength.replace('_', ' '))
+            self.trend_label.setStyleSheet(f"color: {trend_color};")
+            self.trend_multiplier_label.setText(f"×{trend_mult:.2f}")
+
+            # Update recommendation
+            recommendation = summary['recommendation']
+            self.recommendation_label.setText(recommendation)
+
+            print(f"[VolatilityPosition]   → Recommendation: {recommendation[:60]}...")
+            print(f"[VolatilityPosition] ✓ Market conditions updated successfully")
+
+        except Exception as e:
+            print(f"[VolatilityPosition] ❌ Error updating market conditions: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def auto_calculate_position(self):
+        """Silently calculate position size when market data updates"""
+        if self.current_symbol is None or self.current_data is None:
+            return
+
+        # Get inputs
+        entry = self.entry_input.value()
+        sl = self.sl_input.value()
+        direction = 'BUY' if self.buy_btn.isChecked() else 'SELL'
+
+        # Validate
+        if entry == sl:
+            return
+
+        try:
+            # Update sizer settings
+            volatility_position_sizer.update_account_balance(self.balance_input.value())
+            volatility_position_sizer.update_base_risk(self.risk_input.value())
+
+            # Calculate
+            result = volatility_position_sizer.calculate_position_size(
+                self.current_symbol,
+                self.current_data,
+                entry,
+                sl,
+                direction
+            )
+
+            if 'error' not in result:
+                # Display results
+                self.adjusted_risk_label.setText(f"{result['adjusted_risk_pct']:.2f}%")
+                self.dollar_risk_label.setText(f"${result['dollar_risk']:.2f}")
+                self.position_size_label.setText(f"{result['position_size_lots']:.2f} lots")
+                self.sl_distance_label.setText(f"{result['sl_distance_pips']:.1f} pips")
+
+                # Update recommendation with detailed breakdown
+                rec_parts = []
+                rec_parts.append(f"Base risk {result['base_risk_pct']:.1f}%")
+                rec_parts.append(f"× Vol {result['volatility_multiplier']:.2f}")
+                rec_parts.append(f"× Trend {result['trend_multiplier']:.2f}")
+                rec_parts.append(f"= {result['adjusted_risk_pct']:.2f}%")
+
+                self.recommendation_label.setText(' '.join(rec_parts))
+
+                print(f"[VolatilityPosition]   → Position: {result['position_size_lots']:.2f} lots at {result['adjusted_risk_pct']:.2f}% risk")
+
+                # Emit signal
+                self.position_calculated.emit(result)
+
+        except Exception as e:
+            print(f"[VolatilityPosition] ⚠️ Auto-calculate error: {e}")
 
     def calculate_position(self):
-        """Calculate and display position size"""
+        """Calculate and display position size (manual button click)"""
         if self.current_symbol is None or self.current_data is None:
             self.recommendation_label.setText("⚠️ No market data available")
             return
@@ -468,15 +569,20 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""
+        print(f"\n[VolatilityPosition] ====== Timer fired: update_data() ======")
+
         if is_demo_mode():
+            print(f"[VolatilityPosition] Mode: DEMO - loading sample conditions")
             # Load demo volatility data
             self.load_sample_conditions()
         else:
+            print(f"[VolatilityPosition] Mode: LIVE - fetching real data")
             # Get live data
             self.update_from_live_data()
 
         # Update AI if enabled
-        if self.ai_enabled and self.current_data:
+        if self.ai_enabled and self.current_data is not None:
+            print(f"[VolatilityPosition] AI enabled - updating suggestions")
             self.update_ai_suggestions()
 
     def on_mode_changed(self, is_demo: bool):
