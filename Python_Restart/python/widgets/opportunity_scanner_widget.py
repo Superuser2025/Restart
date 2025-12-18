@@ -10,6 +10,7 @@ from PyQt6.QtGui import QFont, QMouseEvent
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import random
+import pandas as pd
 
 from core.opportunity_generator import opportunity_generator
 from core.market_analyzer import market_analyzer
