@@ -55,10 +55,100 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
         self.update_data()
 
     def update_from_live_data(self):
-        """Update with live data from data_manager"""
+        """Update with live data - MULTI-SYMBOL support via MT5"""
         from core.data_manager import data_manager
-        symbol = self.current_symbol
-        self.status_label.setText(f"Live: {symbol}")
+
+        print("    → [Correlation] Fetching multi-symbol data for correlation analysis")
+
+        try:
+            # STRATEGY 1: Fetch multi-symbol data directly from MT5
+            multi_symbol_data = self.fetch_multi_symbol_data_from_mt5()
+
+            if multi_symbol_data and len(multi_symbol_data) >= 2:
+                # SUCCESS: We have real multi-symbol data!
+                print(f"    ✓ Got REAL data for {len(multi_symbol_data)} symbols from MT5")
+
+                # Calculate correlations
+                correlation_report = correlation_analyzer.calculate_correlations(
+                    multi_symbol_data,
+                    short_period=20,  # Current correlation (20 bars)
+                    long_period=100   # Historical average (100 bars)
+                )
+
+                # Update display
+                self.update_correlation_data(correlation_report)
+                self.status_label.setText(f"Live: {len(multi_symbol_data)} symbols analyzed")
+                print(f"    ✓ LIVE CORRELATION: {correlation_report['pairs_calculated']} pairs calculated")
+                return
+
+            # STRATEGY 2: Try mt5_connector (JSON file approach)
+            from core.mt5_connector import mt5_connector
+            all_symbols_data = mt5_connector.get_all_symbols_data()
+
+            if all_symbols_data and len(all_symbols_data) >= 2:
+                print(f"    ✓ Got data for {len(all_symbols_data)} symbols from MT5 JSON")
+                correlation_report = correlation_analyzer.calculate_correlations(
+                    all_symbols_data, short_period=20, long_period=100
+                )
+                self.update_correlation_data(correlation_report)
+                self.status_label.setText(f"Live: {len(all_symbols_data)} symbols analyzed")
+                return
+
+            # FALLBACK: Not enough data for correlation
+            print("    ⚠️ Need at least 2 symbols for correlation analysis")
+            self.status_label.setText("Live: Need at least 2 symbols")
+
+        except Exception as e:
+            print(f"[Correlation] Error fetching live data: {e}")
+            import traceback
+            traceback.print_exc()
+            self.status_label.setText("Live: Error fetching data")
+
+    def fetch_multi_symbol_data_from_mt5(self) -> Dict[str, pd.DataFrame]:
+        """Fetch data for multiple symbols directly from MT5"""
+        try:
+            import MetaTrader5 as mt5
+            import pandas as pd
+
+            # Check if MT5 is initialized
+            if not mt5.initialize():
+                return {}
+
+            symbols_data = {}
+
+            # Get all symbols for correlation
+            symbols = get_all_symbols()
+
+            print(f"    → Fetching data from MT5 for {len(symbols)} symbols (correlation analysis)...")
+
+            for symbol in symbols:
+                try:
+                    # Fetch H4 candles for correlation (need decent sample size)
+                    rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, 200)
+
+                    if rates is not None and len(rates) > 0:
+                        # Convert to DataFrame
+                        df = pd.DataFrame(rates)
+
+                        # Add required columns
+                        if 'time' in df.columns:
+                            df['time'] = pd.to_datetime(df['time'], unit='s')
+
+                        symbols_data[symbol] = df
+                        print(f"    ✓ {symbol}: Got {len(df)} candles")
+
+                except Exception as e:
+                    print(f"    ✗ {symbol}: Failed ({str(e)[:50]})")
+                    continue
+
+            return symbols_data
+
+        except ImportError:
+            print("    ⚠️ MetaTrader5 module not available")
+            return {}
+        except Exception as e:
+            print(f"    ⚠️ MT5 fetch error: {e}")
+            return {}
 
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""

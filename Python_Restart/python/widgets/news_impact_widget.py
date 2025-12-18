@@ -139,11 +139,11 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
 
         # Live data update timer
         self.live_data_timer = QTimer()
-        self.live_data_timer.timeout.connect(self.update_from_live_data)
+        self.live_data_timer.timeout.connect(self.update_data)
         self.live_data_timer.start(3000)
 
-        # Initial update with live data
-        self.update_from_live_data()
+        # Initial update
+        self.update_data()
 
     def init_ui(self):
         """Initialize the user interface"""

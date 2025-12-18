@@ -259,32 +259,46 @@ class RiskRewardWidget(QWidget, AIAssistMixin):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
 
+        print(f"\n[RiskReward] update_from_live_data() called for {self.current_symbol}")
+
         # Get candles from data_manager (uses currently loaded symbol)
         candles = data_manager.get_candles(count=200)
 
         if not candles:
-            print(f"[RiskReward] No data available from data_manager")
+            print(f"[RiskReward] ❌ No data available from data_manager")
             return
 
         # Convert to DataFrame for analysis
         import pandas as pd
         df = pd.DataFrame(candles)
 
+        print(f"[RiskReward] ✓ Got {len(df)} candles for {self.current_symbol}")
+
+        # Show last close price for verification
+        if 'close' in df.columns:
+            last_close = df['close'].iloc[-1]
+            print(f"[RiskReward]   → Last close: {last_close:.5f}")
+
         # Extract structure levels from the data (support/resistance)
         # For now, use high/low of recent candles as proxy for structure
         if len(df) >= 50:
             recent = df.tail(50)
             # Format as dict with 'price' and 'strength' keys (required by optimizer)
+            resistance_price = float(recent['high'].max())
+            support_price = float(recent['low'].min())
+
             self.structure_levels = {
-                'resistance': [{'price': float(recent['high'].max()), 'strength': 1.0}],
-                'support': [{'price': float(recent['low'].min()), 'strength': 1.0}]
+                'resistance': [{'price': resistance_price, 'strength': 1.0}],
+                'support': [{'price': support_price, 'strength': 1.0}]
             }
+
+            print(f"[RiskReward]   → Resistance: {resistance_price:.5f}, Support: {support_price:.5f}")
 
         symbol = self.current_symbol
         if hasattr(self, 'status_label'):
             self.status_label.setText(f"Live: {symbol}")
 
-        print(f"[RiskReward] Updated with {len(candles)} candles for {symbol}")
+        print(f"[RiskReward] ✓ Structure levels updated successfully")
 
     def apply_dark_theme(self):
         """Apply modern dark theme"""

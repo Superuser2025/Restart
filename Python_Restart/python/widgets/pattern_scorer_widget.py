@@ -151,9 +151,97 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
     def update_from_live_data(self):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
-        symbol = self.current_symbol
-        # Pattern scores are updated externally via update_score()
-        self.current_symbol = symbol
+
+        print(f"\n[PatternScorer] update_from_live_data() called")
+
+        try:
+            # Get current candle data
+            candles = data_manager.get_candles()
+
+            if not candles or len(candles) < 20:
+                print(f"[PatternScorer] ⚠️ Not enough data ({len(candles) if candles else 0} candles)")
+                return
+
+            print(f"[PatternScorer] ✓ Got {len(candles)} candles")
+
+            # Get market state for context
+            market_state = data_manager.get_market_state()
+            print(f"[PatternScorer]   → Market state: {market_state.get('trend', 'UNKNOWN')}, Session: {market_state.get('session', 'UNKNOWN')}")
+
+            # Check if there's an opportunity detected (if method exists)
+            opportunities = None
+            if hasattr(data_manager, 'get_current_opportunities'):
+                opportunities = data_manager.get_current_opportunities()
+                print(f"[PatternScorer]   → Found {len(opportunities) if opportunities else 0} opportunities")
+            else:
+                print(f"[PatternScorer]   → Using market structure fallback (get_current_opportunities not available)")
+
+            if opportunities and len(opportunities) > 0:
+                # Score the first opportunity
+                opp = opportunities[0]
+
+                # Determine pattern type from opportunity
+                pattern_type = opp.get('pattern_type', 'Unknown Pattern')
+                entry_price = opp.get('entry_price', 0.0)
+
+                # Calculate scoring factors from opportunity data
+                quality = opp.get('quality', 50)
+
+                # Use pattern scorer to create a score
+                pattern_score = pattern_scorer.score_pattern(
+                    pattern_type=pattern_type,
+                    price_level=entry_price,
+                    at_fvg=quality >= 70,  # High quality suggests FVG
+                    at_order_block=quality >= 75,  # Very high quality suggests OB
+                    at_liquidity=quality >= 60,
+                    volume_ratio=1.5 if quality >= 65 else 1.0,
+                    after_sweep=quality >= 80,
+                    mtf_h4_aligned=market_state.get('trend', '') == 'UPTREND',
+                    mtf_h1_aligned=market_state.get('trend', '') == 'UPTREND',
+                    mtf_m15_aligned=market_state.get('trend', '') == 'UPTREND',
+                    in_session=market_state.get('session', 'UNKNOWN'),
+                    with_structure=True,
+                    swing_level=quality >= 70
+                )
+
+                print(f"[PatternScorer]   → Scored opportunity pattern: {pattern_type}, Score: {pattern_score.total_score:.1f}")
+                self.update_score(pattern_score)
+            else:
+                # No opportunity - create a basic score from current market conditions
+                current = candles[-1]
+                price = current['close']
+
+                # Analyze basic trend
+                sma_20 = sum([c['close'] for c in candles[-20:]]) / 20
+                is_bullish = price > sma_20
+
+                print(f"[PatternScorer]   → No opportunity, scoring market structure (price: {price:.5f}, SMA20: {sma_20:.5f}, {'Bullish' if is_bullish else 'Bearish'})")
+
+                # Create a basic pattern score
+                pattern_score = pattern_scorer.score_pattern(
+                    pattern_type="Market Structure" if is_bullish else "Market Structure",
+                    price_level=price,
+                    at_fvg=False,
+                    at_order_block=False,
+                    at_liquidity=False,
+                    volume_ratio=1.0,
+                    after_sweep=False,
+                    mtf_h4_aligned=is_bullish,
+                    mtf_h1_aligned=is_bullish,
+                    mtf_m15_aligned=is_bullish,
+                    in_session=market_state.get('session', 'UNKNOWN'),
+                    with_structure=True,
+                    swing_level=False
+                )
+
+                print(f"[PatternScorer]   → Market structure score: {pattern_score.total_score:.1f}")
+                self.update_score(pattern_score)
+
+            print(f"[PatternScorer] ✓ Pattern scoring completed successfully")
+
+        except Exception as e:
+            print(f"[Pattern Scorer] Error fetching live data: {e}")
+            # Keep existing score if error occurs
 
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""

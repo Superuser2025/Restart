@@ -281,8 +281,11 @@ class MultiSymbolCorrelationAnalyzer:
             (pair, corr) for pair, corr in correlations_list if corr < 0
         ][:5]
 
+        # Export correlation matrix as DataFrame (widget expects this format)
+        correlation_matrix_df = self.export_correlation_matrix_df()
+
         return {
-            'correlation_matrix': self.correlation_matrix,
+            'correlation_matrix': correlation_matrix_df,  # Now returns DataFrame instead of dict
             'divergence_alerts': self.divergence_alerts,
             'strongest_positive': strongest_positive,
             'strongest_negative': strongest_negative,

@@ -43,11 +43,11 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
 
         # Auto-update timer (every 5 seconds for new commentary)
         self.update_timer = QTimer()
-        self.update_timer.timeout.connect(self.update_commentary)
+        self.update_timer.timeout.connect(self.update_data)  # FIXED: Call update_data() to respect mode
         self.update_timer.start(5000)
 
         # Initial load
-        self.update_commentary()
+        self.update_data()  # FIXED: Call update_data() to respect mode
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -205,6 +205,18 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
             market_data = self.get_market_data()
 
             if not market_data:
+                # LIVE MODE: No real data available - show clear message
+                if not is_demo_mode():
+                    self.narrative_text.setHtml(
+                        "<p style='color: #ffaa00; font-size: 12pt;'><b>⚠️ WAITING FOR LIVE DATA</b><br>"
+                        "No real market data available yet. Check MT5 connection.</p>"
+                    )
+                    self.prediction_text.setHtml(
+                        "<p style='color: #ffaa00;'>Waiting for real data...</p>"
+                    )
+                    self.levels_text.setHtml(
+                        "<p style='color: #888;'>No data available</p>"
+                    )
                 return
 
             # Store analysis data for AI
@@ -263,13 +275,19 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
 
     def get_market_data(self) -> Dict:
         """Get current market data for analysis"""
+        # Check demo mode first
+        if is_demo_mode():
+            return self.get_sample_market_data()
+
+        # LIVE MODE: NEVER return fake data - return None if no real data available
         try:
             # Get data from data manager (uses currently loaded symbol in buffer)
             candles = data_manager.get_candles()
 
             if not candles or len(candles) < 10:
-                # Return sample data WITH CURRENT SYMBOL NAME
-                return self.get_sample_market_data()
+                # CRITICAL: In live mode, return None instead of fake data
+                # This will cause the widget to display "Waiting for data" instead of misleading information
+                return None
 
             current = candles[-1]
             prev = candles[-2]
@@ -300,8 +318,10 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
                 'sma_20': sma_20
             }
 
-        except:
-            return self.get_sample_market_data()
+        except Exception as e:
+            # CRITICAL: In live mode, return None on error instead of fake data
+            print(f"[Price Action] Error getting live data: {e}")
+            return None
 
     def get_sample_market_data(self) -> Dict:
         """Generate sample market data - USE CURRENT SYMBOL NAME AND APPROPRIATE PRICE RANGE"""
