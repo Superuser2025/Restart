@@ -1,0 +1,56 @@
+{
+  "description": "Custom Economic Calendar Events",
+  "usage": "Rename this file to 'economic_calendar.json' and add your events",
+  "events": [
+    {
+      "name": "US Non-Farm Payrolls",
+      "currency": "USD",
+      "timestamp": "2025-01-03T08:30:00",
+      "forecast": 185.0,
+      "previous": 180.0,
+      "actual": null,
+      "impact": "EXTREME",
+      "avg_pip_impact": 150
+    },
+    {
+      "name": "FOMC Interest Rate Decision",
+      "currency": "USD",
+      "timestamp": "2025-01-29T14:00:00",
+      "forecast": 5.25,
+      "previous": 5.00,
+      "actual": null,
+      "impact": "EXTREME",
+      "avg_pip_impact": 175
+    },
+    {
+      "name": "ECB Interest Rate Decision",
+      "currency": "EUR",
+      "timestamp": "2025-01-23T12:45:00",
+      "forecast": 4.50,
+      "previous": 4.25,
+      "actual": null,
+      "impact": "EXTREME",
+      "avg_pip_impact": 140
+    },
+    {
+      "name": "UK GDP Growth Rate",
+      "currency": "GBP",
+      "timestamp": "2025-01-15T07:00:00",
+      "forecast": 0.3,
+      "previous": 0.2,
+      "actual": null,
+      "impact": "HIGH",
+      "avg_pip_impact": 95
+    },
+    {
+      "name": "AUD Employment Change",
+      "currency": "AUD",
+      "timestamp": "2025-01-16T00:30:00",
+      "forecast": 25.0,
+      "previous": 20.5,
+      "actual": null,
+      "impact": "HIGH",
+      "avg_pip_impact": 75
+    }
+  ]
+}
