@@ -310,10 +310,16 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
 
     def update_from_live_data(self):
         """Update with live data from data_manager"""
+        # Load real calendar events
+        self.load_sample_data()
+
+        # Update status with current symbol
         from core.data_manager import data_manager
         symbol = self.current_symbol
         if hasattr(self, 'status_label'):
-            self.status_label.setText(f"Live: {symbol}")
+            current_status = self.status_label.text()
+            if "Loaded" not in current_status:
+                self.status_label.setText(f"Live: {symbol}")
 
     def load_sample_data(self):
         """Load real news events from calendar sources"""
@@ -321,7 +327,9 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
 
         # Fetch real calendar events
         try:
+            print("📰 Fetching calendar events...")
             real_events = calendar_fetcher.fetch_events(days_ahead=7)
+            print(f"📰 Calendar fetcher returned {len(real_events) if real_events else 0} events")
 
             if real_events:
                 # Clear old events
@@ -331,16 +339,24 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
                 for event in real_events:
                     news_impact_predictor.add_event(event)
 
-                self.status_label.setText(f"Loaded {len(real_events)} real events from calendar")
+                print(f"✓ Loaded {len(real_events)} real events from calendar")
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText(f"Loaded {len(real_events)} real events from calendar")
             else:
                 # Fallback to sample data if no real events available
+                print("⚠️ No real events available, loading sample data")
                 self._load_fallback_sample_data()
-                self.status_label.setText("Using sample data (no calendar source available)")
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText("Using sample data (no calendar source available)")
 
         except Exception as e:
             # If fetching fails, use fallback sample data
+            print(f"❌ Calendar fetch failed: {e}")
+            import traceback
+            traceback.print_exc()
             self._load_fallback_sample_data()
-            self.status_label.setText(f"Using sample data (fetch failed: {str(e)[:30]})")
+            if hasattr(self, 'status_label'):
+                self.status_label.setText(f"Using sample data (fetch failed: {str(e)[:30]})")
 
         # Refresh display
         self.refresh_display()
@@ -551,10 +567,10 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""
         if is_demo_mode():
-            # Get demo news events
-            demo_events = get_demo_data('news', symbol=self.current_symbol)
-            if demo_events:
-                self._load_fallback_sample_data()
+            # In demo mode, always load sample events
+            self._load_fallback_sample_data()
+            self.refresh_display()
+            if hasattr(self, 'status_label'):
                 self.status_label.setText("Demo Mode - Sample Events")
         else:
             # Get live data
