@@ -825,13 +825,13 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             current_session = market_analyzer.get_current_session()
             session_quality = market_analyzer.get_session_quality_score()
 
-            # Convert ATR from price units to pipettes for filter comparison
-            # Modern forex uses pipettes (fractional pips) as standard
+            # Convert ATR from price units to pips for filter comparison
             # This ensures ATR units match expected_atr from market_analyzer
+            # Analysis: market_analyzer returns fractional pip values
             if symbol.endswith('JPY'):
-                atr_pips = atr / 0.001  # JPY pairs: 1 pipette = 0.001 (3 decimal places)
+                atr_pips = atr / 0.1  # JPY pairs: fractional pips (0.1 = 10 pips)
             else:
-                atr_pips = atr / 0.00001  # Other pairs: 1 pipette = 0.00001 (5 decimal places)
+                atr_pips = atr / 0.0001  # Other pairs: fractional pips (0.0001 = 1 pip)
 
             return {
                 'symbol': symbol,
