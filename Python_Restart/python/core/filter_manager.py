@@ -17,10 +17,10 @@ class FilterManager:
     def __init__(self):
         # Institutional Filters
         self.volume_filter = True
-        self.spread_filter = True
+        self.spread_filter = False  # DISABLED: Spread calculation not universal across asset types
         self.strong_price_model = True
         self.multi_timeframe = True
-        self.volatility_filter = True
+        self.volatility_filter = False  # DISABLED: ATR units vary by asset (forex/JPY/gold/bitcoin/etc)
         self.sentiment_filter = True
         self.correlation_filter = True
         self.volatility_adaptation = True
