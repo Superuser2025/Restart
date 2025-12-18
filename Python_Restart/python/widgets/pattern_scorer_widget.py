@@ -152,19 +152,25 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
 
+        print(f"\n[PatternScorer] update_from_live_data() called")
+
         try:
             # Get current candle data
             candles = data_manager.get_candles()
 
             if not candles or len(candles) < 20:
-                # Not enough data to score pattern
+                print(f"[PatternScorer] ⚠️ Not enough data ({len(candles) if candles else 0} candles)")
                 return
+
+            print(f"[PatternScorer] ✓ Got {len(candles)} candles")
 
             # Get market state for context
             market_state = data_manager.get_market_state()
+            print(f"[PatternScorer]   → Market state: {market_state.get('trend', 'UNKNOWN')}, Session: {market_state.get('session', 'UNKNOWN')}")
 
             # Check if there's an opportunity detected
             opportunities = data_manager.get_current_opportunities()
+            print(f"[PatternScorer]   → Found {len(opportunities) if opportunities else 0} opportunities")
 
             if opportunities and len(opportunities) > 0:
                 # Score the first opportunity
@@ -194,6 +200,7 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
                     swing_level=quality >= 70
                 )
 
+                print(f"[PatternScorer]   → Scored opportunity pattern: {pattern_type}, Score: {pattern_score.get('total_score', 0):.1f}")
                 self.update_score(pattern_score)
             else:
                 # No opportunity - create a basic score from current market conditions
@@ -203,6 +210,8 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
                 # Analyze basic trend
                 sma_20 = sum([c['close'] for c in candles[-20:]]) / 20
                 is_bullish = price > sma_20
+
+                print(f"[PatternScorer]   → No opportunity, scoring market structure (price: {price:.5f}, SMA20: {sma_20:.5f}, {'Bullish' if is_bullish else 'Bearish'})")
 
                 # Create a basic pattern score
                 pattern_score = pattern_scorer.score_pattern(
@@ -221,7 +230,10 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
                     swing_level=False
                 )
 
+                print(f"[PatternScorer]   → Market structure score: {pattern_score.get('total_score', 0):.1f}")
                 self.update_score(pattern_score)
+
+            print(f"[PatternScorer] ✓ Pattern scoring completed successfully")
 
         except Exception as e:
             print(f"[Pattern Scorer] Error fetching live data: {e}")

@@ -55,16 +55,22 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
 
+        print(f"\n[MTF Structure] update_from_live_data() called for {self.current_symbol}")
+
         try:
             # Get candle data
             candles = data_manager.get_candles()
 
             if not candles or len(candles) < 50:
+                print(f"[MTF Structure] ⚠️ Not enough data ({len(candles) if candles else 0} candles, need 50+)")
                 self.status_label.setText(f"Live: {self.current_symbol} (waiting for data...)")
                 return
 
+            print(f"[MTF Structure] ✓ Got {len(candles)} candles for {self.current_symbol}")
+
             # Get current price
             current_price = candles[-1]['close']
+            print(f"[MTF Structure]   → Current price: {current_price:.5f}")
 
             # Build data by timeframe dictionary
             # Note: data_manager tracks one timeframe, so we'll use what we have
@@ -135,8 +141,17 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
                 'last_update': datetime.now()
             }
 
+            # Log trend analysis results
+            print(f"[MTF Structure]   → Trends: M15={trends.get('M15', 'N/A')}, H1={trends.get('H1', 'N/A')}, H4={trends.get('H4', 'N/A')}, D1={trends.get('D1', 'N/A')}")
+            if nearest_resistance:
+                print(f"[MTF Structure]   → Nearest Resistance: {nearest_resistance['price']:.5f}")
+            if nearest_support:
+                print(f"[MTF Structure]   → Nearest Support: {nearest_support['price']:.5f}")
+
             self.update_structure_data(structure_data)
             self.status_label.setText(f"Live: {self.current_symbol}")
+
+            print(f"[MTF Structure] ✓ Structure analysis completed successfully")
 
         except Exception as e:
             print(f"[MTF Structure] Error fetching live data: {e}")
