@@ -168,9 +168,13 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
             market_state = data_manager.get_market_state()
             print(f"[PatternScorer]   → Market state: {market_state.get('trend', 'UNKNOWN')}, Session: {market_state.get('session', 'UNKNOWN')}")
 
-            # Check if there's an opportunity detected
-            opportunities = data_manager.get_current_opportunities()
-            print(f"[PatternScorer]   → Found {len(opportunities) if opportunities else 0} opportunities")
+            # Check if there's an opportunity detected (if method exists)
+            opportunities = None
+            if hasattr(data_manager, 'get_current_opportunities'):
+                opportunities = data_manager.get_current_opportunities()
+                print(f"[PatternScorer]   → Found {len(opportunities) if opportunities else 0} opportunities")
+            else:
+                print(f"[PatternScorer]   → Using market structure fallback (get_current_opportunities not available)")
 
             if opportunities and len(opportunities) > 0:
                 # Score the first opportunity
