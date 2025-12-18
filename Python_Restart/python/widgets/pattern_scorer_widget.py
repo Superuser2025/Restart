@@ -204,7 +204,7 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
                     swing_level=quality >= 70
                 )
 
-                print(f"[PatternScorer]   → Scored opportunity pattern: {pattern_type}, Score: {pattern_score.get('total_score', 0):.1f}")
+                print(f"[PatternScorer]   → Scored opportunity pattern: {pattern_type}, Score: {pattern_score.total_score:.1f}")
                 self.update_score(pattern_score)
             else:
                 # No opportunity - create a basic score from current market conditions
@@ -234,7 +234,7 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
                     swing_level=False
                 )
 
-                print(f"[PatternScorer]   → Market structure score: {pattern_score.get('total_score', 0):.1f}")
+                print(f"[PatternScorer]   → Market structure score: {pattern_score.total_score:.1f}")
                 self.update_score(pattern_score)
 
             print(f"[PatternScorer] ✓ Pattern scoring completed successfully")
