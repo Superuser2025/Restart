@@ -775,11 +775,15 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 quality_score += 10
                 reasons.append('High R:R')
 
-            if quality_score < 65:
+            # TEMPORARILY LOWERED from 65 to 50 to see more opportunities
+            if quality_score < 50:
+                print(f"    ✗ {symbol} {timeframe}: Quality too low ({quality_score})")
                 return None
 
             if not reasons:
                 reasons = ['Price Action', 'Technical Setup']
+
+            print(f"    ✓ {symbol} {timeframe}: OPPORTUNITY FOUND! Quality={quality_score}, Reasons={reasons}")
 
             # Determine setup type from reasons
             if 'Trend Alignment' in reasons and 'High R:R' in reasons:
@@ -805,11 +809,16 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             }
 
         except Exception as e:
+            print(f"    ✗ {symbol} {timeframe}: Analysis error - {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def update_display(self):
         """Update all three groups with filtered opportunities - APPLIES INSTITUTIONAL FILTERS"""
         from core.filter_manager import filter_manager
+
+        print(f"\n[Scanner] update_display() called with {len(self.opportunities)} opportunities")
 
         # Apply institutional filters to all opportunities
         filtered_opportunities = [
@@ -817,10 +826,14 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             if filter_manager.filter_opportunity(opp)
         ]
 
+        print(f"[Scanner] After filter_manager: {len(filtered_opportunities)} opportunities passed")
+
         # Separate by timeframe
         short_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['M1', 'M5', 'M15']]
         medium_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['M30', 'H1', 'H2']]
         long_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['H4', 'H8', 'D1']]
+
+        print(f"[Scanner] Timeframe split: Short={len(short_term)}, Medium={len(medium_term)}, Long={len(long_term)}")
 
         # Update each group (max 12 per group = 3 rows x 4 columns)
         self.short_group.update_opportunities(short_term[:12])
