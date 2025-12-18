@@ -827,11 +827,11 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
             # Convert ATR from price units to pips for filter comparison
             # This ensures ATR units match expected_atr from market_analyzer
-            # Analysis: market_analyzer returns fractional pip values
+            # After empirical testing: market_analyzer uses these exact scales
             if symbol.endswith('JPY'):
-                atr_pips = atr / 0.1  # JPY pairs: fractional pips (0.1 = 10 pips)
+                atr_pips = atr / 10.0  # JPY pairs: divide by 10 (empirically determined)
             else:
-                atr_pips = atr / 0.0001  # Other pairs: fractional pips (0.0001 = 1 pip)
+                atr_pips = atr / 0.001  # Standard pairs: divide by 0.001 (empirically determined)
 
             return {
                 'symbol': symbol,
