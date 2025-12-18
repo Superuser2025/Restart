@@ -17,10 +17,10 @@ class FilterManager:
     def __init__(self):
         # Institutional Filters
         self.volume_filter = True
-        self.spread_filter = False  # DISABLED: Spread calculation not universal across asset types
+        self.spread_filter = False  # User can enable via UI if needed
         self.strong_price_model = True
         self.multi_timeframe = True
-        self.volatility_filter = False  # DISABLED: ATR units vary by asset (forex/JPY/gold/bitcoin/etc)
+        self.volatility_filter = True  # RE-ENABLED with universal logic
         self.sentiment_filter = True
         self.correlation_filter = True
         self.volatility_adaptation = True
@@ -149,15 +149,21 @@ class FilterManager:
                 print(f"[Filter] ❌ {symbol} {timeframe}: R:R too low ({rr:.2f} < {self.min_rr_ratio})")
                 return False  # R:R too low
 
-        # VOLATILITY FILTER - Check volatility is within acceptable range
+        # VOLATILITY FILTER - Universal check (works for any asset type)
         if self.volatility_filter:
             atr = opportunity.get('atr', 0)
 
-            # Get expected ATR range for this symbol/timeframe
-            expected_atr = market_analyzer.calculate_atr(symbol, timeframe)
-            if atr < expected_atr * 0.5 or atr > expected_atr * 2.0:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Abnormal volatility (ATR={atr:.5f}, expected={expected_atr:.5f})")
-                return False  # Abnormal volatility
+            # UNIVERSAL: Just ensure ATR exists and is reasonable
+            # ATR is in raw price units - works for forex, gold, bitcoin, anything
+            if atr <= 0:
+                print(f"[Filter] ❌ {symbol} {timeframe}: Invalid ATR ({atr:.5f})")
+                return False
+
+            # Optional: Check if ATR is absurdly high (>10% of entry price)
+            entry = opportunity.get('entry', 0)
+            if entry > 0 and atr > entry * 0.1:
+                print(f"[Filter] ❌ {symbol} {timeframe}: ATR too high ({atr:.5f} > 10% of entry {entry:.5f})")
+                return False
 
         # SENTIMENT FILTER - Trend alignment
         if self.sentiment_filter:

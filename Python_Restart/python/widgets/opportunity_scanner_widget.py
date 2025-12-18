@@ -825,13 +825,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             current_session = market_analyzer.get_current_session()
             session_quality = market_analyzer.get_session_quality_score()
 
-            # Convert ATR from price units to pips for filter comparison
-            # This ensures ATR units match expected_atr from market_analyzer
-            # After empirical testing: market_analyzer uses these exact scales
-            if symbol.endswith('JPY'):
-                atr_pips = atr / 10.0  # JPY pairs: divide by 10 (empirically determined)
-            else:
-                atr_pips = atr / 0.001  # Standard pairs: divide by 0.001 (empirically determined)
+            # ATR stays in RAW PRICE UNITS - universal for all asset types
+            # Volatility filter now uses percentage-based checks, no conversion needed
 
             return {
                 'symbol': symbol,
@@ -845,7 +840,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'confluence_reasons': reasons,
                 'setup_type': setup_type,
                 # Basic filter fields
-                'atr': float(atr_pips),  # Now in pipettes, matches expected_atr units
+                'atr': float(atr),  # Raw ATR in price units (universal)
                 'session': current_session,
                 'session_quality': session_quality,
                 'volume': 100,  # Reasonable default (filter uses min 50)
