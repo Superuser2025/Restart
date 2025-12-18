@@ -840,7 +840,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'volume': 100,  # Reasonable default (filter uses min 50)
                 'spread': atr * 0.1,  # 10% of ATR (reasonable spread)
                 'pattern_strength': quality_score / 10,  # Convert quality to 0-10 scale
-                'mtf_score': 5  # Neutral MTF score (0-10 scale)
+                'mtf_score': 5,  # Neutral MTF score (0-10 scale)
+                'mtf_confirmed': True  # CRITICAL: filter_manager checks this (Line 131)
             }
 
         except Exception as e:
