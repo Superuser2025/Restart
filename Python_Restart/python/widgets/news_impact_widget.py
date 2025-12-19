@@ -721,6 +721,12 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
 
             parser.save_to_file(calendar_file)
 
+            # Verify file was saved
+            import json
+            with open(calendar_file, 'r') as f:
+                saved_data = json.load(f)
+                print(f"\n💾 Verified: {len(saved_data.get('events', []))} events saved to {calendar_file}")
+
             # Success message
             self.import_status_label.setText(
                 f"✅ SUCCESS! Imported {len(events)} events - Refreshing display..."
@@ -731,7 +737,12 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
             self.calendar_paste_area.clear()
 
             # Immediately reload and refresh the display
+            print("\n🔄 Reloading calendar data...")
             self.reload_calendar_data()
+
+            # Force refresh display
+            print("🔄 Refreshing display...")
+            self.refresh_display()
 
             # Update success message after reload
             self.import_status_label.setText(

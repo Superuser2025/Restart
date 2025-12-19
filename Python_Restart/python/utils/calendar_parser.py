@@ -398,8 +398,12 @@ class CalendarParser:
         """Check if text looks like a numeric value"""
         if not text:
             return False
-        # Check for numbers, %, -, decimals, K, M, B suffixes
-        return bool(re.search(r'[\d.%KMB-]', text))
+        text = text.strip()
+        # Must START with digit or minus sign, or be just a dash
+        if text == '-':
+            return True
+        # Must be mostly numeric (starts with digit or -, ends with digit or %)
+        return bool(re.match(r'^-?\d+\.?\d*[%KMB]?$', text))
 
     def _strip_html(self, text: str) -> str:
         """Remove HTML tags and convert table structure to text"""
