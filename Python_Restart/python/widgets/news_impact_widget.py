@@ -343,22 +343,22 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
                 if hasattr(self, 'status_label'):
                     self.status_label.setText(f"Loaded {len(real_events)} real events from calendar")
             else:
-                # Fallback to sample data if no real events available
-                print("⚠️ No real events available, loading sample data")
-                self._load_fallback_sample_data()
+                # NO FALLBACK TO FAKE DATA - Show nothing if no real events
+                print("⚠️ No real calendar events available")
+                news_impact_predictor.events = []  # Clear any old events
                 if hasattr(self, 'status_label'):
-                    self.status_label.setText("Using sample data (no calendar source available)")
+                    self.status_label.setText("⚠️ No real calendar data - Add events to economic_calendar.json")
 
         except Exception as e:
-            # If fetching fails, use fallback sample data
+            # If fetching fails, DO NOT show fake data
             print(f"❌ Calendar fetch failed: {e}")
             import traceback
             traceback.print_exc()
-            self._load_fallback_sample_data()
+            news_impact_predictor.events = []  # Clear events
             if hasattr(self, 'status_label'):
-                self.status_label.setText(f"Using sample data (fetch failed: {str(e)[:30]})")
+                self.status_label.setText(f"❌ Calendar unavailable - {str(e)[:50]}")
 
-        # Refresh display
+        # Refresh display (will show empty list if no events)
         self.refresh_display()
 
     def _load_fallback_sample_data(self):
@@ -662,13 +662,13 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""
         if is_demo_mode():
-            # In demo mode, always load sample events
+            # In demo mode, load sample events with CLEAR warning
             self._load_fallback_sample_data()
             self.refresh_display()
             if hasattr(self, 'status_label'):
-                self.status_label.setText("Demo Mode - Sample Events")
+                self.status_label.setText("🎭 DEMO MODE - FAKE EVENTS (NOT REAL!)")
         else:
-            # Get live data
+            # Get live data - NO FAKE DATA in live mode
             self.update_from_live_data()
 
         # Update AI if enabled
