@@ -84,9 +84,24 @@ class CalendarParser:
         return self.events
 
     def _strip_html(self, text: str) -> str:
-        """Remove HTML tags from text"""
-        # Remove HTML tags
-        text = re.sub(r'<[^>]+>', '', text)
+        """Remove HTML tags and convert table structure to text"""
+        # If it's HTML table, convert to tab-delimited format
+        if '<table' in text.lower() or '<tr' in text.lower():
+            print("📊 Detected HTML table - converting to tab-delimited format...")
+
+            # Replace table row endings with newlines
+            text = re.sub(r'</tr>', '\n', text, flags=re.IGNORECASE)
+
+            # Replace table cell endings with tabs
+            text = re.sub(r'</td>', '\t', text, flags=re.IGNORECASE)
+            text = re.sub(r'</th>', '\t', text, flags=re.IGNORECASE)
+
+            # Remove all remaining HTML tags
+            text = re.sub(r'<[^>]+>', '', text)
+        else:
+            # Just remove HTML tags
+            text = re.sub(r'<[^>]+>', '', text)
+
         return text
 
     def _decode_html_entities(self, text: str) -> str:

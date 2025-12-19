@@ -211,10 +211,34 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         """)
         import_layout.addWidget(self.calendar_paste_area)
 
+        # Buttons row
+        buttons_layout = QHBoxLayout()
+
+        # Paste from Clipboard button
+        paste_btn = QPushButton("📋 Paste from Clipboard (HTML)")
+        paste_btn.clicked.connect(self.on_paste_from_clipboard)
+        paste_btn.setFixedHeight(35)
+        paste_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0066cc;
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
+                border-radius: 5px;
+                padding: 8px;
+            }
+            QPushButton:hover {
+                background-color: #0088ee;
+            }
+            QPushButton:pressed {
+                background-color: #004499;
+            }
+        """)
+        buttons_layout.addWidget(paste_btn)
+
         # Import button
-        import_btn = QPushButton("📥 Parse & Import Calendar")
+        import_btn = QPushButton("📥 Parse & Import")
         import_btn.clicked.connect(self.on_import_calendar)
-        import_btn.setMaximumWidth(250)
         import_btn.setFixedHeight(35)
         import_btn.setStyleSheet("""
             QPushButton {
@@ -232,7 +256,9 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
                 background-color: #008800;
             }
         """)
-        import_layout.addWidget(import_btn)
+        buttons_layout.addWidget(import_btn)
+
+        import_layout.addLayout(buttons_layout)
 
         # Import status
         self.import_status_label = QLabel("")
@@ -609,6 +635,46 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         print("   - 3 HIGH impact events (75-95 pips)")
         print("   - 3 MEDIUM impact events (40-55 pips)")
         print("   - 2 LOW impact events (18-25 pips)")
+
+    def on_paste_from_clipboard(self):
+        """Paste calendar data directly from clipboard (HTML version if available)"""
+        from PyQt6.QtWidgets import QApplication
+
+        clipboard = QApplication.clipboard()
+        mime_data = clipboard.mimeData()
+
+        print("\n" + "="*60)
+        print("📋 CLIPBOARD ANALYSIS:")
+        print("="*60)
+        print(f"Has HTML: {mime_data.hasHtml()}")
+        print(f"Has Text: {mime_data.hasText()}")
+        print(f"Formats: {mime_data.formats()}")
+        print("="*60 + "\n")
+
+        # Try HTML first (preserves table structure)
+        if mime_data.hasHtml():
+            html_content = mime_data.html()
+            print(f"📄 HTML Length: {len(html_content)} chars")
+            print("First 500 chars of HTML:")
+            print(html_content[:500])
+            print("\n")
+
+            self.calendar_paste_area.setPlainText(html_content)
+            self.import_status_label.setText("✅ Pasted HTML from clipboard (table structure preserved)")
+            self.import_status_label.setStyleSheet("color: #00ff00;")
+        elif mime_data.hasText():
+            text_content = mime_data.text()
+            print(f"📄 Text Length: {len(text_content)} chars")
+            print("First 500 chars of text:")
+            print(text_content[:500])
+            print("\n")
+
+            self.calendar_paste_area.setPlainText(text_content)
+            self.import_status_label.setText("⚠️ Pasted plain text from clipboard (may lose structure)")
+            self.import_status_label.setStyleSheet("color: #ffaa00;")
+        else:
+            self.import_status_label.setText("❌ No text data in clipboard!")
+            self.import_status_label.setStyleSheet("color: #ff0000;")
 
     def on_import_calendar(self):
         """Handle calendar import from pasted data"""
