@@ -172,9 +172,9 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         layout.addLayout(header_layout)
 
         # === CALENDAR IMPORT ===
-        import_group = QGroupBox("📥 Import Calendar Data (Uncheck to collapse)")
-        import_group.setCheckable(True)
-        import_group.setChecked(True)  # Expanded by default - uncheck to collapse after importing
+        self.import_group = QGroupBox("📥 Import Calendar Data (Auto-collapses after import)")
+        self.import_group.setCheckable(True)
+        self.import_group.setChecked(True)  # Expanded by default - auto-collapses after importing
         import_layout = QVBoxLayout()
 
         # Instructions
@@ -266,8 +266,8 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         self.import_status_label.setWordWrap(True)
         import_layout.addWidget(self.import_status_label)
 
-        import_group.setLayout(import_layout)
-        layout.addWidget(import_group)
+        self.import_group.setLayout(import_layout)
+        layout.addWidget(self.import_group)
 
         # === IMMINENT ALERTS ===
         alerts_group = QGroupBox("⚠️ Imminent High-Impact Events")
@@ -283,7 +283,7 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         layout.addWidget(alerts_group)
 
         # === UPCOMING EVENTS ===
-        events_group = QGroupBox("📅 Upcoming Events (Next 24h)")
+        events_group = QGroupBox("📅 Upcoming Events (Next 7 Days)")
         events_layout = QVBoxLayout()
 
         self.events_list = QListWidget()
@@ -749,6 +749,10 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
                 f"✅ {len(events)} events imported and loaded successfully!"
             )
 
+            # Auto-collapse the import section
+            self.import_group.setChecked(False)
+            print("📦 Auto-collapsed import section")
+
         except Exception as e:
             self.import_status_label.setText(f"❌ Error: {str(e)}")
             self.import_status_label.setStyleSheet("color: #ff0000;")
@@ -766,8 +770,8 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
 
     def refresh_display(self):
         """Refresh the display with current data"""
-        # Get upcoming events
-        upcoming = news_impact_predictor.get_upcoming_events(hours=24)
+        # Get upcoming events (7 days)
+        upcoming = news_impact_predictor.get_upcoming_events(hours=168)
 
         # Store for AI analysis
         self.current_events = upcoming
@@ -791,7 +795,7 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         # Update status
         self.status_label.setText(
             f"Last updated: {datetime.now().strftime('%H:%M:%S')} | "
-            f"{len(upcoming)} events in next 24h"
+            f"{len(upcoming)} events in next 7 days"
         )
 
         # Update AI if enabled
