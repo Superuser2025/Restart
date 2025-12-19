@@ -5,10 +5,53 @@ Economic Calendar Parser - Convert pasted calendar data to JSON
 Parses the format from Investing.com or similar calendar sites
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import re
 from typing import List, Dict, Optional
+from html.parser import HTMLParser
+
+
+class TableExtractor(HTMLParser):
+    """Extract data from HTML tables"""
+
+    def __init__(self):
+        super().__init__()
+        self.in_table = False
+        self.in_row = False
+        self.in_cell = False
+        self.current_row = []
+        self.rows = []
+        self.current_data = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'table':
+            self.in_table = True
+        elif tag == 'tr':
+            self.in_row = True
+            self.current_row = []
+        elif tag in ['td', 'th']:
+            self.in_cell = True
+            self.current_data = []
+
+    def handle_endtag(self, tag):
+        if tag == 'table':
+            self.in_table = False
+        elif tag == 'tr':
+            if self.current_row:
+                self.rows.append(self.current_row)
+            self.in_row = False
+            self.current_row = []
+        elif tag in ['td', 'th']:
+            if self.in_cell:
+                cell_text = ''.join(self.current_data).strip()
+                self.current_row.append(cell_text)
+            self.in_cell = False
+            self.current_data = []
+
+    def handle_data(self, data):
+        if self.in_cell:
+            self.current_data.append(data)
 
 
 class CalendarParser:
@@ -43,8 +86,158 @@ class CalendarParser:
     def parse(self, text: str) -> List[Dict]:
         """Parse calendar text and return list of events"""
         self.events = []
-        self.current_date = None
+        self.current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
+        print(f"\n🔍 Analyzing calendar data ({len(text)} chars)...")
+
+        # Check if it's HTML
+        if '<table' in text.lower() or '<tr' in text.lower():
+            print("📊 Detected HTML table - using HTML parser...")
+            return self._parse_html_table(text)
+        else:
+            print("📝 No HTML detected - using text parser...")
+            return self._parse_text(text)
+
+    def _parse_html_table(self, html: str) -> List[Dict]:
+        """Parse HTML table format"""
+        # Extract table data
+        extractor = TableExtractor()
+        extractor.feed(html)
+
+        print(f"📋 Extracted {len(extractor.rows)} rows from HTML")
+
+        # Process each row
+        for i, row in enumerate(extractor.rows):
+            if len(row) < 3:
+                continue
+
+            # Try to parse as event - Investing.com format: [Time, Currency, Event, Actual, Forecast, Previous]
+            event = self._parse_table_row(row)
+            if event:
+                self.events.append(event)
+                print(f"  ✓ Event {len(self.events)}: {event['currency']} {event['name'][:40]}")
+
+        print(f"\n✅ Parsed {len(self.events)} events from HTML table")
+        return self.events
+
+    def _parse_table_row(self, cells: List[str]) -> Optional[Dict]:
+        """Parse a table row into an event"""
+        try:
+            # Investing.com table format variations:
+            # [Time, Currency/Flag, Event, Actual, Forecast, Previous]
+            # OR: [Date, Time, Currency, Event, Impact, Actual, Forecast, Previous]
+
+            # Find time (contains : or AM/PM)
+            time_idx = -1
+            for i, cell in enumerate(cells):
+                if ':' in cell or 'AM' in cell.upper() or 'PM' in cell.upper():
+                    time_idx = i
+                    break
+
+            if time_idx == -1:
+                return None
+
+            # Find currency/country code (2-3 letter codes)
+            currency_idx = -1
+            for i in range(time_idx + 1, min(time_idx + 3, len(cells))):
+                cell = cells[i].strip().upper()
+                if len(cell) == 2 or len(cell) == 3:
+                    if cell in self.COUNTRY_TO_CURRENCY or cell in ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'NZD', 'CHF']:
+                        currency_idx = i
+                        break
+
+            if currency_idx == -1:
+                return None
+
+            # Event name is next after currency
+            event_idx = currency_idx + 1
+            if event_idx >= len(cells):
+                return None
+
+            time_str = cells[time_idx].strip()
+            country = cells[currency_idx].strip().upper()
+            event_name = cells[event_idx].strip()
+
+            if not event_name:
+                return None
+
+            # Parse time
+            event_time = self._parse_time(time_str)
+            if not event_time:
+                return None
+
+            # Use current or next date
+            timestamp = self.current_date.replace(
+                hour=event_time.hour,
+                minute=event_time.minute
+            )
+
+            # If time is in the past, assume it's tomorrow
+            if timestamp < datetime.now():
+                timestamp += timedelta(days=1)
+
+            # Get forecast and previous values
+            actual = None
+            forecast = None
+            previous = None
+
+            # Try to find numeric values in remaining cells
+            for i in range(event_idx + 1, len(cells)):
+                val = self._parse_numeric(cells[i])
+                if val is not None:
+                    if actual is None:
+                        actual = val
+                    elif forecast is None:
+                        forecast = val
+                    elif previous is None:
+                        previous = val
+                        break
+
+            # Determine impact level
+            impact, pips = self._determine_impact(event_name, country)
+
+            # Get currency
+            if country in self.COUNTRY_TO_CURRENCY:
+                currency = self.COUNTRY_TO_CURRENCY[country]
+            else:
+                currency = country if len(country) == 3 else 'USD'
+
+            # Only include major currencies
+            major_currencies = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'NZD', 'CHF']
+            if currency not in major_currencies:
+                return None
+
+            return {
+                'name': event_name,
+                'currency': currency,
+                'timestamp': timestamp.isoformat(),
+                'forecast': forecast,
+                'previous': previous,
+                'actual': actual,
+                'impact': impact,
+                'avg_pip_impact': pips
+            }
+
+        except Exception as e:
+            print(f"  ⊗ Error parsing row: {e}")
+            return None
+
+    def _parse_numeric(self, text: str) -> Optional[float]:
+        """Parse numeric value from text"""
+        if not text or text.strip() in ['', '-', 'N/A', 'n/a']:
+            return None
+        try:
+            # Remove % and other symbols
+            cleaned = re.sub(r'[%KMB]', '', text.strip())
+            cleaned = re.sub(r'[^\d.-]', '', cleaned)
+            if cleaned:
+                return float(cleaned)
+        except:
+            pass
+        return None
+
+    def _parse_text(self, text: str) -> List[Dict]:
+        """Parse text format (fallback)"""
         # Strip HTML tags if present
         text = self._strip_html(text)
 
@@ -53,9 +246,8 @@ class CalendarParser:
 
         lines = text.strip().split('\n')
 
-        print(f"\n🔍 Parsing {len(lines)} lines of calendar data...")
+        print(f"📝 Parsing {len(lines)} lines of text data...")
         parsed_count = 0
-        skipped_count = 0
 
         for i, line in enumerate(lines):
             line = line.strip()
@@ -75,12 +267,8 @@ class CalendarParser:
                 self.events.append(event)
                 parsed_count += 1
                 print(f"  ✓ Event {parsed_count}: {event['currency']} {event['name'][:40]}...")
-            else:
-                skipped_count += 1
-                if i < 10:  # Only print first few skipped lines for debugging
-                    print(f"  ⊘ Skipped line {i}: {line[:60]}...")
 
-        print(f"\n✅ Parsed {parsed_count} events, skipped {skipped_count} lines")
+        print(f"\n✅ Parsed {parsed_count} events from text")
         return self.events
 
     def _strip_html(self, text: str) -> str:
