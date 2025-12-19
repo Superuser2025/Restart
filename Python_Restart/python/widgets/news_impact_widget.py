@@ -179,22 +179,24 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
 
         # Instructions
         instructions = QLabel(
-            "Copy the monthly calendar from Investing.com and paste it here.\n"
-            "Format: Tab-delimited with Date, Time, Country, Event Name, Previous, Forecast"
+            "📋 QUICK IMPORT FROM INVESTING.COM:\n"
+            "1. Visit: https://www.investing.com/economic-calendar/\n"
+            "2. Select your date range (next week/month)\n"
+            "3. Select ALL table rows: Click first event, then Shift+Click last event\n"
+            "4. Copy: Ctrl+C (or right-click → Copy)\n"
+            "5. Paste below and click Import\n\n"
+            "✓ Parser handles HTML, tabs, spaces automatically!"
         )
-        instructions.setFont(QFont("Arial", 9))
-        instructions.setStyleSheet("color: #aaaaaa; padding: 5px;")
+        instructions.setFont(QFont("Arial", 8))
+        instructions.setStyleSheet("color: #00aaff; padding: 5px; background-color: #1a2a3a; border-radius: 3px;")
         instructions.setWordWrap(True)
         import_layout.addWidget(instructions)
 
         # Text area for pasting
         self.calendar_paste_area = QTextEdit()
         self.calendar_paste_area.setPlaceholderText(
-            "Paste monthly calendar here...\n\n"
-            "Example format:\n"
-            "Friday January 02 2026    Actual    Previous\n"
-            "02:30 PM    US    Non Farm Payrolls DEC    64K    70K\n"
-            "03:45 PM    US    S&P Global Manufacturing PMI    52.2    51.8"
+            "Just paste the copied calendar data from Investing.com here...\n\n"
+            "The parser is smart - it handles any format from the website!"
         )
         self.calendar_paste_area.setMaximumHeight(180)
         self.calendar_paste_area.setFont(QFont("Courier New", 9))
