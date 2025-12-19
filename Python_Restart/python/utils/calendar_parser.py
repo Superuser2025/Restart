@@ -45,9 +45,19 @@ class CalendarParser:
         self.events = []
         self.current_date = None
 
+        # Strip HTML tags if present
+        text = self._strip_html(text)
+
+        # Decode HTML entities
+        text = self._decode_html_entities(text)
+
         lines = text.strip().split('\n')
 
-        for line in lines:
+        print(f"\n🔍 Parsing {len(lines)} lines of calendar data...")
+        parsed_count = 0
+        skipped_count = 0
+
+        for i, line in enumerate(lines):
             line = line.strip()
             if not line:
                 continue
@@ -55,14 +65,34 @@ class CalendarParser:
             # Check if it's a date header
             if self._is_date_header(line):
                 self.current_date = self._parse_date_header(line)
+                if self.current_date:
+                    print(f"📅 Found date: {self.current_date.strftime('%Y-%m-%d')}")
                 continue
 
             # Try to parse as event
             event = self._parse_event_line(line)
             if event:
                 self.events.append(event)
+                parsed_count += 1
+                print(f"  ✓ Event {parsed_count}: {event['currency']} {event['name'][:40]}...")
+            else:
+                skipped_count += 1
+                if i < 10:  # Only print first few skipped lines for debugging
+                    print(f"  ⊘ Skipped line {i}: {line[:60]}...")
 
+        print(f"\n✅ Parsed {parsed_count} events, skipped {skipped_count} lines")
         return self.events
+
+    def _strip_html(self, text: str) -> str:
+        """Remove HTML tags from text"""
+        # Remove HTML tags
+        text = re.sub(r'<[^>]+>', '', text)
+        return text
+
+    def _decode_html_entities(self, text: str) -> str:
+        """Decode HTML entities like &nbsp; &amp; etc."""
+        import html
+        return html.unescape(text)
 
     def _is_date_header(self, line: str) -> bool:
         """Check if line is a date header"""
@@ -107,8 +137,15 @@ class CalendarParser:
         if not self.current_date:
             return None
 
-        # Split by tabs
-        parts = line.split('\t')
+        # Split by tabs first, then try multiple spaces if no tabs
+        if '\t' in line:
+            parts = line.split('\t')
+        else:
+            # Split by 2+ spaces
+            parts = re.split(r'\s{2,}', line)
+
+        # Clean up parts
+        parts = [p.strip() for p in parts if p.strip()]
 
         # Need at least: time, country, event name
         if len(parts) < 3:

@@ -625,6 +625,17 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
             self.import_status_label.setText("⏳ Parsing calendar data...")
             self.import_status_label.setStyleSheet("color: #ffaa00;")
 
+            # Debug: show what we received
+            print("\n" + "="*60)
+            print("📋 CALENDAR DATA RECEIVED:")
+            print("="*60)
+            print(f"Length: {len(calendar_text)} characters")
+            print(f"Has tabs: {chr(9) in calendar_text}")
+            print(f"Has HTML tags: {'<' in calendar_text and '>' in calendar_text}")
+            print("\nFirst 500 chars:")
+            print(repr(calendar_text[:500]))
+            print("="*60 + "\n")
+
             # Parse the calendar
             parser = CalendarParser()
             events = parser.parse(calendar_text)
