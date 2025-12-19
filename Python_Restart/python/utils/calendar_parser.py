@@ -250,13 +250,7 @@ class CalendarParser:
         return None
 
     def _parse_text(self, text: str) -> List[Dict]:
-        """Parse text format (fallback)"""
-        # Strip HTML tags if present
-        text = self._strip_html(text)
-
-        # Decode HTML entities
-        text = self._decode_html_entities(text)
-
+        """Parse text format (Investing.com copy/paste)"""
         lines = text.strip().split('\n')
 
         print(f"📝 Parsing {len(lines)} lines of text data...")
@@ -267,15 +261,19 @@ class CalendarParser:
             if not line:
                 continue
 
-            # Check if it's a date header
-            if self._is_date_header(line):
-                self.current_date = self._parse_date_header(line)
+            # Check if it's a date header: "Thursday, January 1, 2026"
+            if self._is_date_header_investing(line):
+                self.current_date = self._parse_date_header_investing(line)
                 if self.current_date:
                     print(f"📅 Found date: {self.current_date.strftime('%Y-%m-%d')}")
                 continue
 
-            # Try to parse as event
-            event = self._parse_event_line(line)
+            # Skip holiday lines
+            if 'Holiday' in line or 'All Day' in line:
+                continue
+
+            # Try to parse as event (Investing.com format)
+            event = self._parse_investing_line(line)
             if event:
                 self.events.append(event)
                 parsed_count += 1
@@ -283,6 +281,125 @@ class CalendarParser:
 
         print(f"\n✅ Parsed {parsed_count} events from text")
         return self.events
+
+    def _is_date_header_investing(self, line: str) -> bool:
+        """Check if line is Investing.com date header: 'Thursday, January 1, 2026'"""
+        months = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December']
+        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+        # Must have a day name and month name
+        has_day = any(day in line for day in days)
+        has_month = any(month in line for month in months)
+        has_year = any(year in line for year in ['2025', '2026', '2027', '2028'])
+
+        return has_day and has_month and has_year
+
+    def _parse_date_header_investing(self, line: str) -> Optional[datetime]:
+        """Parse Investing.com date header: 'Thursday, January 1, 2026'"""
+        try:
+            # Remove day of week: "Thursday, January 1, 2026" -> "January 1, 2026"
+            parts = line.split(',', 1)
+            if len(parts) == 2:
+                date_str = parts[1].strip()
+                # Parse "January 1, 2026"
+                return datetime.strptime(date_str, "%B %d, %Y")
+        except:
+            pass
+        return None
+
+    def _parse_investing_line(self, line: str) -> Optional[Dict]:
+        """Parse Investing.com event line: '08:45  USD  S&P Global Manufacturing PMI (Dec)  51.8'"""
+        if not self.current_date:
+            return None
+
+        # Split by tabs
+        parts = [p.strip() for p in line.split('\t') if p.strip()]
+
+        if len(parts) < 3:
+            return None
+
+        try:
+            # First part should be time: "08:45" or "01:00"
+            time_str = parts[0]
+            if not re.match(r'\d{1,2}:\d{2}', time_str):
+                return None
+
+            # Second part should be 3-letter currency code: USD, EUR, GBP, etc.
+            currency = parts[1].strip().upper()
+            if len(currency) != 3:
+                return None
+
+            # Only major currencies
+            major_currencies = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'NZD', 'CHF', 'RUB', 'BRL', 'INR', 'HKD', 'SGD']
+            if currency not in major_currencies:
+                return None
+
+            # Find event name (first non-empty text after currency)
+            event_name = None
+            event_idx = -1
+            for i in range(2, len(parts)):
+                if parts[i] and not self._is_numeric_value(parts[i]):
+                    event_name = parts[i]
+                    event_idx = i
+                    break
+
+            if not event_name:
+                return None
+
+            # Parse time (24-hour format)
+            hour, minute = map(int, time_str.split(':'))
+            timestamp = self.current_date.replace(hour=hour, minute=minute)
+
+            # If time is in the past, assume it's for next occurrence
+            if timestamp < datetime.now():
+                # Check if it's more than 12 hours in the past, then add a day
+                if (datetime.now() - timestamp).total_seconds() > 43200:
+                    timestamp += timedelta(days=1)
+
+            # Get numeric values (actual, forecast, previous)
+            actual = None
+            forecast = None
+            previous = None
+
+            numeric_values = []
+            for i in range(event_idx + 1, len(parts)):
+                val = self._parse_numeric(parts[i])
+                if val is not None:
+                    numeric_values.append(val)
+
+            # Assign values: last value is usually Previous, second-to-last is Forecast
+            if len(numeric_values) >= 1:
+                previous = numeric_values[-1]
+            if len(numeric_values) >= 2:
+                forecast = numeric_values[-2]
+            if len(numeric_values) >= 3:
+                actual = numeric_values[-3]
+
+            # Determine impact level
+            impact, pips = self._determine_impact(event_name, currency)
+
+            return {
+                'name': event_name,
+                'currency': currency,
+                'timestamp': timestamp.isoformat(),
+                'forecast': forecast,
+                'previous': previous,
+                'actual': actual,
+                'impact': impact,
+                'avg_pip_impact': pips
+            }
+
+        except Exception as e:
+            print(f"  ⊗ Error parsing line: {e} - {line[:60]}")
+            return None
+
+    def _is_numeric_value(self, text: str) -> bool:
+        """Check if text looks like a numeric value"""
+        if not text:
+            return False
+        # Check for numbers, %, -, decimals, K, M, B suffixes
+        return bool(re.search(r'[\d.%KMB-]', text))
 
     def _strip_html(self, text: str) -> str:
         """Remove HTML tags and convert table structure to text"""
