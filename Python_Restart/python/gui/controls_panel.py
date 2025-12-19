@@ -226,6 +226,12 @@ class ControlsPanel(QWidget):
         visual_section = self.create_visual_section()
         layout.addWidget(visual_section)
 
+        # ============================================================
+        # CALENDAR IMPORT
+        # ============================================================
+        calendar_section = self.create_calendar_import_section()
+        layout.addWidget(calendar_section)
+
         layout.addStretch()
 
         scroll.setWidget(container)
@@ -775,6 +781,165 @@ class ControlsPanel(QWidget):
             layout.addWidget(checkbox)
 
         return frame
+
+    def create_calendar_import_section(self) -> QFrame:
+        """Create calendar import section for pasting monthly calendar data"""
+
+        frame = QFrame()
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {settings.theme.surface};
+                border: 1px solid {settings.theme.border_color};
+                border-radius: 12px;
+                padding: 16px;
+            }}
+        """)
+
+        layout = QVBoxLayout(frame)
+        layout.setSpacing(12)
+
+        # Title
+        title = QLabel("📅 Import Monthly Calendar")
+        title.setStyleSheet(f"""
+            QLabel {{
+                color: {settings.theme.accent};
+                font-size: {settings.theme.font_size_md}px;
+                font-weight: 600;
+                background: transparent;
+                border: none;
+            }}
+        """)
+        layout.addWidget(title)
+
+        # Instructions
+        instructions = QLabel(
+            "Paste monthly calendar data from Investing.com\n"
+            "(Format: Date, Time, Country, Event Name, Previous, Forecast)"
+        )
+        instructions.setStyleSheet(f"""
+            QLabel {{
+                color: {settings.theme.text_secondary};
+                font-size: {settings.theme.font_size_xs}px;
+                background: transparent;
+                border: none;
+                padding: 4px;
+            }}
+        """)
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+
+        # Text area for pasting calendar
+        from PyQt6.QtWidgets import QTextEdit, QPushButton
+        self.calendar_text_input = QTextEdit()
+        self.calendar_text_input.setPlaceholderText(
+            "Paste calendar data here...\n\n"
+            "Example:\n"
+            "Friday January 02 2026    Actual    Previous\n"
+            "02:30 PM    US    Non Farm Payrolls DEC    64K    70K\n"
+            "03:45 PM    US    S&P Global Manufacturing PMI    52.2    51.8"
+        )
+        self.calendar_text_input.setMaximumHeight(200)
+        self.calendar_text_input.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {settings.theme.background};
+                border: 1px solid {settings.theme.border_color};
+                border-radius: 4px;
+                color: {settings.theme.text_primary};
+                font-size: {settings.theme.font_size_xs}px;
+                font-family: 'Courier New', monospace;
+                padding: 8px;
+            }}
+        """)
+        layout.addWidget(self.calendar_text_input)
+
+        # Parse button
+        parse_btn = QPushButton("📥 Parse & Import Calendar")
+        parse_btn.clicked.connect(self.on_parse_calendar)
+        parse_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {settings.theme.success};
+                border: none;
+                border-radius: 6px;
+                padding: 10px;
+                color: white;
+                font-weight: bold;
+                font-size: {settings.theme.font_size_sm}px;
+            }}
+            QPushButton:hover {{
+                background-color: #27ae60;
+            }}
+            QPushButton:pressed {{
+                background-color: #1e8449;
+            }}
+        """)
+        layout.addWidget(parse_btn)
+
+        # Status label
+        self.calendar_import_status = QLabel("")
+        self.calendar_import_status.setStyleSheet(f"""
+            QLabel {{
+                color: {settings.theme.text_secondary};
+                font-size: {settings.theme.font_size_xs}px;
+                background: transparent;
+                border: none;
+                padding: 4px;
+            }}
+        """)
+        self.calendar_import_status.setWordWrap(True)
+        layout.addWidget(self.calendar_import_status)
+
+        return frame
+
+    def on_parse_calendar(self):
+        """Parse and import pasted calendar data"""
+        from utils.calendar_parser import CalendarParser
+        import os
+
+        # Get pasted text
+        calendar_text = self.calendar_text_input.toPlainText().strip()
+
+        if not calendar_text:
+            self.calendar_import_status.setText("❌ Please paste calendar data first!")
+            self.calendar_import_status.setStyleSheet("color: #e74c3c;")
+            return
+
+        try:
+            # Parse the calendar
+            parser = CalendarParser()
+            events = parser.parse(calendar_text)
+
+            if not events:
+                self.calendar_import_status.setText("❌ No events found. Check format!")
+                self.calendar_import_status.setStyleSheet("color: #e74c3c;")
+                return
+
+            # Save to file
+            calendar_file = os.path.join(
+                os.path.dirname(__file__),
+                '../data/economic_calendar.json'
+            )
+
+            parser.save_to_file(calendar_file)
+
+            # Success message
+            self.calendar_import_status.setText(
+                f"✅ SUCCESS! Imported {len(events)} events\n"
+                f"Restart app or click Refresh in News tab to see events"
+            )
+            self.calendar_import_status.setStyleSheet("color: #27ae60;")
+
+            # Log to status
+            self._log_status(f"✓ Imported {len(events)} calendar events")
+
+            # Clear text area
+            self.calendar_text_input.clear()
+
+        except Exception as e:
+            self.calendar_import_status.setText(f"❌ Error: {str(e)}")
+            self.calendar_import_status.setStyleSheet("color: #e74c3c;")
+            print(f"Calendar import error: {e}")
+            import traceback
+            traceback.print_exc()
 
     def create_styled_checkbox(self, text: str, checked: bool = False) -> QCheckBox:
         """Create styled checkbox"""
