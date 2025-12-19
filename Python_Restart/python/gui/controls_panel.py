@@ -628,8 +628,9 @@ class ControlsPanel(QWidget):
 
         for key, label, default in filters:
             checkbox = self.create_styled_checkbox(label, default)
-            checkbox.stateChanged.connect(
-                lambda state, k=key: self.on_filter_toggled(k, state == Qt.CheckState.Checked.value)
+            # Use toggled signal instead of stateChanged for cleaner bool handling
+            checkbox.toggled.connect(
+                lambda checked, k=key: self.on_filter_toggled(k, checked)
             )
             self.filter_checkboxes[key] = checkbox
             layout.addWidget(checkbox)
@@ -677,8 +678,9 @@ class ControlsPanel(QWidget):
 
         for key, label, default in smc_features:
             checkbox = self.create_styled_checkbox(label, default)
-            checkbox.stateChanged.connect(
-                lambda state, k=key: self.setting_changed.emit(f'use_{k}', state == Qt.CheckState.Checked.value)
+            # Use toggled signal instead of stateChanged for cleaner bool handling
+            checkbox.toggled.connect(
+                lambda checked, k=key: self.setting_changed.emit(f'use_{k}', checked)
             )
             self.smc_checkboxes[key] = checkbox
             layout.addWidget(checkbox)
@@ -716,8 +718,9 @@ class ControlsPanel(QWidget):
 
         # ML enable checkbox
         self.ml_enable_checkbox = self.create_styled_checkbox("Enable ML Filter", settings.trading.use_ml_filter)
-        self.ml_enable_checkbox.stateChanged.connect(
-            lambda state: self.setting_changed.emit('use_ml_filter', state == Qt.CheckState.Checked.value)
+        # Use toggled signal instead of stateChanged for cleaner bool handling
+        self.ml_enable_checkbox.toggled.connect(
+            lambda checked: self.setting_changed.emit('use_ml_filter', checked)
         )
         layout.addWidget(self.ml_enable_checkbox)
 
@@ -764,8 +767,9 @@ class ControlsPanel(QWidget):
 
         for key, label, default in visuals:
             checkbox = self.create_styled_checkbox(label, default)
-            checkbox.stateChanged.connect(
-                lambda state, k=key: self.setting_changed.emit(f'show_{k}', state == Qt.CheckState.Checked.value)
+            # Use toggled signal instead of stateChanged for cleaner bool handling
+            checkbox.toggled.connect(
+                lambda checked, k=key: self.setting_changed.emit(f'show_{k}', checked)
             )
             self.visual_checkboxes[key] = checkbox
             layout.addWidget(checkbox)
