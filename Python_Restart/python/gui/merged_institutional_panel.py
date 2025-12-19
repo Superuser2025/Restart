@@ -84,6 +84,9 @@ class MergedInstitutionalPanel(QWidget):
         # === RISK METRICS ===
         layout.addWidget(self.create_risk_metrics_section())
 
+        # === CALENDAR IMPORT ===
+        layout.addWidget(self.create_calendar_import_section())
+
         # PERFORMANCE section removed per user request (redundant with chart display)
 
         layout.addStretch()
@@ -495,6 +498,126 @@ class MergedInstitutionalPanel(QWidget):
 
         group.setLayout(layout)
         return group
+
+    def create_calendar_import_section(self) -> QGroupBox:
+        """Create calendar import section for pasting monthly calendar data"""
+        group = QGroupBox("📅 IMPORT MONTHLY CALENDAR")
+        layout = QVBoxLayout()
+
+        # Instructions
+        instructions = QLabel(
+            "Paste monthly calendar from Investing.com\n"
+            "Format: Date, Time, Country, Event, Previous, Forecast"
+        )
+        instructions.setStyleSheet("color: #aaaaaa; font-size: 13px; padding: 4px;")
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+
+        # Text area for pasting calendar
+        self.calendar_text_input = QTextEdit()
+        self.calendar_text_input.setPlaceholderText(
+            "Paste calendar data here...\n\n"
+            "Example:\n"
+            "Friday January 02 2026    Actual    Previous\n"
+            "02:30 PM    US    Non Farm Payrolls DEC    64K    70K\n"
+            "03:45 PM    US    S&P Global Manufacturing PMI    52.2    51.8"
+        )
+        self.calendar_text_input.setMaximumHeight(200)
+        self.calendar_text_input.setStyleSheet("""
+            QTextEdit {
+                background-color: #0a0a0a;
+                border: 1px solid #00ff00;
+                border-radius: 3px;
+                color: #ffffff;
+                font-size: 13px;
+                font-family: 'Courier New', monospace;
+                padding: 8px;
+            }
+        """)
+        layout.addWidget(self.calendar_text_input)
+
+        # Parse button
+        parse_btn = QPushButton("📥 Parse & Import Calendar")
+        parse_btn.clicked.connect(self.on_parse_calendar)
+        parse_btn.setFixedHeight(40)
+        parse_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #00aa00;
+                border: none;
+                border-radius: 5px;
+                padding: 10px;
+                color: white;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #00cc00;
+            }
+            QPushButton:pressed {
+                background-color: #008800;
+            }
+        """)
+        layout.addWidget(parse_btn)
+
+        # Status label
+        self.calendar_import_status = QLabel("")
+        self.calendar_import_status.setStyleSheet("color: #aaaaaa; font-size: 13px; padding: 4px;")
+        self.calendar_import_status.setWordWrap(True)
+        layout.addWidget(self.calendar_import_status)
+
+        group.setLayout(layout)
+        return group
+
+    def on_parse_calendar(self):
+        """Parse and import pasted calendar data"""
+        from utils.calendar_parser import CalendarParser
+        import os
+
+        # Get pasted text
+        calendar_text = self.calendar_text_input.toPlainText().strip()
+
+        if not calendar_text:
+            self.calendar_import_status.setText("❌ Please paste calendar data first!")
+            self.calendar_import_status.setStyleSheet("color: #ff0000; font-size: 13px;")
+            return
+
+        try:
+            # Parse the calendar
+            parser = CalendarParser()
+            events = parser.parse(calendar_text)
+
+            if not events:
+                self.calendar_import_status.setText("❌ No events found. Check format!")
+                self.calendar_import_status.setStyleSheet("color: #ff0000; font-size: 13px;")
+                return
+
+            # Save to file
+            calendar_file = os.path.join(
+                os.path.dirname(__file__),
+                '../data/economic_calendar.json'
+            )
+
+            parser.save_to_file(calendar_file)
+
+            # Success message
+            self.calendar_import_status.setText(
+                f"✅ SUCCESS! Imported {len(events)} events\n"
+                f"Restart app or click Refresh in News tab to see events"
+            )
+            self.calendar_import_status.setStyleSheet("color: #00ff00; font-size: 13px;")
+
+            # Log to status
+            self.log_status(f"✓ Imported {len(events)} calendar events")
+
+            # Clear text area
+            self.calendar_text_input.clear()
+
+        except Exception as e:
+            self.calendar_import_status.setText(f"❌ Error: {str(e)}")
+            self.calendar_import_status.setStyleSheet("color: #ff0000; font-size: 13px;")
+            print(f"Calendar import error: {e}")
+            import traceback
+            traceback.print_exc()
 
     # PERFORMANCE SECTION REMOVED - User confirmed it's redundant with chart display
     # def create_performance_section(self) -> QGroupBox:
