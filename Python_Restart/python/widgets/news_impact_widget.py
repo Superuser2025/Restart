@@ -171,6 +171,76 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
 
         layout.addLayout(header_layout)
 
+        # === CALENDAR IMPORT ===
+        import_group = QGroupBox("📥 Import Calendar Data (Paste monthly calendar from Investing.com)")
+        import_group.setCheckable(True)
+        import_group.setChecked(False)  # Collapsed by default
+        import_layout = QVBoxLayout()
+
+        # Instructions
+        instructions = QLabel(
+            "Copy the monthly calendar from Investing.com and paste it here.\n"
+            "Format: Tab-delimited with Date, Time, Country, Event Name, Previous, Forecast"
+        )
+        instructions.setFont(QFont("Arial", 9))
+        instructions.setStyleSheet("color: #aaaaaa; padding: 5px;")
+        instructions.setWordWrap(True)
+        import_layout.addWidget(instructions)
+
+        # Text area for pasting
+        self.calendar_paste_area = QTextEdit()
+        self.calendar_paste_area.setPlaceholderText(
+            "Paste monthly calendar here...\n\n"
+            "Example format:\n"
+            "Friday January 02 2026    Actual    Previous\n"
+            "02:30 PM    US    Non Farm Payrolls DEC    64K    70K\n"
+            "03:45 PM    US    S&P Global Manufacturing PMI    52.2    51.8"
+        )
+        self.calendar_paste_area.setMaximumHeight(180)
+        self.calendar_paste_area.setFont(QFont("Courier New", 9))
+        self.calendar_paste_area.setStyleSheet("""
+            QTextEdit {
+                background-color: #1a1a1a;
+                border: 1px solid #00ff00;
+                border-radius: 3px;
+                color: #ffffff;
+                padding: 8px;
+            }
+        """)
+        import_layout.addWidget(self.calendar_paste_area)
+
+        # Import button
+        import_btn = QPushButton("📥 Parse & Import Calendar")
+        import_btn.clicked.connect(self.on_import_calendar)
+        import_btn.setMaximumWidth(250)
+        import_btn.setFixedHeight(35)
+        import_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #00aa00;
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
+                border-radius: 5px;
+                padding: 8px;
+            }
+            QPushButton:hover {
+                background-color: #00cc00;
+            }
+            QPushButton:pressed {
+                background-color: #008800;
+            }
+        """)
+        import_layout.addWidget(import_btn)
+
+        # Import status
+        self.import_status_label = QLabel("")
+        self.import_status_label.setFont(QFont("Arial", 9))
+        self.import_status_label.setWordWrap(True)
+        import_layout.addWidget(self.import_status_label)
+
+        import_group.setLayout(import_layout)
+        layout.addWidget(import_group)
+
         # === IMMINENT ALERTS ===
         alerts_group = QGroupBox("⚠️ Imminent High-Impact Events")
         alerts_layout = QVBoxLayout()
@@ -537,6 +607,64 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         print("   - 3 HIGH impact events (75-95 pips)")
         print("   - 3 MEDIUM impact events (40-55 pips)")
         print("   - 2 LOW impact events (18-25 pips)")
+
+    def on_import_calendar(self):
+        """Handle calendar import from pasted data"""
+        import os
+        from utils.calendar_parser import CalendarParser
+
+        # Get pasted text
+        calendar_text = self.calendar_paste_area.toPlainText().strip()
+
+        if not calendar_text:
+            self.import_status_label.setText("❌ Please paste calendar data first!")
+            self.import_status_label.setStyleSheet("color: #ff0000;")
+            return
+
+        try:
+            self.import_status_label.setText("⏳ Parsing calendar data...")
+            self.import_status_label.setStyleSheet("color: #ffaa00;")
+
+            # Parse the calendar
+            parser = CalendarParser()
+            events = parser.parse(calendar_text)
+
+            if not events:
+                self.import_status_label.setText("❌ No events found. Check the format and try again.")
+                self.import_status_label.setStyleSheet("color: #ff0000;")
+                return
+
+            # Save to file
+            calendar_file = os.path.join(
+                os.path.dirname(__file__),
+                '../data/economic_calendar.json'
+            )
+
+            parser.save_to_file(calendar_file)
+
+            # Success message
+            self.import_status_label.setText(
+                f"✅ SUCCESS! Imported {len(events)} events - Refreshing display..."
+            )
+            self.import_status_label.setStyleSheet("color: #00ff00;")
+
+            # Clear the paste area
+            self.calendar_paste_area.clear()
+
+            # Immediately reload and refresh the display
+            self.reload_calendar_data()
+
+            # Update success message after reload
+            self.import_status_label.setText(
+                f"✅ {len(events)} events imported and loaded successfully!"
+            )
+
+        except Exception as e:
+            self.import_status_label.setText(f"❌ Error: {str(e)}")
+            self.import_status_label.setStyleSheet("color: #ff0000;")
+            print(f"Calendar import error: {e}")
+            import traceback
+            traceback.print_exc()
 
     def reload_calendar_data(self):
         """Reload calendar data from source"""
