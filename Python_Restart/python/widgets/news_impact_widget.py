@@ -172,9 +172,9 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         layout.addLayout(header_layout)
 
         # === CALENDAR IMPORT ===
-        self.import_group = QGroupBox("📥 Import Calendar Data (Auto-collapses after import)")
+        self.import_group = QGroupBox("📥 Import Calendar Data (Click to collapse/expand)")
         self.import_group.setCheckable(True)
-        self.import_group.setChecked(True)  # Expanded by default - auto-collapses after importing
+        self.import_group.setChecked(True)  # Expanded by default - click title to toggle
         import_layout = QVBoxLayout()
 
         # Instructions
@@ -360,6 +360,16 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px;
+            }
+            QGroupBox::indicator {
+                width: 0px;
+                height: 0px;
+            }
+            QGroupBox[checkable="true"]::title {
+                color: #00ff00;
+            }
+            QGroupBox[checkable="true"]:!checked::title {
+                color: #888888;
             }
             QListWidget {
                 background-color: #2b2b2b;
