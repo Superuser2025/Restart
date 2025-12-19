@@ -172,9 +172,9 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         layout.addLayout(header_layout)
 
         # === CALENDAR IMPORT ===
-        import_group = QGroupBox("📥 Import Calendar Data (Paste monthly calendar from Investing.com)")
+        import_group = QGroupBox("📥 Import Calendar Data (Uncheck to collapse)")
         import_group.setCheckable(True)
-        import_group.setChecked(False)  # Collapsed by default
+        import_group.setChecked(True)  # Expanded by default - uncheck to collapse after importing
         import_layout = QVBoxLayout()
 
         # Instructions
