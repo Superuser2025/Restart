@@ -106,21 +106,33 @@ class CalendarParser:
 
         print(f"📋 Extracted {len(extractor.rows)} rows from HTML")
 
+        # Show first 5 rows for debugging
+        print("\n📊 SHOWING FIRST 5 ROWS:")
+        for i, row in enumerate(extractor.rows[:5]):
+            print(f"  Row {i}: {len(row)} cells")
+            for j, cell in enumerate(row):
+                print(f"    Cell {j}: '{cell[:50]}'")
+        print()
+
         # Process each row
         for i, row in enumerate(extractor.rows):
             if len(row) < 3:
+                print(f"  ⊘ Row {i}: Only {len(row)} cells - skipping")
                 continue
 
             # Try to parse as event - Investing.com format: [Time, Currency, Event, Actual, Forecast, Previous]
-            event = self._parse_table_row(row)
+            event = self._parse_table_row(row, i)
             if event:
                 self.events.append(event)
                 print(f"  ✓ Event {len(self.events)}: {event['currency']} {event['name'][:40]}")
+            else:
+                if i < 10:  # Show why first 10 failed
+                    print(f"  ⊘ Row {i}: Failed to parse - {row[:3]}")
 
         print(f"\n✅ Parsed {len(self.events)} events from HTML table")
         return self.events
 
-    def _parse_table_row(self, cells: List[str]) -> Optional[Dict]:
+    def _parse_table_row(self, cells: List[str], row_num: int = 0) -> Optional[Dict]:
         """Parse a table row into an event"""
         try:
             # Investing.com table format variations:
@@ -135,6 +147,7 @@ class CalendarParser:
                     break
 
             if time_idx == -1:
+                print(f"    Row {row_num}: No time found in cells: {[c[:20] for c in cells[:5]]}")
                 return None
 
             # Find currency/country code (2-3 letter codes)
