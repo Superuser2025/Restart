@@ -19,6 +19,12 @@ import numpy as np
 from core.market_analyzer import market_analyzer
 from core.data_manager import data_manager
 
+# Smart Money Detectors (REAL detection, not random!)
+from analysis.order_block_detector import order_block_detector
+from analysis.liquidity_sweep_detector import liquidity_sweep_detector
+from analysis.fair_value_gap_detector import fair_value_gap_detector
+from analysis.market_structure_detector import market_structure_detector
+
 
 class OpportunityGenerator:
     """
@@ -391,6 +397,49 @@ class OpportunityGenerator:
                 pattern, mtf_result, session_score, price_data['spread'], atr, rr
             )
 
+            # SMART MONEY DETECTION: Get recent candles for detectors
+            candles = data_manager.get_candles(count=100)
+            if not candles:
+                # Fallback if no candles available yet
+                candles = []
+
+            # Run REAL smart money detectors
+            has_liquidity_sweep = False
+            is_at_order_block = False
+            structure_aligned = mtf_result['aligned']  # Fallback to MTF
+            is_at_fvg = False
+
+            if candles and len(candles) >= 10:
+                # LIQUIDITY SWEEP DETECTION (real!)
+                has_liquidity_sweep = liquidity_sweep_detector.has_recent_sweep(
+                    candles, symbol, lookback_candles=5
+                )
+
+                # ORDER BLOCK VALIDATION (real!)
+                is_at_order_block = order_block_detector.validate_order_block(
+                    candles, entry, symbol
+                )
+
+                # MARKET STRUCTURE ALIGNMENT (real BOS/CHoCH detection!)
+                structure_aligned = market_structure_detector.check_structure_aligned(
+                    candles, direction, symbol
+                )
+
+                # FAIR VALUE GAP DETECTION (real!)
+                is_at_fvg = fair_value_gap_detector.is_price_in_fvg(
+                    candles, entry, symbol
+                )
+
+            # Boost confluence reasons with smart money concepts
+            if has_liquidity_sweep:
+                confluence_reasons.append('Liquidity Sweep')
+            if is_at_order_block:
+                confluence_reasons.append('Order Block')
+            if is_at_fvg:
+                confluence_reasons.append('FVG')
+            if structure_aligned and not mtf_result['aligned']:
+                confluence_reasons.append('Structure Aligned')
+
             # Create opportunity
             opportunity = {
                 'symbol': symbol,
@@ -411,10 +460,14 @@ class OpportunityGenerator:
                 'volatility': atr,
                 'sentiment': mtf_result.get('h4_trend', 'neutral'),
                 'correlation_score': 0.8 if mtf_result['aligned'] else 0.3,
-                'liquidity_sweep': random.choice([True, False, False]),  # 33% chance
-                'is_retail_trap': False if quality_score >= 70 else random.choice([True, False, False, False, False]),
-                'order_block_valid': True if quality_score >= 60 else random.choice([True, True, False]),
-                'structure_aligned': mtf_result['aligned'],
+
+                # REAL SMART MONEY DETECTION (not random!)
+                'liquidity_sweep': has_liquidity_sweep,
+                'is_retail_trap': False,  # TODO: Implement retail trap detector
+                'order_block_valid': is_at_order_block,
+                'structure_aligned': structure_aligned,
+                'at_fvg': is_at_fvg,  # NEW: FVG proximity
+
                 'pattern_reliability': quality_score,  # Use quality score as ML confidence
                 'parameters_optimized': True if quality_score >= 65 else False,
                 'regime_match': mtf_result['aligned'],
