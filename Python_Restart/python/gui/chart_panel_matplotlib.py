@@ -1537,40 +1537,103 @@ class ChartPanel(QWidget):
         return timeframe_settings.get(self.current_timeframe, timeframe_settings['H4'])
 
     def draw_chart_overlays(self):
-        """Draw FVG/OB/Liquidity zones on chart from REAL EA data - RESPECTS VISUAL CONTROLS"""
+        """Draw FVG/OB/Liquidity zones on chart from REAL SMART MONEY DETECTORS"""
         try:
-            # Get zone data from EA via data_manager
-            zones = data_manager.get_zones()
+            # ============================================================
+            # USE REAL SMART MONEY DETECTORS (not EA data!)
+            # ============================================================
+            from analysis.order_block_detector import order_block_detector
+            from analysis.fair_value_gap_detector import fair_value_gap_detector
+            from analysis.liquidity_sweep_detector import liquidity_sweep_detector
+
+            # Get candles from chart data
+            if not self.candle_data or len(self.candle_data) < 10:
+                return
+
+            # Convert DataFrame to candle list format
+            candles = []
+            for idx, row in self.candle_data.iterrows():
+                candles.append({
+                    'time': row.get('time', idx),
+                    'open': row['open'],
+                    'high': row['high'],
+                    'low': row['low'],
+                    'close': row['close'],
+                    'tick_volume': row.get('tick_volume', 0)
+                })
+
+            print(f"\n[ChartOverlay] ═══ SMART MONEY DETECTION for {self.current_symbol} ═══")
+            print(f"[ChartOverlay] → Analyzing {len(candles)} candles")
 
             # Draw FVGs (Fair Value Gaps) - CHECK VISUAL CONTROL
             if visual_controls.should_draw_fvg_zones():
-                fvgs = zones.get('fvgs', [])
+                print(f"[ChartOverlay] --- FVG DETECTION ---")
+                fvgs = fair_value_gap_detector.detect_fair_value_gaps(
+                    candles, self.current_symbol, lookback=150, min_gap_pips=3
+                )
+                print(f"[ChartOverlay] Total FVGs: {len(fvgs)}, Unfilled: {len([f for f in fvgs if not f['filled']])}")
+
                 if fvgs and len(fvgs) > 0:
-                    self.draw_fvg_zones(fvgs)
-                else:
-                    # Fallback to sample if no real data
-                    self.draw_sample_fvg()
+                    # Convert to chart format
+                    fvg_chart_data = []
+                    for fvg in fvgs[:10]:  # Top 10
+                        if not fvg['filled']:
+                            fvg_chart_data.append({
+                                'top': fvg['top'],
+                                'bottom': fvg['bottom'],
+                                'is_bullish': fvg['type'] == 'bullish',
+                                'filled': False,
+                                'ever_visited': fvg['fill_percentage'] > 0
+                            })
+                    self.draw_fvg_zones(fvg_chart_data)
+                    print(f"[ChartOverlay]   → Drew {len(fvg_chart_data)} FVG zones")
 
             # Draw Order Blocks - CHECK VISUAL CONTROL
             if visual_controls.should_draw_order_blocks():
-                order_blocks = zones.get('order_blocks', [])
+                print(f"[ChartOverlay] --- ORDER BLOCK DETECTION ---")
+                order_blocks = order_block_detector.detect_order_blocks(
+                    candles, self.current_symbol, lookback=150, min_impulse_pips=8
+                )
+                valid_obs = [ob for ob in order_blocks if ob['valid'] and not ob['mitigated']]
+                print(f"[ChartOverlay] Total OBs: {len(order_blocks)}, Valid: {len(valid_obs)}")
+
                 if order_blocks and len(order_blocks) > 0:
-                    self.draw_order_block_zones(order_blocks)
-                else:
-                    # Fallback to sample if no real data
-                    self.draw_sample_order_block()
+                    # Convert to chart format
+                    ob_chart_data = []
+                    display_obs = valid_obs[:10] if valid_obs else order_blocks[:10]
+                    for ob in display_obs:
+                        ob_chart_data.append({
+                            'top': ob['price_high'],
+                            'bottom': ob['price_low'],
+                            'is_bullish': ob['type'] == 'demand',
+                            'invalidated': ob['mitigated']
+                        })
+                    self.draw_order_block_zones(ob_chart_data)
+                    print(f"[ChartOverlay]   → Drew {len(ob_chart_data)} OB zones")
 
             # Draw Liquidity Zones - CHECK VISUAL CONTROL
             if visual_controls.should_draw_liquidity_lines():
-                liquidity = zones.get('liquidity', [])
-                if liquidity and len(liquidity) > 0:
-                    self.draw_liquidity_zones(liquidity)
-                else:
-                    # Fallback to sample if no real data
-                    self.draw_sample_liquidity()
+                print(f"[ChartOverlay] --- LIQUIDITY SWEEP DETECTION ---")
+                sweeps = liquidity_sweep_detector.detect_liquidity_sweeps(
+                    candles, self.current_symbol, lookback=150, tolerance_pips=5
+                )
+                print(f"[ChartOverlay] Total Sweeps: {len(sweeps)}")
+
+                if sweeps and len(sweeps) > 0:
+                    # Convert to chart format
+                    liq_chart_data = []
+                    for sweep in sweeps[:5]:
+                        liq_chart_data.append({
+                            'level': sweep['level'],
+                            'is_high': sweep['type'] == 'high_sweep'
+                        })
+                    self.draw_liquidity_zones(liq_chart_data)
+                    print(f"[ChartOverlay]   → Drew {len(liq_chart_data)} liquidity lines")
 
         except Exception as e:
-            pass
+            print(f"[ChartOverlay] ERROR in draw_chart_overlays: {e}")
+            import traceback
+            traceback.print_exc()
 
     def draw_fvg_zones(self, fvgs: list):
         """Draw actual FVG zones from EA data"""
@@ -1678,12 +1741,12 @@ class ChartPanel(QWidget):
             )
 
     def draw_liquidity_zones(self, liquidity: list):
-        """Draw actual Liquidity zones from EA data"""
+        """Draw actual Liquidity zones from smart money detectors"""
         if not self.candle_data:
             return
 
         for liq in liquidity:
-            price = liq.get('price')
+            price = liq.get('level')  # FIXED: Use 'level' from detector output
             is_high = liq.get('is_high', True)  # True = resistance, False = support
             swept = liq.get('swept', False)
             touch_count = liq.get('touch_count', 0)
