@@ -1592,8 +1592,9 @@ class ChartPanel(QWidget):
                 if fvgs and len(fvgs) > 0:
                     # Convert to chart format with timestamps
                     fvg_chart_data = []
-                    for fvg in fvgs[:10]:  # Top 10
+                    for i, fvg in enumerate(fvgs[:10]):  # Top 10
                         if not fvg['filled']:
+                            print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}")
                             fvg_chart_data.append({
                                 'top': fvg['top'],
                                 'bottom': fvg['bottom'],
@@ -1619,7 +1620,8 @@ class ChartPanel(QWidget):
                     # Convert to chart format with timestamps
                     ob_chart_data = []
                     display_obs = valid_obs[:10] if valid_obs else order_blocks[:10]
-                    for ob in display_obs:
+                    for i, ob in enumerate(display_obs):
+                        print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}")
                         ob_chart_data.append({
                             'top': ob['price_high'],
                             'bottom': ob['price_low'],
