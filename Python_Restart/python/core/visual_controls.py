@@ -14,6 +14,7 @@ class VisualControls:
         self.monthly_zones = True
         self.volatility_zones = True
         self.commentary = True
+        self.smart_money_legend = False  # Legend OFF by default
 
     def set_visual(self, visual_name: str, enabled: bool):
         """Enable/disable a specific visual element"""
@@ -60,6 +61,10 @@ class VisualControls:
     def should_draw_commentary(self) -> bool:
         """Check if commentary should be drawn"""
         return self.commentary
+
+    def should_draw_smart_money_legend(self) -> bool:
+        """Check if smart money legend should be drawn"""
+        return self.smart_money_legend
 
 
 # Global singleton instance

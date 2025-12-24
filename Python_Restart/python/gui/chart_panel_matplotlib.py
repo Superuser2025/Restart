@@ -1654,6 +1654,10 @@ class ChartPanel(QWidget):
                     self.draw_liquidity_zones(liq_chart_data)
                     print(f"[ChartOverlay]   → Drew {len(liq_chart_data)} liquidity lines")
 
+            # Draw Legend (if enabled)
+            if visual_controls.should_draw_smart_money_legend():
+                self.draw_smart_money_legend()
+
         except Exception as e:
             print(f"[ChartOverlay] ERROR in draw_chart_overlays: {e}")
             import traceback
@@ -1707,19 +1711,21 @@ class ChartPanel(QWidget):
                     # Handle both datetime objects and unix timestamps
                     if isinstance(timestamp, datetime):
                         dt = timestamp
-                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
+                        # Skip if it's epoch (1970-01-01)
+                        if dt.year > 1970:
+                            time_str = dt.strftime('%H:00 %d.%m.%y')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 86400:  # Skip if less than 1 day from epoch
                         dt = datetime.fromtimestamp(timestamp)
-                    else:
-                        dt = None
-
-                    if dt:
                         time_str = dt.strftime('%H:00 %d.%m.%y')
                 except Exception as e:
                     print(f"[Chart] Error formatting FVG timestamp: {e}")
                     time_str = ''
 
-            # Add label with timestamp on the right side
-            label_text = f"FVG {'↑' if is_bullish else '↓'} {time_str}".strip()
+            # Add label with timestamp on the right side (skip timestamp if not available)
+            if time_str:
+                label_text = f"FVG {'↑' if is_bullish else '↓'} {time_str}"
+            else:
+                label_text = f"FVG {'↑' if is_bullish else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
@@ -1780,19 +1786,21 @@ class ChartPanel(QWidget):
                     # Handle both datetime objects and unix timestamps
                     if isinstance(timestamp, datetime):
                         dt = timestamp
-                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
+                        # Skip if it's epoch (1970-01-01)
+                        if dt.year > 1970:
+                            time_str = dt.strftime('%H:00 %d.%m.%y')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 86400:  # Skip if less than 1 day from epoch
                         dt = datetime.fromtimestamp(timestamp)
-                    else:
-                        dt = None
-
-                    if dt:
                         time_str = dt.strftime('%H:00 %d.%m.%y')
                 except Exception as e:
                     print(f"[Chart] Error formatting OB timestamp: {e}")
                     time_str = ''
 
-            # Add label with timestamp
-            label_text = f"OB {'↑' if is_bullish else '↓'} {time_str}".strip()
+            # Add label with timestamp (skip timestamp if not available)
+            if time_str:
+                label_text = f"OB {'↑' if is_bullish else '↓'} {time_str}"
+            else:
+                label_text = f"OB {'↑' if is_bullish else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
@@ -1844,19 +1852,21 @@ class ChartPanel(QWidget):
                     # Handle both datetime objects and unix timestamps
                     if isinstance(timestamp, datetime):
                         dt = timestamp
-                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
+                        # Skip if it's epoch (1970-01-01)
+                        if dt.year > 1970:
+                            time_str = dt.strftime('%H:00 %d.%m.%y')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 86400:  # Skip if less than 1 day from epoch
                         dt = datetime.fromtimestamp(timestamp)
-                    else:
-                        dt = None
-
-                    if dt:
                         time_str = dt.strftime('%H:00 %d.%m.%y')
                 except Exception as e:
                     print(f"[Chart] Error formatting LIQ timestamp: {e}")
                     time_str = ''
 
-            # Add label with timestamp
-            label_text = f"LIQ {'↑' if is_high else '↓'} {time_str}".strip()
+            # Add label with timestamp (skip timestamp if not available)
+            if time_str:
+                label_text = f"LIQ {'↑' if is_high else '↓'} {time_str}"
+            else:
+                label_text = f"LIQ {'↑' if is_high else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 8,
                 price,
@@ -1870,84 +1880,96 @@ class ChartPanel(QWidget):
             )
 
     def draw_smart_money_legend(self):
-        """Draw legend explaining smart money zones"""
+        """Draw legend explaining smart money zones (toggleable)"""
         try:
-            # Legend position (top-left corner)
-            legend_x = 10
-            legend_y_start = 30
-            line_height = 20
+            from matplotlib.patches import Rectangle, FancyBboxPatch
+
+            # Use normalized axes coordinates (0-1 range)
+            # Position in top-left corner
+            legend_x = 0.02  # 2% from left edge
+            legend_y = 0.98  # 98% from bottom (top of chart)
+            box_width = 0.11  # 11% of chart width
+            item_height = 0.035  # 3.5% of chart height per item
 
             # Legend items with colors
             legend_items = [
-                ('FVG Bullish', '#06B6D4'),
-                ('FVG Bearish', '#D946EF'),
-                ('OB Bullish', '#FBBF24'),
-                ('OB Bearish', '#F59E0B'),
-                ('Liquidity High', '#EF4444'),
-                ('Liquidity Low', '#10B981'),
+                ('FVG Bull', '#06B6D4'),
+                ('FVG Bear', '#D946EF'),
+                ('OB Bull', '#FBBF24'),
+                ('OB Bear', '#F59E0B'),
+                ('Liq High', '#EF4444'),
+                ('Liq Low', '#10B981'),
             ]
 
+            # Calculate total height
+            total_height = (len(legend_items) + 0.8) * item_height
+
             # Draw legend background
-            legend_width = 150
-            legend_height = len(legend_items) * line_height + 20
-            from matplotlib.patches import Rectangle
-            legend_bg = Rectangle(
-                (legend_x - 5, legend_y_start - 15),
-                legend_width,
-                legend_height,
+            legend_bg = FancyBboxPatch(
+                (legend_x, legend_y - total_height),
+                box_width,
+                total_height,
+                boxstyle="round,pad=0.01",
                 facecolor='#0A0E27',
                 edgecolor='#FFFFFF',
-                alpha=0.85,
-                linewidth=2,
-                transform=self.canvas.axes.transData,
+                alpha=0.92,
+                linewidth=1.5,
+                transform=self.canvas.axes.transAxes,  # USE AXES COORDINATES!
+                zorder=1000,
                 clip_on=False
             )
             self.canvas.axes.add_patch(legend_bg)
 
             # Draw legend title
             self.canvas.axes.text(
-                legend_x + 5,
-                legend_y_start,
+                legend_x + box_width/2,
+                legend_y - item_height/2,
                 'SMART MONEY',
-                fontsize=9,
+                fontsize=8,
                 color='#FFFFFF',
                 weight='bold',
-                transform=self.canvas.axes.transData,
+                ha='center',
+                va='center',
+                transform=self.canvas.axes.transAxes,  # USE AXES COORDINATES!
+                zorder=1001,
                 clip_on=False
             )
 
             # Draw legend items
-            y_offset = legend_y_start + 18
-            for label, color in legend_items:
+            for i, (label, color) in enumerate(legend_items):
+                y_pos = legend_y - (i + 1.3) * item_height
+
                 # Color box
                 color_box = Rectangle(
-                    (legend_x + 5, y_offset - 8),
-                    12,
-                    12,
+                    (legend_x + 0.01, y_pos - 0.008),
+                    0.012,
+                    0.016,
                     facecolor=color,
                     edgecolor=color,
-                    alpha=0.7,
-                    transform=self.canvas.axes.transData,
+                    alpha=0.85,
+                    transform=self.canvas.axes.transAxes,  # USE AXES COORDINATES!
+                    zorder=1001,
                     clip_on=False
                 )
                 self.canvas.axes.add_patch(color_box)
 
                 # Label text
                 self.canvas.axes.text(
-                    legend_x + 22,
-                    y_offset,
+                    legend_x + 0.028,
+                    y_pos,
                     label,
                     fontsize=7,
                     color='#FFFFFF',
-                    weight='normal',
-                    transform=self.canvas.axes.transData,
+                    va='center',
+                    transform=self.canvas.axes.transAxes,  # USE AXES COORDINATES!
+                    zorder=1001,
                     clip_on=False
                 )
 
-                y_offset += line_height
-
         except Exception as e:
             print(f"[Chart] Error drawing legend: {e}")
+            import traceback
+            traceback.print_exc()
 
     def draw_sample_fvg(self):
         """Draw Fair Value Gap rectangle (sample)"""
