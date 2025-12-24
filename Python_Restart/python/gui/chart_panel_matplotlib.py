@@ -1726,15 +1726,16 @@ class ChartPanel(QWidget):
                 try:
                     # Handle both datetime objects and unix timestamps
                     if isinstance(timestamp, datetime):
-                        time_str = timestamp.strftime('%d.%m %H:%M')
-                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
+                        # Only show if year >= 2020 (skip epoch)
+                        if timestamp.year >= 2020:
+                            time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 1577836800:  # After Jan 1, 2020
                         dt = datetime.fromtimestamp(timestamp)
                         time_str = dt.strftime('%d.%m %H:%M')
                 except Exception as e:
-                    print(f"[Chart] FVG timestamp format error: {type(timestamp)}, {timestamp}, {e}")
-                    time_str = ''
+                    print(f"[Chart] FVG timestamp={timestamp} (type:{type(timestamp).__name__})")
 
-            # Add label with timestamp when zone was formed
+            # Add label - DON'T show epoch timestamps!
             if time_str:
                 label_text = f"FVG {'↑' if is_bullish else '↓'} {time_str}"
             else:
@@ -1798,15 +1799,16 @@ class ChartPanel(QWidget):
                 try:
                     # Handle both datetime objects and unix timestamps
                     if isinstance(timestamp, datetime):
-                        time_str = timestamp.strftime('%d.%m %H:%M')
-                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
+                        # Only show if year >= 2020 (skip epoch)
+                        if timestamp.year >= 2020:
+                            time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 1577836800:  # After Jan 1, 2020
                         dt = datetime.fromtimestamp(timestamp)
                         time_str = dt.strftime('%d.%m %H:%M')
                 except Exception as e:
-                    print(f"[Chart] OB timestamp format error: {type(timestamp)}, {timestamp}, {e}")
-                    time_str = ''
+                    print(f"[Chart] OB timestamp={timestamp} (type:{type(timestamp).__name__})")
 
-            # Add label with timestamp when zone was formed
+            # Add label - DON'T show epoch timestamps!
             if time_str:
                 label_text = f"OB {'↑' if is_bullish else '↓'} {time_str}"
             else:
@@ -1861,15 +1863,16 @@ class ChartPanel(QWidget):
                 try:
                     # Handle both datetime objects and unix timestamps
                     if isinstance(timestamp, datetime):
-                        time_str = timestamp.strftime('%d.%m %H:%M')
-                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
+                        # Only show if year >= 2020 (skip epoch)
+                        if timestamp.year >= 2020:
+                            time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 1577836800:  # After Jan 1, 2020
                         dt = datetime.fromtimestamp(timestamp)
                         time_str = dt.strftime('%d.%m %H:%M')
                 except Exception as e:
-                    print(f"[Chart] LIQ timestamp format error: {type(timestamp)}, {timestamp}, {e}")
-                    time_str = ''
+                    print(f"[Chart] LIQ timestamp={timestamp} (type:{type(timestamp).__name__})")
 
-            # Add label with timestamp when zone was formed
+            # Add label - DON'T show epoch timestamps!
             if time_str:
                 label_text = f"LIQ {'↑' if is_high else '↓'} {time_str}"
             else:
