@@ -14,6 +14,10 @@ import random
 from core.data_manager import data_manager
 from core.ai_assist_base import AIAssistMixin
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from analysis.order_block_detector import order_block_detector
+from analysis.liquidity_sweep_detector import liquidity_sweep_detector
+from analysis.fair_value_gap_detector import fair_value_gap_detector
+from analysis.market_structure_detector import market_structure_detector
 
 
 class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
@@ -306,6 +310,56 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
             avg_range = sum([c['high'] - c['low'] for c in candles[-10:]]) / 10
             volatility = "HIGH" if high_low_range > avg_range * 1.5 else "NORMAL"
 
+            # ============================================================
+            # SMART MONEY DETECTION
+            # ============================================================
+            smart_money_context = {}
+
+            # Detect Order Blocks
+            order_blocks = order_block_detector.detect_order_blocks(candles, self.current_symbol, lookback=50)
+            valid_obs = [ob for ob in order_blocks if ob['valid'] and not ob['mitigated']]
+            if valid_obs:
+                nearest_ob = valid_obs[0]
+                ob_mid = (nearest_ob['price_high'] + nearest_ob['price_low']) / 2
+                smart_money_context['nearest_ob'] = {
+                    'type': nearest_ob['type'],
+                    'price': ob_mid,
+                    'distance_pips': abs(price - ob_mid) * 10000
+                }
+
+            # Detect Fair Value Gaps
+            fvgs = fair_value_gap_detector.detect_fair_value_gaps(candles, self.current_symbol, lookback=50)
+            unfilled_fvgs = [fvg for fvg in fvgs if not fvg['filled']]
+            if unfilled_fvgs:
+                nearest_fvg = unfilled_fvgs[0]
+                smart_money_context['nearest_fvg'] = {
+                    'type': nearest_fvg['type'],
+                    'price': nearest_fvg['mid'],
+                    'distance_pips': abs(price - nearest_fvg['mid']) * 10000
+                }
+
+            # Detect Liquidity Sweeps
+            sweeps = liquidity_sweep_detector.detect_liquidity_sweeps(candles, self.current_symbol, lookback=50)
+            if sweeps:
+                recent_sweep = sweeps[0]
+                smart_money_context['recent_sweep'] = {
+                    'type': recent_sweep['type'],
+                    'level': recent_sweep['level'],
+                    'expected_direction': recent_sweep['expected_direction']
+                }
+
+            # Detect Market Structure
+            structure_events, current_structure_trend = market_structure_detector.detect_structure_shifts(
+                candles, self.current_symbol, lookback=50
+            )
+            if structure_events:
+                latest_event = structure_events[0]
+                smart_money_context['structure_event'] = {
+                    'type': latest_event['type'],  # BOS or CHoCH
+                    'direction': latest_event['direction'],
+                    'signal': latest_event['signal']  # continuation or reversal
+                }
+
             return {
                 'symbol': self.current_symbol,  # Add symbol to data
                 'price': price,
@@ -315,7 +369,8 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
                 'volatility': volatility,
                 'high': current['high'],
                 'low': current['low'],
-                'sma_20': sma_20
+                'sma_20': sma_20,
+                'smart_money': smart_money_context  # NEW: Smart money context
             }
 
         except Exception as e:
@@ -374,6 +429,7 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
         trend = data['trend']
         volatility = data['volatility']
         price_change_pct = data['price_change_pct']
+        smart_money = data.get('smart_money', {})
 
         # Main narrative with SYMBOL NAME
         if trend == "BULLISH":
@@ -400,6 +456,36 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
             narrative += f"Price has moved <span style='color: #EF4444;'>{price_change_pct:.3f}%</span> lower, "
             narrative += "indicating selling pressure from institutions."
 
+        # ============================================================
+        # SMART MONEY NARRATIVE (NEW)
+        # ============================================================
+        smart_money_narrative = ""
+
+        # Mention nearest Order Block
+        if 'nearest_ob' in smart_money:
+            ob = smart_money['nearest_ob']
+            ob_type_text = "demand zone" if ob['type'] == 'demand' else "supply zone"
+            smart_money_narrative += f"<br><br><span style='color: #3B82F6;'>💰 Order Block:</span> Nearest {ob_type_text} at {ob['price']:.5f} ({ob['distance_pips']:.1f} pips away). "
+
+        # Mention nearest FVG
+        if 'nearest_fvg' in smart_money:
+            fvg = smart_money['nearest_fvg']
+            fvg_direction = "bullish" if fvg['type'] == 'bullish' else "bearish"
+            smart_money_narrative += f"<span style='color: #F59E0B;'>📊 FVG:</span> {fvg_direction.capitalize()} Fair Value Gap at {fvg['price']:.5f} ({fvg['distance_pips']:.1f} pips). "
+
+        # Mention recent liquidity sweep
+        if 'recent_sweep' in smart_money:
+            sweep = smart_money['recent_sweep']
+            sweep_type = "high" if sweep['type'] == 'high_sweep' else "low"
+            smart_money_narrative += f"<span style='color: #EF4444;'>⚡ Liquidity Sweep:</span> Recent {sweep_type} sweep detected - expect {sweep['expected_direction']} move. "
+
+        # Mention market structure event
+        if 'structure_event' in smart_money:
+            event = smart_money['structure_event']
+            event_color = "#10B981" if event['direction'] == 'bullish' else "#EF4444"
+            smart_money_narrative += f"<span style='color: {event_color};'>📈 Structure:</span> {event['type']} ({event['signal']}) - {event['direction']} bias. "
+
+        narrative += smart_money_narrative
         return f"<p style='font-size: 12pt; line-height: 1.6;'>{narrative}</p>"
 
     def generate_prediction(self, data: Dict) -> str:
@@ -435,8 +521,9 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
         symbol = data.get('symbol', self.current_symbol)
         price = data['price']
         trend = data['trend']
+        smart_money = data.get('smart_money', {})
 
-        # Random commentary based on market state - ALL WITH SYMBOL NAME
+        # Build templates list with smart money context
         templates = [
             f"[{timestamp}] {symbol}: Price testing {price:.5f} - {trend} structure holding",
             f"[{timestamp}] {symbol}: Institutional order flow detected at {price:.5f}",
@@ -445,6 +532,22 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
             f"[{timestamp}] {symbol}: Key support/resistance interaction at {price:.5f}",
             f"[{timestamp}] {symbol}: Price respecting major technical levels - {trend} bias confirmed"
         ]
+
+        # Add smart money-specific commentary
+        if 'nearest_ob' in smart_money:
+            ob_type = "demand" if smart_money['nearest_ob']['type'] == 'demand' else "supply"
+            templates.append(f"[{timestamp}] {symbol}: Approaching {ob_type} Order Block - institutional zone")
+
+        if 'nearest_fvg' in smart_money:
+            templates.append(f"[{timestamp}] {symbol}: FVG zone ahead - price likely to fill the gap")
+
+        if 'recent_sweep' in smart_money:
+            direction = smart_money['recent_sweep']['expected_direction']
+            templates.append(f"[{timestamp}] {symbol}: Liquidity sweep complete - {direction} bias active")
+
+        if 'structure_event' in smart_money:
+            event = smart_money['structure_event']
+            templates.append(f"[{timestamp}] {symbol}: {event['type']} detected - {event['signal']} signal")
 
         return random.choice(templates)
 
