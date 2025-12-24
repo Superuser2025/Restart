@@ -1537,40 +1537,149 @@ class ChartPanel(QWidget):
         return timeframe_settings.get(self.current_timeframe, timeframe_settings['H4'])
 
     def draw_chart_overlays(self):
-        """Draw FVG/OB/Liquidity zones on chart from REAL EA data - RESPECTS VISUAL CONTROLS"""
+        """Draw FVG/OB/Liquidity zones on chart from REAL SMART MONEY DETECTORS"""
         try:
-            # Get zone data from EA via data_manager
-            zones = data_manager.get_zones()
+            # ============================================================
+            # USE REAL SMART MONEY DETECTORS (not EA data!)
+            # ============================================================
+            from analysis.order_block_detector import order_block_detector
+            from analysis.fair_value_gap_detector import fair_value_gap_detector
+            from analysis.liquidity_sweep_detector import liquidity_sweep_detector
+
+            # Get candles from chart data
+            if self.candle_data is None or len(self.candle_data) < 10:
+                return
+
+            # Convert to candle list format (handle both DataFrame and list)
+            candles = []
+
+            # Check if candle_data is a DataFrame (has iterrows method)
+            if hasattr(self.candle_data, 'iterrows'):
+                # It's a DataFrame - convert to list
+                for idx, row in self.candle_data.iterrows():
+                    candles.append({
+                        'time': row.get('time', idx),
+                        'open': row['open'],
+                        'high': row['high'],
+                        'low': row['low'],
+                        'close': row['close'],
+                        'tick_volume': row.get('tick_volume', 0)
+                    })
+            elif isinstance(self.candle_data, list):
+                # It's already a list - use directly or ensure correct format
+                for candle in self.candle_data:
+                    if isinstance(candle, dict):
+                        # Already correct format
+                        candles.append(candle)
+                    else:
+                        # Unknown format - skip
+                        continue
+            else:
+                print(f"[ChartOverlay] ERROR: Unknown candle_data type: {type(self.candle_data)}")
+                return
+
+            print(f"\n[ChartOverlay] ═══ SMART MONEY DETECTION for {self.current_symbol} ═══")
+            print(f"[ChartOverlay] → Analyzing {len(candles)} candles")
 
             # Draw FVGs (Fair Value Gaps) - CHECK VISUAL CONTROL
             if visual_controls.should_draw_fvg_zones():
-                fvgs = zones.get('fvgs', [])
+                print(f"[ChartOverlay] --- FVG DETECTION ---")
+                fvgs = fair_value_gap_detector.detect_fair_value_gaps(
+                    candles, self.current_symbol, lookback=150, min_gap_pips=3
+                )
+                print(f"[ChartOverlay] Total FVGs: {len(fvgs)}, Unfilled: {len([f for f in fvgs if not f['filled']])}")
+
                 if fvgs and len(fvgs) > 0:
-                    self.draw_fvg_zones(fvgs)
-                else:
-                    # Fallback to sample if no real data
-                    self.draw_sample_fvg()
+                    # Convert to chart format with timestamps
+                    fvg_chart_data = []
+                    for i, fvg in enumerate(fvgs[:10]):  # Top 10
+                        if not fvg['filled']:
+                            # Get timestamp from the candle at this index
+                            candle_idx = fvg.get('candle_index', len(candles) - 1)
+                            if 0 <= candle_idx < len(candles):
+                                # Use 'timestamp' field (has real time), not 'time' (often 0)
+                                candle_time = candles[candle_idx].get('timestamp') or candles[candle_idx].get('time')
+                                print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, time={candle_time}")
+                            else:
+                                candle_time = None
+                                print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, BAD INDEX={candle_idx}")
+
+                            fvg_chart_data.append({
+                                'top': fvg['top'],
+                                'bottom': fvg['bottom'],
+                                'is_bullish': fvg['type'] == 'bullish',
+                                'filled': False,
+                                'ever_visited': fvg['fill_percentage'] > 0,
+                                'timestamp': candle_time,  # Use candle's actual time
+                                'candle_index': candle_idx
+                            })
+                    self.draw_fvg_zones(fvg_chart_data)
+                    print(f"[ChartOverlay]   → Drew {len(fvg_chart_data)} FVG zones")
 
             # Draw Order Blocks - CHECK VISUAL CONTROL
             if visual_controls.should_draw_order_blocks():
-                order_blocks = zones.get('order_blocks', [])
+                print(f"[ChartOverlay] --- ORDER BLOCK DETECTION ---")
+                order_blocks = order_block_detector.detect_order_blocks(
+                    candles, self.current_symbol, lookback=150, min_impulse_pips=8
+                )
+                valid_obs = [ob for ob in order_blocks if ob['valid'] and not ob['mitigated']]
+                print(f"[ChartOverlay] Total OBs: {len(order_blocks)}, Valid: {len(valid_obs)}")
+
                 if order_blocks and len(order_blocks) > 0:
-                    self.draw_order_block_zones(order_blocks)
-                else:
-                    # Fallback to sample if no real data
-                    self.draw_sample_order_block()
+                    # Convert to chart format with timestamps
+                    ob_chart_data = []
+                    display_obs = valid_obs[:10] if valid_obs else order_blocks[:10]
+                    for i, ob in enumerate(display_obs):
+                        # Get timestamp from the candle at this index
+                        candle_idx = ob.get('candle_index', len(candles) - 1)
+                        if 0 <= candle_idx < len(candles):
+                            # Use 'timestamp' field (has real time), not 'time' (often 0)
+                            candle_time = candles[candle_idx].get('timestamp') or candles[candle_idx].get('time')
+                            print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, time={candle_time}")
+                        else:
+                            candle_time = None
+                            print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, BAD INDEX={candle_idx}")
+
+                        ob_chart_data.append({
+                            'top': ob['price_high'],
+                            'bottom': ob['price_low'],
+                            'is_bullish': ob['type'] == 'demand',
+                            'invalidated': ob['mitigated'],
+                            'timestamp': candle_time,  # Use candle's actual time
+                            'candle_index': candle_idx
+                        })
+                    self.draw_order_block_zones(ob_chart_data)
+                    print(f"[ChartOverlay]   → Drew {len(ob_chart_data)} OB zones")
 
             # Draw Liquidity Zones - CHECK VISUAL CONTROL
             if visual_controls.should_draw_liquidity_lines():
-                liquidity = zones.get('liquidity', [])
-                if liquidity and len(liquidity) > 0:
-                    self.draw_liquidity_zones(liquidity)
-                else:
-                    # Fallback to sample if no real data
-                    self.draw_sample_liquidity()
+                print(f"[ChartOverlay] --- LIQUIDITY SWEEP DETECTION ---")
+                sweeps = liquidity_sweep_detector.detect_liquidity_sweeps(
+                    candles, self.current_symbol, lookback=150, tolerance_pips=5
+                )
+                print(f"[ChartOverlay] Total Sweeps: {len(sweeps)}")
+
+                if sweeps and len(sweeps) > 0:
+                    # Convert to chart format with timestamps
+                    liq_chart_data = []
+                    for sweep in sweeps[:5]:
+                        liq_chart_data.append({
+                            'level': sweep['level'],
+                            'is_high': sweep['type'] == 'high_sweep',
+                            'timestamp': sweep.get('timestamp'),  # Use timestamp directly from detector
+                            'candle_index': sweep.get('candle_index')
+                        })
+                    self.draw_liquidity_zones(liq_chart_data)
+                    print(f"[ChartOverlay]   → Drew {len(liq_chart_data)} liquidity lines")
+
+            # Draw Legend (if enabled)
+            if visual_controls.should_draw_smart_money_legend():
+                self.draw_smart_money_legend()
 
         except Exception as e:
-            pass
+            print(f"[ChartOverlay] ERROR in draw_chart_overlays: {e}")
+            import traceback
+            traceback.print_exc()
 
     def draw_fvg_zones(self, fvgs: list):
         """Draw actual FVG zones from EA data"""
@@ -1611,17 +1720,37 @@ class ChartPanel(QWidget):
             )
             self.canvas.axes.add_patch(rect)
 
-            # Add label on the right side
-            label_text = 'FVG↑' if is_bullish else 'FVG↓'
+            # Format timestamp from candle time
+            from datetime import datetime
+            timestamp = fvg.get('timestamp')
+            time_str = ''
+            if timestamp:
+                try:
+                    # Handle both datetime objects and unix timestamps
+                    if isinstance(timestamp, datetime):
+                        # Only show if year >= 2020 (skip epoch)
+                        if timestamp.year >= 2020:
+                            time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 1577836800:  # After Jan 1, 2020
+                        dt = datetime.fromtimestamp(timestamp)
+                        time_str = dt.strftime('%d.%m %H:%M')
+                except Exception as e:
+                    print(f"[Chart] FVG timestamp={timestamp} (type:{type(timestamp).__name__})")
+
+            # Add label - DON'T show epoch timestamps!
+            if time_str:
+                label_text = f"FVG {'↑' if is_bullish else '↓'} {time_str}"
+            else:
+                label_text = f"FVG {'↑' if is_bullish else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
                 label_text,
-                fontsize=7,
+                fontsize=8,
                 color=color,
                 weight='bold',
                 ha='right',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='#0A0E27', edgecolor=color, alpha=0.9)
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#0A0E27', edgecolor=color, alpha=0.9, linewidth=1.5)
             )
 
     def draw_order_block_zones(self, order_blocks: list):
@@ -1664,26 +1793,46 @@ class ChartPanel(QWidget):
             )
             self.canvas.axes.add_patch(rect)
 
-            # Add label with test count
-            label_text = f'OB↑ [{test_count}]' if is_bullish else f'OB↓ [{test_count}]'
+            # Format timestamp from candle time
+            from datetime import datetime
+            timestamp = ob.get('timestamp')
+            time_str = ''
+            if timestamp:
+                try:
+                    # Handle both datetime objects and unix timestamps
+                    if isinstance(timestamp, datetime):
+                        # Only show if year >= 2020 (skip epoch)
+                        if timestamp.year >= 2020:
+                            time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 1577836800:  # After Jan 1, 2020
+                        dt = datetime.fromtimestamp(timestamp)
+                        time_str = dt.strftime('%d.%m %H:%M')
+                except Exception as e:
+                    print(f"[Chart] OB timestamp={timestamp} (type:{type(timestamp).__name__})")
+
+            # Add label - DON'T show epoch timestamps!
+            if time_str:
+                label_text = f"OB {'↑' if is_bullish else '↓'} {time_str}"
+            else:
+                label_text = f"OB {'↑' if is_bullish else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
                 label_text,
-                fontsize=7,
+                fontsize=8,
                 color=color,
                 weight='bold',
                 ha='right',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='#0A0E27', edgecolor=color, alpha=0.9)
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#0A0E27', edgecolor=color, alpha=0.9, linewidth=1.5)
             )
 
     def draw_liquidity_zones(self, liquidity: list):
-        """Draw actual Liquidity zones from EA data"""
+        """Draw actual Liquidity zones from smart money detectors"""
         if not self.candle_data:
             return
 
         for liq in liquidity:
-            price = liq.get('price')
+            price = liq.get('level')  # FIXED: Use 'level' from detector output
             is_high = liq.get('is_high', True)  # True = resistance, False = support
             swept = liq.get('swept', False)
             touch_count = liq.get('touch_count', 0)
@@ -1708,22 +1857,131 @@ class ChartPanel(QWidget):
                 label=f'Liquidity ({"Resistance" if is_high else "Support"})'
             )
 
-            # Add label
-            label_text = f'LIQ↑ [{touch_count}]' if is_high else f'LIQ↓ [{touch_count}]'
-            if swept:
-                label_text += ' SWEPT'
+            # Format timestamp from candle time
+            from datetime import datetime
+            timestamp = liq.get('timestamp')
+            time_str = ''
+            if timestamp:
+                try:
+                    # Handle both datetime objects and unix timestamps
+                    if isinstance(timestamp, datetime):
+                        # Only show if year >= 2020 (skip epoch)
+                        if timestamp.year >= 2020:
+                            time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 1577836800:  # After Jan 1, 2020
+                        dt = datetime.fromtimestamp(timestamp)
+                        time_str = dt.strftime('%d.%m %H:%M')
+                except Exception as e:
+                    print(f"[Chart] LIQ timestamp={timestamp} (type:{type(timestamp).__name__})")
 
+            # Add label - DON'T show epoch timestamps!
+            if time_str:
+                label_text = f"LIQ {'↑' if is_high else '↓'} {time_str}"
+            else:
+                label_text = f"LIQ {'↑' if is_high else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 8,
                 price,
                 label_text,
-                fontsize=7,
+                fontsize=8,
                 color=color,
                 weight='bold',
                 ha='right',
                 va='center',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='#0A0E27', edgecolor=color, alpha=0.9)
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#0A0E27', edgecolor=color, alpha=0.9, linewidth=1.5)
             )
+
+    def draw_smart_money_legend(self):
+        """Draw legend explaining smart money zones (toggleable)"""
+        try:
+            from matplotlib.patches import Rectangle, FancyBboxPatch
+
+            # Use normalized axes coordinates (0-1 range)
+            # Position in top-left corner
+            legend_x = 0.02  # 2% from left edge
+            legend_y = 0.98  # 98% from bottom (top of chart)
+            box_width = 0.11  # 11% of chart width
+            item_height = 0.035  # 3.5% of chart height per item
+
+            # Legend items with colors
+            legend_items = [
+                ('FVG Bull', '#06B6D4'),
+                ('FVG Bear', '#D946EF'),
+                ('OB Bull', '#FBBF24'),
+                ('OB Bear', '#F59E0B'),
+                ('Liq High', '#EF4444'),
+                ('Liq Low', '#10B981'),
+            ]
+
+            # Calculate total height
+            total_height = (len(legend_items) + 0.8) * item_height
+
+            # Draw legend background
+            legend_bg = FancyBboxPatch(
+                (legend_x, legend_y - total_height),
+                box_width,
+                total_height,
+                boxstyle="round,pad=0.01",
+                facecolor='#0A0E27',
+                edgecolor='#FFFFFF',
+                alpha=0.92,
+                linewidth=1.5,
+                transform=self.canvas.axes.transAxes,  # USE AXES COORDINATES!
+                zorder=1000,
+                clip_on=False
+            )
+            self.canvas.axes.add_patch(legend_bg)
+
+            # Draw legend title
+            self.canvas.axes.text(
+                legend_x + box_width/2,
+                legend_y - item_height/2,
+                'SMART MONEY',
+                fontsize=8,
+                color='#FFFFFF',
+                weight='bold',
+                ha='center',
+                va='center',
+                transform=self.canvas.axes.transAxes,  # USE AXES COORDINATES!
+                zorder=1001,
+                clip_on=False
+            )
+
+            # Draw legend items
+            for i, (label, color) in enumerate(legend_items):
+                y_pos = legend_y - (i + 1.3) * item_height
+
+                # Color box
+                color_box = Rectangle(
+                    (legend_x + 0.01, y_pos - 0.008),
+                    0.012,
+                    0.016,
+                    facecolor=color,
+                    edgecolor=color,
+                    alpha=0.85,
+                    transform=self.canvas.axes.transAxes,  # USE AXES COORDINATES!
+                    zorder=1001,
+                    clip_on=False
+                )
+                self.canvas.axes.add_patch(color_box)
+
+                # Label text
+                self.canvas.axes.text(
+                    legend_x + 0.028,
+                    y_pos,
+                    label,
+                    fontsize=7,
+                    color='#FFFFFF',
+                    va='center',
+                    transform=self.canvas.axes.transAxes,  # USE AXES COORDINATES!
+                    zorder=1001,
+                    clip_on=False
+                )
+
+        except Exception as e:
+            print(f"[Chart] Error drawing legend: {e}")
+            import traceback
+            traceback.print_exc()
 
     def draw_sample_fvg(self):
         """Draw Fair Value Gap rectangle (sample)"""

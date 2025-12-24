@@ -14,6 +14,10 @@ from widgets.mtf_structure_map import mtf_structure_map
 from core.ai_assist_base import AIAssistMixin
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 from core.multi_symbol_manager import get_all_symbols
+from analysis.order_block_detector import order_block_detector
+from analysis.liquidity_sweep_detector import liquidity_sweep_detector
+from analysis.fair_value_gap_detector import fair_value_gap_detector
+from analysis.market_structure_detector import market_structure_detector
 
 
 class MTFStructureWidget(QWidget, AIAssistMixin):
@@ -131,6 +135,50 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
                     'timeframe': current_timeframe
                 }
 
+            # ============================================================
+            # SMART MONEY DETECTION - Add OB/FVG/Liquidity as key levels
+            # ============================================================
+            smart_money_levels = []
+
+            # DETECT ORDER BLOCKS
+            order_blocks = order_block_detector.detect_order_blocks(candles, self.current_symbol, lookback=50)
+            for ob in order_blocks[:3]:  # Top 3 OBs
+                if ob['valid'] and not ob['mitigated']:
+                    ob_mid = (ob['price_high'] + ob['price_low']) / 2
+                    smart_money_levels.append({
+                        'type': f"OB ({ob['type'].upper()})",
+                        'price': ob_mid,
+                        'price_range': f"{ob['price_low']:.5f} - {ob['price_high']:.5f}",
+                        'strength': ob['strength'],
+                        'distance_pips': abs(current_price - ob_mid) * 10000
+                    })
+
+            # DETECT FAIR VALUE GAPS
+            fvgs = fair_value_gap_detector.detect_fair_value_gaps(candles, self.current_symbol, lookback=50)
+            for fvg in fvgs[:3]:  # Top 3 FVGs
+                if not fvg['filled']:
+                    smart_money_levels.append({
+                        'type': f"FVG ({fvg['type'].upper()})",
+                        'price': fvg['mid'],
+                        'price_range': f"{fvg['bottom']:.5f} - {fvg['top']:.5f}",
+                        'strength': fvg['strength'],
+                        'distance_pips': abs(current_price - fvg['mid']) * 10000
+                    })
+
+            # DETECT LIQUIDITY SWEEPS
+            sweeps = liquidity_sweep_detector.detect_liquidity_sweeps(candles, self.current_symbol, lookback=50)
+            for sweep in sweeps[:2]:  # Top 2 sweeps
+                smart_money_levels.append({
+                    'type': f"Liquidity Sweep ({sweep['type'].upper()})",
+                    'price': sweep['level'],
+                    'price_range': None,
+                    'strength': sweep['strength'],
+                    'distance_pips': abs(current_price - sweep['level']) * 10000
+                })
+
+            # Sort by distance (nearest first)
+            smart_money_levels.sort(key=lambda x: x['distance_pips'])
+
             # Build structure data
             structure_data = {
                 'trend_analysis': trends,
@@ -138,6 +186,7 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
                 'nearest_resistance': nearest_resistance,
                 'current_price': current_price,
                 'confluence_zones': [],  # Would require multi-timeframe data
+                'smart_money_levels': smart_money_levels,  # NEW: Smart money key levels
                 'last_update': datetime.now()
             }
 
@@ -147,6 +196,12 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
                 print(f"[MTF Structure]   → Nearest Resistance: {nearest_resistance['price']:.5f}")
             if nearest_support:
                 print(f"[MTF Structure]   → Nearest Support: {nearest_support['price']:.5f}")
+
+            # Log smart money levels
+            if smart_money_levels:
+                print(f"[MTF Structure]   → Smart Money Levels detected: {len(smart_money_levels)}")
+                for i, level in enumerate(smart_money_levels[:3], 1):
+                    print(f"[MTF Structure]     {i}. {level['type']} @ {level['price']:.5f} ({level['distance_pips']:.1f} pips, strength {level['strength']:.0f})")
 
             self.update_structure_data(structure_data)
             self.status_label.setText(f"Live: {self.current_symbol}")
@@ -248,6 +303,19 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
 
         confluence_group.setLayout(confluence_layout)
         layout.addWidget(confluence_group)
+
+        # === SMART MONEY LEVELS ===
+        smart_money_group = QGroupBox("💰 Smart Money Key Levels")
+        smart_money_layout = QVBoxLayout()
+
+        self.smart_money_text = QTextEdit()
+        self.smart_money_text.setReadOnly(True)
+        self.smart_money_text.setMaximumHeight(150)
+        self.smart_money_text.setFont(QFont("Courier", 9))
+        smart_money_layout.addWidget(self.smart_money_text)
+
+        smart_money_group.setLayout(smart_money_layout)
+        layout.addWidget(smart_money_group)
 
         # === AI SUGGESTION FRAME ===
         self.create_ai_suggestion_frame(layout)
@@ -389,6 +457,34 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
             self.confluence_text.setPlainText(''.join(confluence_text))
         else:
             self.confluence_text.setPlainText("No confluence zones detected")
+
+        # Update smart money levels
+        smart_money_levels = structure_data.get('smart_money_levels', [])
+        if smart_money_levels:
+            smart_money_text = []
+            for i, level in enumerate(smart_money_levels[:5], 1):
+                level_type = level['type']
+                price = level['price']
+                strength = level['strength']
+                distance = level['distance_pips']
+
+                # Add range if available (OB/FVG have ranges)
+                if level['price_range']:
+                    smart_money_text.append(
+                        f"{i}. {level_type}\n"
+                        f"   Price: {price:.5f} (Range: {level['price_range']})\n"
+                        f"   Distance: {distance:.1f} pips | Strength: {strength:.0f}/100\n\n"
+                    )
+                else:
+                    smart_money_text.append(
+                        f"{i}. {level_type}\n"
+                        f"   Price: {price:.5f}\n"
+                        f"   Distance: {distance:.1f} pips | Strength: {strength:.0f}/100\n\n"
+                    )
+
+            self.smart_money_text.setPlainText(''.join(smart_money_text))
+        else:
+            self.smart_money_text.setPlainText("No smart money levels detected")
 
         # Update status
         last_update = structure_data.get('last_update')

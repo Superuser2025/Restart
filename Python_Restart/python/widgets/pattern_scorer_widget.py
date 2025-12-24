@@ -184,24 +184,32 @@ class PatternScorerWidget(QWidget, AIAssistMixin):
                 pattern_type = opp.get('pattern_type', 'Unknown Pattern')
                 entry_price = opp.get('entry_price', 0.0)
 
-                # Calculate scoring factors from opportunity data
-                quality = opp.get('quality', 50)
+                # CRITICAL: Use REAL smart money flags from Week 1 detectors!
+                # These are now set by real detector logic, not random values
+                at_order_block = opp.get('order_block_valid', False)
+                at_fvg = opp.get('at_fvg', False)
+                liquidity_sweep = opp.get('liquidity_sweep', False)
+                structure_aligned = opp.get('structure_aligned', False)
 
-                # Use pattern scorer to create a score
+                # Calculate volume ratio from opportunity data
+                quality = opp.get('quality', 50)
+                volume_ratio = 1.0 + (quality / 100.0)  # 50% quality = 1.5x volume
+
+                # Use pattern scorer to create a score with REAL smart money data
                 pattern_score = pattern_scorer.score_pattern(
                     pattern_type=pattern_type,
                     price_level=entry_price,
-                    at_fvg=quality >= 70,  # High quality suggests FVG
-                    at_order_block=quality >= 75,  # Very high quality suggests OB
-                    at_liquidity=quality >= 60,
-                    volume_ratio=1.5 if quality >= 65 else 1.0,
-                    after_sweep=quality >= 80,
-                    mtf_h4_aligned=market_state.get('trend', '') == 'UPTREND',
-                    mtf_h1_aligned=market_state.get('trend', '') == 'UPTREND',
-                    mtf_m15_aligned=market_state.get('trend', '') == 'UPTREND',
+                    at_fvg=at_fvg,  # REAL FVG detection
+                    at_order_block=at_order_block,  # REAL OB validation
+                    at_liquidity=liquidity_sweep,  # REAL liquidity sweep detection
+                    volume_ratio=volume_ratio,
+                    after_sweep=liquidity_sweep,  # Same as at_liquidity
+                    mtf_h4_aligned=structure_aligned,  # REAL structure alignment
+                    mtf_h1_aligned=structure_aligned,
+                    mtf_m15_aligned=structure_aligned,
                     in_session=market_state.get('session', 'UNKNOWN'),
-                    with_structure=True,
-                    swing_level=quality >= 70
+                    with_structure=structure_aligned,
+                    swing_level=at_order_block or at_fvg  # OB/FVG are swing levels
                 )
 
                 print(f"[PatternScorer]   → Scored opportunity pattern: {pattern_type}, Score: {pattern_score.total_score:.1f}")

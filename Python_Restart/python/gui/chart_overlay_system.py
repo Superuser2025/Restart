@@ -176,28 +176,45 @@ class ChartOverlaySystem(QWidget):
 
             # Draw zone rectangle with transparency
             zone_color = QColor(zone.color)
-            zone_color.setAlpha(40)  # Semi-transparent
+            zone_color.setAlpha(120)  # INCREASED: More visible (was 40)
             painter.setBrush(QBrush(zone_color))
 
             # Border
             border_color = QColor(zone.color)
-            border_color.setAlpha(180)
-            painter.setPen(QPen(border_color, 2))
+            border_color.setAlpha(220)  # INCREASED: Brighter border (was 180)
+            painter.setPen(QPen(border_color, 3))  # Thicker border (was 2)
 
             # Draw rectangle
             painter.drawRect(0, y_top, self.width(), zone_height)
 
-            # Draw zone label
+            # Draw zone label with background
             label_color = QColor(zone.color)
             label_color.setAlpha(255)
-            painter.setPen(QPen(label_color, 1))
-            painter.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+
+            # Label text with price range
+            if zone.zone_type in ["Order Block", "FVG"]:
+                label_text = f"{zone.name}: {zone.bottom:.5f} - {zone.top:.5f}"
+            else:
+                label_text = f"{zone.name}: {zone.top:.5f}"
 
             # Label position
             label_x = 10
-            label_y = y_top + (zone_height // 2) + 5
+            label_y = y_top + 15
 
-            painter.drawText(label_x, label_y, f"{zone.name} ({zone.top:.5f})")
+            # Draw label background for better visibility
+            painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            text_rect = painter.fontMetrics().boundingRect(label_text)
+            bg_rect = text_rect.adjusted(-4, -2, 4, 2)
+            bg_rect.translate(label_x, label_y - text_rect.height())
+
+            bg_color = QColor(0, 0, 0, 180)
+            painter.setBrush(QBrush(bg_color))
+            painter.setPen(QPen(label_color, 2))
+            painter.drawRoundedRect(bg_rect, 4, 4)
+
+            # Draw label text
+            painter.setPen(QPen(label_color, 1))
+            painter.drawText(label_x, label_y, label_text)
 
     def draw_analysis_panel(self, painter: QPainter):
         """Draw real-time analysis overlay panel"""

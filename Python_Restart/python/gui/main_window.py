@@ -589,6 +589,17 @@ class MainWindow(QMainWindow):
         print(f"[Main Window] Setting changed: {setting_name} = {value}")
         self.status_label.setText(f"Setting updated: {setting_name}")
 
+        # Handle Chart Visual toggles
+        if setting_name.startswith('visual_'):
+            from core.visual_controls import visual_controls
+            visual_name = setting_name.replace('visual_', '')
+            visual_controls.set_visual(visual_name, value)
+
+            # Trigger chart redraw
+            if hasattr(self, 'chart_panel'):
+                self.chart_panel.plot_candlesticks()
+                print(f"[Main Window] Chart redrawn with {visual_name} {'ON' if value else 'OFF'}")
+
         # Handle update speed changes
         if setting_name == 'update_speed':
             # Map speed to milliseconds
