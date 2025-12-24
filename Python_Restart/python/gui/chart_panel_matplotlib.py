@@ -1547,20 +1547,36 @@ class ChartPanel(QWidget):
             from analysis.liquidity_sweep_detector import liquidity_sweep_detector
 
             # Get candles from chart data
-            if not self.candle_data or len(self.candle_data) < 10:
+            if self.candle_data is None or len(self.candle_data) < 10:
                 return
 
-            # Convert DataFrame to candle list format
+            # Convert to candle list format (handle both DataFrame and list)
             candles = []
-            for idx, row in self.candle_data.iterrows():
-                candles.append({
-                    'time': row.get('time', idx),
-                    'open': row['open'],
-                    'high': row['high'],
-                    'low': row['low'],
-                    'close': row['close'],
-                    'tick_volume': row.get('tick_volume', 0)
-                })
+
+            # Check if candle_data is a DataFrame (has iterrows method)
+            if hasattr(self.candle_data, 'iterrows'):
+                # It's a DataFrame - convert to list
+                for idx, row in self.candle_data.iterrows():
+                    candles.append({
+                        'time': row.get('time', idx),
+                        'open': row['open'],
+                        'high': row['high'],
+                        'low': row['low'],
+                        'close': row['close'],
+                        'tick_volume': row.get('tick_volume', 0)
+                    })
+            elif isinstance(self.candle_data, list):
+                # It's already a list - use directly or ensure correct format
+                for candle in self.candle_data:
+                    if isinstance(candle, dict):
+                        # Already correct format
+                        candles.append(candle)
+                    else:
+                        # Unknown format - skip
+                        continue
+            else:
+                print(f"[ChartOverlay] ERROR: Unknown candle_data type: {type(self.candle_data)}")
+                return
 
             print(f"\n[ChartOverlay] ═══ SMART MONEY DETECTION for {self.current_symbol} ═══")
             print(f"[ChartOverlay] → Analyzing {len(candles)} candles")
