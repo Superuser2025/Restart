@@ -1594,15 +1594,23 @@ class ChartPanel(QWidget):
                     fvg_chart_data = []
                     for i, fvg in enumerate(fvgs[:10]):  # Top 10
                         if not fvg['filled']:
-                            print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}")
+                            # Get timestamp from the candle at this index
+                            candle_idx = fvg.get('candle_index', len(candles) - 1)
+                            if 0 <= candle_idx < len(candles):
+                                candle_time = candles[candle_idx].get('time')
+                                print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, time={candle_time}")
+                            else:
+                                candle_time = None
+                                print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, BAD INDEX={candle_idx}")
+
                             fvg_chart_data.append({
                                 'top': fvg['top'],
                                 'bottom': fvg['bottom'],
                                 'is_bullish': fvg['type'] == 'bullish',
                                 'filled': False,
                                 'ever_visited': fvg['fill_percentage'] > 0,
-                                'timestamp': fvg.get('timestamp'),  # Use timestamp directly from detector
-                                'candle_index': fvg.get('candle_index')
+                                'timestamp': candle_time,  # Use candle's actual time
+                                'candle_index': candle_idx
                             })
                     self.draw_fvg_zones(fvg_chart_data)
                     print(f"[ChartOverlay]   → Drew {len(fvg_chart_data)} FVG zones")
@@ -1621,14 +1629,22 @@ class ChartPanel(QWidget):
                     ob_chart_data = []
                     display_obs = valid_obs[:10] if valid_obs else order_blocks[:10]
                     for i, ob in enumerate(display_obs):
-                        print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}")
+                        # Get timestamp from the candle at this index
+                        candle_idx = ob.get('candle_index', len(candles) - 1)
+                        if 0 <= candle_idx < len(candles):
+                            candle_time = candles[candle_idx].get('time')
+                            print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, time={candle_time}")
+                        else:
+                            candle_time = None
+                            print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, BAD INDEX={candle_idx}")
+
                         ob_chart_data.append({
                             'top': ob['price_high'],
                             'bottom': ob['price_low'],
                             'is_bullish': ob['type'] == 'demand',
                             'invalidated': ob['mitigated'],
-                            'timestamp': ob.get('timestamp'),  # Use timestamp directly from detector
-                            'candle_index': ob.get('candle_index')
+                            'timestamp': candle_time,  # Use candle's actual time
+                            'candle_index': candle_idx
                         })
                     self.draw_order_block_zones(ob_chart_data)
                     print(f"[ChartOverlay]   → Drew {len(ob_chart_data)} OB zones")
@@ -1702,7 +1718,7 @@ class ChartPanel(QWidget):
             )
             self.canvas.axes.add_patch(rect)
 
-            # Format timestamp as "FVG HH:00 DD.MM.YY"
+            # Format timestamp from candle time
             from datetime import datetime
             timestamp = fvg.get('timestamp')
             time_str = ''
@@ -1710,20 +1726,19 @@ class ChartPanel(QWidget):
                 try:
                     # Handle both datetime objects and unix timestamps
                     if isinstance(timestamp, datetime):
-                        dt = timestamp
-                        # Only show if year >= 2020 (valid recent data)
-                        if dt.year >= 2020:
-                            time_str = dt.strftime('%H:00 %d.%m.%y')
-                    elif isinstance(timestamp, (int, float)) and timestamp > 1577836800:  # Jan 1, 2020
+                        time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
                         dt = datetime.fromtimestamp(timestamp)
-                        if dt.year >= 2020:
-                            time_str = dt.strftime('%H:00 %d.%m.%y')
+                        time_str = dt.strftime('%d.%m %H:%M')
                 except Exception as e:
-                    print(f"[Chart] FVG timestamp error: {e}, value: {timestamp}")
+                    print(f"[Chart] FVG timestamp format error: {type(timestamp)}, {timestamp}, {e}")
                     time_str = ''
 
-            # Add label WITHOUT timestamp (timestamps unreliable, just show zone type)
-            label_text = f"FVG {'↑' if is_bullish else '↓'}"
+            # Add label with timestamp when zone was formed
+            if time_str:
+                label_text = f"FVG {'↑' if is_bullish else '↓'} {time_str}"
+            else:
+                label_text = f"FVG {'↑' if is_bullish else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
@@ -1775,8 +1790,27 @@ class ChartPanel(QWidget):
             )
             self.canvas.axes.add_patch(rect)
 
-            # Add label WITHOUT timestamp (timestamps unreliable, just show zone type)
-            label_text = f"OB {'↑' if is_bullish else '↓'}"
+            # Format timestamp from candle time
+            from datetime import datetime
+            timestamp = ob.get('timestamp')
+            time_str = ''
+            if timestamp:
+                try:
+                    # Handle both datetime objects and unix timestamps
+                    if isinstance(timestamp, datetime):
+                        time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
+                        dt = datetime.fromtimestamp(timestamp)
+                        time_str = dt.strftime('%d.%m %H:%M')
+                except Exception as e:
+                    print(f"[Chart] OB timestamp format error: {type(timestamp)}, {timestamp}, {e}")
+                    time_str = ''
+
+            # Add label with timestamp when zone was formed
+            if time_str:
+                label_text = f"OB {'↑' if is_bullish else '↓'} {time_str}"
+            else:
+                label_text = f"OB {'↑' if is_bullish else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
@@ -1819,8 +1853,27 @@ class ChartPanel(QWidget):
                 label=f'Liquidity ({"Resistance" if is_high else "Support"})'
             )
 
-            # Add label WITHOUT timestamp (timestamps unreliable, just show zone type)
-            label_text = f"LIQ {'↑' if is_high else '↓'}"
+            # Format timestamp from candle time
+            from datetime import datetime
+            timestamp = liq.get('timestamp')
+            time_str = ''
+            if timestamp:
+                try:
+                    # Handle both datetime objects and unix timestamps
+                    if isinstance(timestamp, datetime):
+                        time_str = timestamp.strftime('%d.%m %H:%M')
+                    elif isinstance(timestamp, (int, float)) and timestamp > 0:
+                        dt = datetime.fromtimestamp(timestamp)
+                        time_str = dt.strftime('%d.%m %H:%M')
+                except Exception as e:
+                    print(f"[Chart] LIQ timestamp format error: {type(timestamp)}, {timestamp}, {e}")
+                    time_str = ''
+
+            # Add label with timestamp when zone was formed
+            if time_str:
+                label_text = f"LIQ {'↑' if is_high else '↓'} {time_str}"
+            else:
+                label_text = f"LIQ {'↑' if is_high else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 8,
                 price,
