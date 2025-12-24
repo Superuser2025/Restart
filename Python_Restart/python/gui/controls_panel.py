@@ -678,6 +678,7 @@ class ControlsPanel(QWidget):
             ('order_blocks', 'Order Blocks', True),
             ('fvg', 'Fair Value Gaps', True),
             ('market_structure', 'Market Structure', True),
+            ('smart_money_legend', 'Show Legend', False),  # Legend toggle
         ]
 
         self.smc_checkboxes = {}
@@ -685,8 +686,10 @@ class ControlsPanel(QWidget):
         for key, label, default in smc_features:
             checkbox = self.create_styled_checkbox(label, default)
             # Use toggled signal instead of stateChanged for cleaner bool handling
+            # Legend toggle uses visual_ prefix for visual_controls system
+            setting_key = f'visual_{key}' if key == 'smart_money_legend' else f'use_{key}'
             checkbox.toggled.connect(
-                lambda checked, k=key: self.setting_changed.emit(f'use_{k}', checked)
+                lambda checked, k=setting_key: self.setting_changed.emit(k, checked)
             )
             self.smc_checkboxes[key] = checkbox
             layout.addWidget(checkbox)
