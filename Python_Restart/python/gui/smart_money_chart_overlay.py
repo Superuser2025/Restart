@@ -54,11 +54,15 @@ class SmartMoneyChartOverlay:
         # ============================================================
         if self.enabled_overlays['Order Blocks']:
             order_blocks = order_block_detector.detect_order_blocks(
-                candles, symbol, lookback=50
+                candles, symbol, lookback=150, min_impulse_pips=8  # RELAXED: was 50 lookback, 15 pips
             )
 
-            # Show top 5 valid, unmitigated OBs
-            valid_obs = [ob for ob in order_blocks if ob['valid'] and not ob['mitigated']][:5]
+            # Show top 10 valid, unmitigated OBs (was 5)
+            valid_obs = [ob for ob in order_blocks if ob['valid'] and not ob['mitigated']][:10]
+
+            # If no valid OBs, show mitigated ones with lower opacity
+            if not valid_obs:
+                valid_obs = order_blocks[:5]  # Show any OBs even if mitigated
 
             for ob in valid_obs:
                 if ob['type'] == 'demand':
@@ -83,11 +87,15 @@ class SmartMoneyChartOverlay:
         # ============================================================
         if self.enabled_overlays['FVG Zones']:
             fvgs = fair_value_gap_detector.detect_fair_value_gaps(
-                candles, symbol, lookback=50
+                candles, symbol, lookback=150, min_gap_pips=3  # RELAXED: was 50 lookback, 5 pips
             )
 
-            # Show top 5 unfilled FVGs
-            unfilled_fvgs = [fvg for fvg in fvgs if not fvg['filled']][:5]
+            # Show top 10 unfilled FVGs (was 5)
+            unfilled_fvgs = [fvg for fvg in fvgs if not fvg['filled']][:10]
+
+            # If no unfilled FVGs, show partially filled ones
+            if not unfilled_fvgs:
+                unfilled_fvgs = [fvg for fvg in fvgs if fvg['fill_percentage'] < 50][:5]
 
             for fvg in unfilled_fvgs:
                 if fvg['type'] == 'bullish':
@@ -112,11 +120,11 @@ class SmartMoneyChartOverlay:
         # ============================================================
         if self.enabled_overlays['Liquidity Lines']:
             sweeps = liquidity_sweep_detector.detect_liquidity_sweeps(
-                candles, symbol, lookback=50
+                candles, symbol, lookback=150, tolerance_pips=5  # RELAXED: was 50 lookback, 3 pips
             )
 
-            # Show top 3 recent sweeps
-            for sweep in sweeps[:3]:
+            # Show top 5 recent sweeps (was 3)
+            for sweep in sweeps[:5]:
                 # Liquidity sweep level → Orange line (thin zone)
                 color = "#ff8800"  # Orange
                 name = f"Liquidity ({sweep['type'].upper()})"
@@ -136,11 +144,11 @@ class SmartMoneyChartOverlay:
         # ============================================================
         if self.enabled_overlays['Structure Markers']:
             structure_events, current_trend = market_structure_detector.detect_structure_shifts(
-                candles, symbol, lookback=50
+                candles, symbol, lookback=150  # RELAXED: was 50 lookback
             )
 
-            # Show top 3 recent structure events
-            for event in structure_events[:3]:
+            # Show top 5 recent structure events (was 3)
+            for event in structure_events[:5]:
                 # Determine color based on direction
                 if event['direction'] == 'bullish':
                     color = "#00ff88"  # Green
@@ -161,6 +169,15 @@ class SmartMoneyChartOverlay:
 
         # Trigger chart redraw
         chart_overlay_system.update()
+
+        # Log detection results for debugging
+        print(f"\n[SmartMoneyOverlay] Zone Detection Summary for {symbol}:")
+        print(f"  → Total zones rendered: {len(chart_overlay_system.zones)}")
+        zone_types = {}
+        for zone in chart_overlay_system.zones:
+            zone_types[zone.zone_type] = zone_types.get(zone.zone_type, 0) + 1
+        for ztype, count in zone_types.items():
+            print(f"  → {ztype}: {count} zones")
 
     def toggle_overlay(self, overlay_name: str, enabled: bool):
         """Toggle specific overlay type"""
