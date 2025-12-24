@@ -47,24 +47,36 @@ class SmartMoneyChartOverlay:
         chart_overlay_system.clear_zones()
 
         if not candles or len(candles) < 10:
+            print(f"[SmartMoneyOverlay] ERROR: Not enough candles ({len(candles) if candles else 0})")
             return
+
+        print(f"\n[SmartMoneyOverlay] ═══ DETECTION START for {symbol} ═══")
+        print(f"[SmartMoneyOverlay] → Analyzing {len(candles)} candles")
 
         # ============================================================
         # ORDER BLOCKS → Green/Red Rectangles
         # ============================================================
         if self.enabled_overlays['Order Blocks']:
+            print(f"\n[SmartMoneyOverlay] --- ORDER BLOCK DETECTION ---")
             order_blocks = order_block_detector.detect_order_blocks(
                 candles, symbol, lookback=150, min_impulse_pips=8  # RELAXED: was 50 lookback, 15 pips
             )
+            print(f"[SmartMoneyOverlay] Total OBs detected: {len(order_blocks)}")
 
-            # Show top 10 valid, unmitigated OBs (was 5)
-            valid_obs = [ob for ob in order_blocks if ob['valid'] and not ob['mitigated']][:10]
+            # Show ALL OBs, not just valid ones (for debugging)
+            valid_obs = [ob for ob in order_blocks if ob['valid'] and not ob['mitigated']]
+            mitigated_obs = [ob for ob in order_blocks if ob['mitigated']]
+            invalid_obs = [ob for ob in order_blocks if not ob['valid']]
 
-            # If no valid OBs, show mitigated ones with lower opacity
-            if not valid_obs:
-                valid_obs = order_blocks[:5]  # Show any OBs even if mitigated
+            print(f"[SmartMoneyOverlay]   → Valid (unmitigated): {len(valid_obs)}")
+            print(f"[SmartMoneyOverlay]   → Mitigated: {len(mitigated_obs)}")
+            print(f"[SmartMoneyOverlay]   → Invalid: {len(invalid_obs)}")
 
-            for ob in valid_obs:
+            # Show top 10 valid OBs, or fallback to ANY OBs if none valid
+            display_obs = valid_obs[:10] if valid_obs else order_blocks[:10]
+            print(f"[SmartMoneyOverlay]   → Displaying: {len(display_obs)} OBs")
+
+            for ob in display_obs:
                 if ob['type'] == 'demand':
                     # Bullish OB → Green
                     color = "#00ff00"
@@ -86,18 +98,26 @@ class SmartMoneyChartOverlay:
         # FAIR VALUE GAPS → Yellow/Magenta Shaded Areas
         # ============================================================
         if self.enabled_overlays['FVG Zones']:
+            print(f"\n[SmartMoneyOverlay] --- FVG DETECTION ---")
             fvgs = fair_value_gap_detector.detect_fair_value_gaps(
                 candles, symbol, lookback=150, min_gap_pips=3  # RELAXED: was 50 lookback, 5 pips
             )
+            print(f"[SmartMoneyOverlay] Total FVGs detected: {len(fvgs)}")
 
-            # Show top 10 unfilled FVGs (was 5)
-            unfilled_fvgs = [fvg for fvg in fvgs if not fvg['filled']][:10]
+            # Show ALL FVGs with their fill status
+            unfilled = [fvg for fvg in fvgs if not fvg['filled']]
+            partial = [fvg for fvg in fvgs if fvg['filled'] and fvg['fill_percentage'] < 50]
+            filled = [fvg for fvg in fvgs if fvg['fill_percentage'] >= 50]
 
-            # If no unfilled FVGs, show partially filled ones
-            if not unfilled_fvgs:
-                unfilled_fvgs = [fvg for fvg in fvgs if fvg['fill_percentage'] < 50][:5]
+            print(f"[SmartMoneyOverlay]   → Unfilled: {len(unfilled)}")
+            print(f"[SmartMoneyOverlay]   → Partially filled (<50%): {len(partial)}")
+            print(f"[SmartMoneyOverlay]   → Filled (>=50%): {len(filled)}")
 
-            for fvg in unfilled_fvgs:
+            # Show top 10 unfilled, or fallback to ANY FVGs
+            display_fvgs = unfilled[:10] if unfilled else (partial[:5] if partial else fvgs[:5])
+            print(f"[SmartMoneyOverlay]   → Displaying: {len(display_fvgs)} FVGs")
+
+            for fvg in display_fvgs:
                 if fvg['type'] == 'bullish':
                     # Bullish FVG → Cyan/Yellow
                     color = "#ffff00"  # Yellow
@@ -119,9 +139,12 @@ class SmartMoneyChartOverlay:
         # LIQUIDITY SWEEPS → Orange Horizontal Lines
         # ============================================================
         if self.enabled_overlays['Liquidity Lines']:
+            print(f"\n[SmartMoneyOverlay] --- LIQUIDITY SWEEP DETECTION ---")
             sweeps = liquidity_sweep_detector.detect_liquidity_sweeps(
                 candles, symbol, lookback=150, tolerance_pips=5  # RELAXED: was 50 lookback, 3 pips
             )
+            print(f"[SmartMoneyOverlay] Total Sweeps detected: {len(sweeps)}")
+            print(f"[SmartMoneyOverlay]   → Displaying: {min(len(sweeps), 5)} sweeps")
 
             # Show top 5 recent sweeps (was 3)
             for sweep in sweeps[:5]:
