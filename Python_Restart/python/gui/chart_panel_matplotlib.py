@@ -1711,21 +1711,19 @@ class ChartPanel(QWidget):
                     # Handle both datetime objects and unix timestamps
                     if isinstance(timestamp, datetime):
                         dt = timestamp
-                        # Skip if it's epoch (1970-01-01)
-                        if dt.year > 1970:
+                        # Only show if year >= 2020 (valid recent data)
+                        if dt.year >= 2020:
                             time_str = dt.strftime('%H:00 %d.%m.%y')
-                    elif isinstance(timestamp, (int, float)) and timestamp > 86400:  # Skip if less than 1 day from epoch
+                    elif isinstance(timestamp, (int, float)) and timestamp > 1577836800:  # Jan 1, 2020
                         dt = datetime.fromtimestamp(timestamp)
-                        time_str = dt.strftime('%H:00 %d.%m.%y')
+                        if dt.year >= 2020:
+                            time_str = dt.strftime('%H:00 %d.%m.%y')
                 except Exception as e:
-                    print(f"[Chart] Error formatting FVG timestamp: {e}")
+                    print(f"[Chart] FVG timestamp error: {e}, value: {timestamp}")
                     time_str = ''
 
-            # Add label with timestamp on the right side (skip timestamp if not available)
-            if time_str:
-                label_text = f"FVG {'↑' if is_bullish else '↓'} {time_str}"
-            else:
-                label_text = f"FVG {'↑' if is_bullish else '↓'}"
+            # Add label WITHOUT timestamp (timestamps unreliable, just show zone type)
+            label_text = f"FVG {'↑' if is_bullish else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
@@ -1777,30 +1775,8 @@ class ChartPanel(QWidget):
             )
             self.canvas.axes.add_patch(rect)
 
-            # Format timestamp as "OB HH:00 DD.MM.YY"
-            from datetime import datetime
-            timestamp = ob.get('timestamp')
-            time_str = ''
-            if timestamp:
-                try:
-                    # Handle both datetime objects and unix timestamps
-                    if isinstance(timestamp, datetime):
-                        dt = timestamp
-                        # Skip if it's epoch (1970-01-01)
-                        if dt.year > 1970:
-                            time_str = dt.strftime('%H:00 %d.%m.%y')
-                    elif isinstance(timestamp, (int, float)) and timestamp > 86400:  # Skip if less than 1 day from epoch
-                        dt = datetime.fromtimestamp(timestamp)
-                        time_str = dt.strftime('%H:00 %d.%m.%y')
-                except Exception as e:
-                    print(f"[Chart] Error formatting OB timestamp: {e}")
-                    time_str = ''
-
-            # Add label with timestamp (skip timestamp if not available)
-            if time_str:
-                label_text = f"OB {'↑' if is_bullish else '↓'} {time_str}"
-            else:
-                label_text = f"OB {'↑' if is_bullish else '↓'}"
+            # Add label WITHOUT timestamp (timestamps unreliable, just show zone type)
+            label_text = f"OB {'↑' if is_bullish else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
@@ -1843,30 +1819,8 @@ class ChartPanel(QWidget):
                 label=f'Liquidity ({"Resistance" if is_high else "Support"})'
             )
 
-            # Format timestamp as "LIQ HH:00 DD.MM.YY"
-            from datetime import datetime
-            timestamp = liq.get('timestamp')
-            time_str = ''
-            if timestamp:
-                try:
-                    # Handle both datetime objects and unix timestamps
-                    if isinstance(timestamp, datetime):
-                        dt = timestamp
-                        # Skip if it's epoch (1970-01-01)
-                        if dt.year > 1970:
-                            time_str = dt.strftime('%H:00 %d.%m.%y')
-                    elif isinstance(timestamp, (int, float)) and timestamp > 86400:  # Skip if less than 1 day from epoch
-                        dt = datetime.fromtimestamp(timestamp)
-                        time_str = dt.strftime('%H:00 %d.%m.%y')
-                except Exception as e:
-                    print(f"[Chart] Error formatting LIQ timestamp: {e}")
-                    time_str = ''
-
-            # Add label with timestamp (skip timestamp if not available)
-            if time_str:
-                label_text = f"LIQ {'↑' if is_high else '↓'} {time_str}"
-            else:
-                label_text = f"LIQ {'↑' if is_high else '↓'}"
+            # Add label WITHOUT timestamp (timestamps unreliable, just show zone type)
+            label_text = f"LIQ {'↑' if is_high else '↓'}"
             self.canvas.axes.text(
                 len(self.candle_data) - 8,
                 price,
