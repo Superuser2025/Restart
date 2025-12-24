@@ -24,6 +24,7 @@ except ImportError:
 
 from core.data_manager import data_manager
 from gui.chart_overlay_system import ChartOverlaySystem
+from gui.smart_money_chart_overlay import smart_money_chart_overlay
 
 
 class MplCanvas(FigureCanvasQTAgg):
@@ -315,9 +316,29 @@ class EnhancedChartPanel(QWidget):
             price_low
         )
 
-        # Generate zones based on current price
+        # ============================================================
+        # GENERATE REAL SMART MONEY ZONES (not sample data!)
+        # ============================================================
         current_price = df['close'].iloc[-1]
-        self.overlay.generate_sample_zones(current_price)
+
+        # Convert DataFrame to list of candle dictionaries for detectors
+        candles = []
+        for idx, row in df.iterrows():
+            candles.append({
+                'time': row.get('time', idx),
+                'open': row['open'],
+                'high': row['high'],
+                'low': row['low'],
+                'close': row['close'],
+                'tick_volume': row.get('tick_volume', 0)
+            })
+
+        # Generate zones from REAL smart money detectors
+        smart_money_chart_overlay.generate_zones_from_detectors(
+            candles=candles,
+            symbol=self.current_symbol,
+            chart_overlay_system=self.overlay
+        )
 
         # Update analysis data
         self.overlay.update_analysis({
