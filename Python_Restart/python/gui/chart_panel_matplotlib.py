@@ -1590,16 +1590,22 @@ class ChartPanel(QWidget):
                 print(f"[ChartOverlay] Total FVGs: {len(fvgs)}, Unfilled: {len([f for f in fvgs if not f['filled']])}")
 
                 if fvgs and len(fvgs) > 0:
-                    # Convert to chart format
+                    # Convert to chart format with timestamps
                     fvg_chart_data = []
                     for fvg in fvgs[:10]:  # Top 10
                         if not fvg['filled']:
+                            # Get timestamp from candle at FVG index
+                            candle_idx = fvg.get('candle_index', len(candles) - 1)
+                            candle_time = candles[candle_idx].get('time', 0) if candle_idx < len(candles) else 0
+
                             fvg_chart_data.append({
                                 'top': fvg['top'],
                                 'bottom': fvg['bottom'],
                                 'is_bullish': fvg['type'] == 'bullish',
                                 'filled': False,
-                                'ever_visited': fvg['fill_percentage'] > 0
+                                'ever_visited': fvg['fill_percentage'] > 0,
+                                'timestamp': candle_time,
+                                'candle_index': candle_idx
                             })
                     self.draw_fvg_zones(fvg_chart_data)
                     print(f"[ChartOverlay]   → Drew {len(fvg_chart_data)} FVG zones")
@@ -1614,15 +1620,21 @@ class ChartPanel(QWidget):
                 print(f"[ChartOverlay] Total OBs: {len(order_blocks)}, Valid: {len(valid_obs)}")
 
                 if order_blocks and len(order_blocks) > 0:
-                    # Convert to chart format
+                    # Convert to chart format with timestamps
                     ob_chart_data = []
                     display_obs = valid_obs[:10] if valid_obs else order_blocks[:10]
                     for ob in display_obs:
+                        # Get timestamp from candle at OB index
+                        candle_idx = ob.get('candle_index', len(candles) - 1)
+                        candle_time = candles[candle_idx].get('time', 0) if candle_idx < len(candles) else 0
+
                         ob_chart_data.append({
                             'top': ob['price_high'],
                             'bottom': ob['price_low'],
                             'is_bullish': ob['type'] == 'demand',
-                            'invalidated': ob['mitigated']
+                            'invalidated': ob['mitigated'],
+                            'timestamp': candle_time,
+                            'candle_index': candle_idx
                         })
                     self.draw_order_block_zones(ob_chart_data)
                     print(f"[ChartOverlay]   → Drew {len(ob_chart_data)} OB zones")
@@ -1636,15 +1648,24 @@ class ChartPanel(QWidget):
                 print(f"[ChartOverlay] Total Sweeps: {len(sweeps)}")
 
                 if sweeps and len(sweeps) > 0:
-                    # Convert to chart format
+                    # Convert to chart format with timestamps
                     liq_chart_data = []
                     for sweep in sweeps[:5]:
+                        # Get timestamp from candle at sweep index
+                        candle_idx = sweep.get('candle_index', len(candles) - 1)
+                        candle_time = candles[candle_idx].get('time', 0) if candle_idx < len(candles) else 0
+
                         liq_chart_data.append({
                             'level': sweep['level'],
-                            'is_high': sweep['type'] == 'high_sweep'
+                            'is_high': sweep['type'] == 'high_sweep',
+                            'timestamp': candle_time,
+                            'candle_index': candle_idx
                         })
                     self.draw_liquidity_zones(liq_chart_data)
                     print(f"[ChartOverlay]   → Drew {len(liq_chart_data)} liquidity lines")
+
+            # Draw Legend
+            self.draw_smart_money_legend()
 
         except Exception as e:
             print(f"[ChartOverlay] ERROR in draw_chart_overlays: {e}")
@@ -1690,17 +1711,29 @@ class ChartPanel(QWidget):
             )
             self.canvas.axes.add_patch(rect)
 
-            # Add label on the right side
-            label_text = 'FVG↑' if is_bullish else 'FVG↓'
+            # Format timestamp as "FVG HH:00 DD.MM.YY"
+            from datetime import datetime
+            timestamp = fvg.get('timestamp', 0)
+            if timestamp > 0:
+                try:
+                    dt = datetime.fromtimestamp(timestamp)
+                    time_str = dt.strftime('%H:00 %d.%m.%y')
+                except:
+                    time_str = ''
+            else:
+                time_str = ''
+
+            # Add label with timestamp on the right side
+            label_text = f"FVG {'↑' if is_bullish else '↓'} {time_str}".strip()
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
                 label_text,
-                fontsize=7,
+                fontsize=8,
                 color=color,
                 weight='bold',
                 ha='right',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='#0A0E27', edgecolor=color, alpha=0.9)
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#0A0E27', edgecolor=color, alpha=0.9, linewidth=1.5)
             )
 
     def draw_order_block_zones(self, order_blocks: list):
@@ -1743,17 +1776,29 @@ class ChartPanel(QWidget):
             )
             self.canvas.axes.add_patch(rect)
 
-            # Add label with test count
-            label_text = f'OB↑ [{test_count}]' if is_bullish else f'OB↓ [{test_count}]'
+            # Format timestamp as "OB HH:00 DD.MM.YY"
+            from datetime import datetime
+            timestamp = ob.get('timestamp', 0)
+            if timestamp > 0:
+                try:
+                    dt = datetime.fromtimestamp(timestamp)
+                    time_str = dt.strftime('%H:00 %d.%m.%y')
+                except:
+                    time_str = ''
+            else:
+                time_str = ''
+
+            # Add label with timestamp
+            label_text = f"OB {'↑' if is_bullish else '↓'} {time_str}".strip()
             self.canvas.axes.text(
                 len(self.candle_data) - 2,
                 (top + bottom) / 2,
                 label_text,
-                fontsize=7,
+                fontsize=8,
                 color=color,
                 weight='bold',
                 ha='right',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='#0A0E27', edgecolor=color, alpha=0.9)
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#0A0E27', edgecolor=color, alpha=0.9, linewidth=1.5)
             )
 
     def draw_liquidity_zones(self, liquidity: list):
@@ -1787,22 +1832,111 @@ class ChartPanel(QWidget):
                 label=f'Liquidity ({"Resistance" if is_high else "Support"})'
             )
 
-            # Add label
-            label_text = f'LIQ↑ [{touch_count}]' if is_high else f'LIQ↓ [{touch_count}]'
-            if swept:
-                label_text += ' SWEPT'
+            # Format timestamp as "LIQ HH:00 DD.MM.YY"
+            from datetime import datetime
+            timestamp = liq.get('timestamp', 0)
+            if timestamp > 0:
+                try:
+                    dt = datetime.fromtimestamp(timestamp)
+                    time_str = dt.strftime('%H:00 %d.%m.%y')
+                except:
+                    time_str = ''
+            else:
+                time_str = ''
 
+            # Add label with timestamp
+            label_text = f"LIQ {'↑' if is_high else '↓'} {time_str}".strip()
             self.canvas.axes.text(
                 len(self.candle_data) - 8,
                 price,
                 label_text,
-                fontsize=7,
+                fontsize=8,
                 color=color,
                 weight='bold',
                 ha='right',
                 va='center',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='#0A0E27', edgecolor=color, alpha=0.9)
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#0A0E27', edgecolor=color, alpha=0.9, linewidth=1.5)
             )
+
+    def draw_smart_money_legend(self):
+        """Draw legend explaining smart money zones"""
+        try:
+            # Legend position (top-left corner)
+            legend_x = 10
+            legend_y_start = 30
+            line_height = 20
+
+            # Legend items with colors
+            legend_items = [
+                ('FVG Bullish', '#06B6D4'),
+                ('FVG Bearish', '#D946EF'),
+                ('OB Bullish', '#FBBF24'),
+                ('OB Bearish', '#F59E0B'),
+                ('Liquidity High', '#EF4444'),
+                ('Liquidity Low', '#10B981'),
+            ]
+
+            # Draw legend background
+            legend_width = 150
+            legend_height = len(legend_items) * line_height + 20
+            from matplotlib.patches import Rectangle
+            legend_bg = Rectangle(
+                (legend_x - 5, legend_y_start - 15),
+                legend_width,
+                legend_height,
+                facecolor='#0A0E27',
+                edgecolor='#FFFFFF',
+                alpha=0.85,
+                linewidth=2,
+                transform=self.canvas.axes.transData,
+                clip_on=False
+            )
+            self.canvas.axes.add_patch(legend_bg)
+
+            # Draw legend title
+            self.canvas.axes.text(
+                legend_x + 5,
+                legend_y_start,
+                'SMART MONEY',
+                fontsize=9,
+                color='#FFFFFF',
+                weight='bold',
+                transform=self.canvas.axes.transData,
+                clip_on=False
+            )
+
+            # Draw legend items
+            y_offset = legend_y_start + 18
+            for label, color in legend_items:
+                # Color box
+                color_box = Rectangle(
+                    (legend_x + 5, y_offset - 8),
+                    12,
+                    12,
+                    facecolor=color,
+                    edgecolor=color,
+                    alpha=0.7,
+                    transform=self.canvas.axes.transData,
+                    clip_on=False
+                )
+                self.canvas.axes.add_patch(color_box)
+
+                # Label text
+                self.canvas.axes.text(
+                    legend_x + 22,
+                    y_offset,
+                    label,
+                    fontsize=7,
+                    color='#FFFFFF',
+                    weight='normal',
+                    transform=self.canvas.axes.transData,
+                    clip_on=False
+                )
+
+                y_offset += line_height
+
+        except Exception as e:
+            print(f"[Chart] Error drawing legend: {e}")
 
     def draw_sample_fvg(self):
         """Draw Fair Value Gap rectangle (sample)"""
