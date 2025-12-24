@@ -1597,7 +1597,8 @@ class ChartPanel(QWidget):
                             # Get timestamp from the candle at this index
                             candle_idx = fvg.get('candle_index', len(candles) - 1)
                             if 0 <= candle_idx < len(candles):
-                                candle_time = candles[candle_idx].get('time')
+                                # Use 'timestamp' field (has real time), not 'time' (often 0)
+                                candle_time = candles[candle_idx].get('timestamp') or candles[candle_idx].get('time')
                                 print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, time={candle_time}")
                             else:
                                 candle_time = None
@@ -1632,7 +1633,8 @@ class ChartPanel(QWidget):
                         # Get timestamp from the candle at this index
                         candle_idx = ob.get('candle_index', len(candles) - 1)
                         if 0 <= candle_idx < len(candles):
-                            candle_time = candles[candle_idx].get('time')
+                            # Use 'timestamp' field (has real time), not 'time' (often 0)
+                            candle_time = candles[candle_idx].get('timestamp') or candles[candle_idx].get('time')
                             print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, time={candle_time}")
                         else:
                             candle_time = None
