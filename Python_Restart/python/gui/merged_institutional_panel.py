@@ -72,9 +72,6 @@ class MergedInstitutionalPanel(QWidget):
         # === CHART VISUALS ===
         layout.addWidget(self.create_chart_visuals_section())
 
-        # === HEAVY ZONES LEGEND ===
-        layout.addWidget(self.create_heavy_zones_section())
-
         # === MARKET STATUS ===
         layout.addWidget(self.create_market_status_section())
 
@@ -419,38 +416,6 @@ class MergedInstitutionalPanel(QWidget):
             checkbox.setStyleSheet("color: #ffffff; font-size: 14px;")
             checkbox.stateChanged.connect(lambda state, v=visual: self.on_visual_toggled(v, state == Qt.CheckState.Checked.value))
             layout.addWidget(checkbox)
-
-        group.setLayout(layout)
-        return group
-
-    def create_heavy_zones_section(self) -> QGroupBox:
-        """Create heavy zones color legend"""
-        group = QGroupBox("🎨 ZONE LEGEND")
-        layout = QVBoxLayout()
-
-        zones = [
-            ("Bullish OB", "#00ff00"),
-            ("Bearish OB", "#ff0000"),
-            ("FVG Up", "#00ffff"),
-            ("FVG Down", "#ff00ff"),
-            ("Liquidity", "#ffaa00")
-        ]
-
-        for zone_name, color in zones:
-            zone_layout = QHBoxLayout()
-
-            color_box = QLabel()
-            color_box.setFixedSize(25, 15)
-            color_box.setStyleSheet(f"background-color: {color}; border: 1px solid #ffffff; border-radius: 2px;")
-
-            label = QLabel(zone_name)
-            label.setStyleSheet("color: #ffffff; font-size: 14px;")
-
-            zone_layout.addWidget(color_box)
-            zone_layout.addWidget(label)
-            zone_layout.addStretch()
-
-            layout.addLayout(zone_layout)
 
         group.setLayout(layout)
         return group
