@@ -224,14 +224,12 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                     analysis['warnings'].append("⚠ CRITICAL: Trading AGAINST bullish trend (counter-trend SELL)")
                     analysis['warnings'].append("This is a counter-trend trade - HIGH RISK")
                 elif trend == "RANGING":
-                    # RANGING markets: Be conservative - only approve if volatility is LOW
-                    if volatility == "LOW":
-                        trend_aligned = True
-                        analysis['reasons'].append("Market is ranging with low volatility (suitable for range trading)")
-                    else:
-                        trend_aligned = False
-                        analysis['warnings'].append("⚠ Market is ranging - no clear trend to trade")
-                        analysis['warnings'].append("Wait for breakout or trend to develop")
+                    # RANGING markets: REJECT all directional trades - no clear trend
+                    trend_aligned = False
+                    analysis['warnings'].append("⚠ Market is ranging - no clear trend direction")
+                    analysis['warnings'].append("Wait for trend to develop or breakout to occur")
+                    if volatility == "HIGH":
+                        analysis['warnings'].append("High volatility adds to uncertainty")
             else:
                 trend_aligned = True  # If we can't determine trend, don't block
         else:
