@@ -13,6 +13,7 @@
 #include <Trade\PositionInfo.mqh>
 #include <Trade\AccountInfo.mqh>
 #include "JSONExporter.mqh"
+#include "ML_PredictionReader.mqh"
 
 //+------------------------------------------------------------------+
 //| TRADING PROFILE ENUMERATION                                       |
@@ -721,6 +722,7 @@ void AddPriceActionComment(string text, color text_color, int priority, datetime
 //+------------------------------------------------------------------+
 CMLTradingSystem* ml_system = NULL;
 CJSONExporter jsonExporter;
+CMLPredictionReader ml_reader;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                    |
