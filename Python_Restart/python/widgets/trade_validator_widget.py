@@ -397,11 +397,11 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         <h3 style="color: #64B5F6; margin-top: 0;">📈 Market Conditions:</h3>
 """
             if 'trend' in mc:
-                html += f"        <p style="margin: 5px 0;">• <strong>Trend:</strong> {mc['trend']}</p>\n"
+                html += f"        <p style='margin: 5px 0;'>• <strong>Trend:</strong> {mc['trend']}</p>\n"
             if 'volatility' in mc:
-                html += f"        <p style="margin: 5px 0;">• <strong>Volatility:</strong> {mc['volatility']}</p>\n"
+                html += f"        <p style='margin: 5px 0;'>• <strong>Volatility:</strong> {mc['volatility']}</p>\n"
             if 'session' in mc:
-                html += f"        <p style="margin: 5px 0;">• <strong>Session:</strong> {mc['session']}</p>\n"
+                html += f"        <p style='margin: 5px 0;'>• <strong>Session:</strong> {mc['session']}</p>\n"
 
             html += "    </div>\n"
 
@@ -412,7 +412,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         <h3 style="color: #4CAF50; margin-top: 0;">✅ Positive Factors:</h3>
 """
             for reason in reasons:
-                html += f"        <p style="margin: 5px 0;">• {reason}</p>\n"
+                html += f"        <p style='margin: 5px 0;'>• {reason}</p>\n"
             html += "    </div>\n"
 
         # Warnings (if any)
@@ -422,7 +422,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         <h3 style="color: #F44336; margin-top: 0;">❌ Warning Factors:</h3>
 """
             for warning in warnings:
-                html += f"        <p style="margin: 5px 0;">• {warning}</p>\n"
+                html += f"        <p style='margin: 5px 0;'>• {warning}</p>\n"
             html += "    </div>\n"
 
         # Bottom line
