@@ -211,25 +211,26 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             if trend != 'UNKNOWN':
                 if direction == "BUY" and trend == "BULLISH":
                     trend_aligned = True
-                    analysis['reasons'].append("Trend is bullish (aligned with BUY)")
+                    analysis['reasons'].append("✅ H4 trend is BULLISH (aligned with BUY)")
                 elif direction == "SELL" and trend == "BEARISH":
                     trend_aligned = True
-                    analysis['reasons'].append("Trend is bearish (aligned with SELL)")
+                    analysis['reasons'].append("✅ H4 trend is BEARISH (aligned with SELL)")
                 elif direction == "BUY" and trend == "BEARISH":
                     trend_aligned = False
-                    analysis['warnings'].append("⚠ CRITICAL: Trading AGAINST bearish trend (counter-trend BUY)")
+                    analysis['warnings'].append("⚠ CRITICAL: H4 trend is BEARISH - trading AGAINST trend (counter-trend BUY)")
                     analysis['warnings'].append("This is a counter-trend trade - HIGH RISK")
                 elif direction == "SELL" and trend == "BULLISH":
                     trend_aligned = False
-                    analysis['warnings'].append("⚠ CRITICAL: Trading AGAINST bullish trend (counter-trend SELL)")
+                    analysis['warnings'].append("⚠ CRITICAL: H4 trend is BULLISH - trading AGAINST trend (counter-trend SELL)")
                     analysis['warnings'].append("This is a counter-trend trade - HIGH RISK")
                 elif trend == "RANGING":
-                    # RANGING markets: REJECT all directional trades - no clear trend
-                    trend_aligned = False
-                    analysis['warnings'].append("⚠ Market is ranging - no clear trend direction")
-                    analysis['warnings'].append("Wait for trend to develop or breakout to occur")
+                    # RANGING markets: INFORM user but don't auto-reject
+                    # Let ML decision stand, but warn about ranging conditions
+                    trend_aligned = True  # Don't block on ranging (ML decides)
+                    analysis['warnings'].append("ℹ️  Market is RANGING on H4 - no clear trend")
+                    analysis['warnings'].append("Check multiple timeframes before entering")
                     if volatility == "HIGH":
-                        analysis['warnings'].append("High volatility adds to uncertainty")
+                        analysis['warnings'].append("⚠ High volatility - choppy conditions")
             else:
                 trend_aligned = True  # If we can't determine trend, don't block
         else:
@@ -296,7 +297,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 
     def get_market_conditions(self, symbol):
         """
-        Get current market conditions for the symbol
+        Get current market conditions for the symbol with MULTI-TIMEFRAME analysis
         Returns: dict with market data or None
         """
         if not MT5_AVAILABLE:
@@ -312,35 +313,48 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                 mt5.shutdown()
                 return None
 
-            # Get recent bars to analyze trend
-            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 100)
-            if rates is None or len(rates) < 50:
-                mt5.shutdown()
-                return None
-
-            # Analyze trend (simple: compare current price to MA50)
             import numpy as np
-            ma50 = np.mean(rates[-50:]['close'])
             current_price = tick.bid
 
-            if current_price > ma50 * 1.002:  # 0.2% above MA
-                trend = "BULLISH"
-            elif current_price < ma50 * 0.998:  # 0.2% below MA
-                trend = "BEARISH"
-            else:
-                trend = "RANGING"
+            # MULTI-TIMEFRAME TREND ANALYSIS
+            timeframes = {
+                'M15': mt5.TIMEFRAME_M15,
+                'H1': mt5.TIMEFRAME_H1,
+                'H4': mt5.TIMEFRAME_H4,
+                'D1': mt5.TIMEFRAME_D1
+            }
 
-            # Analyze volatility (ATR-like)
-            high_low = rates[-20:]['high'] - rates[-20:]['low']
-            avg_range = np.mean(high_low)
-            recent_range = high_low[-1]
+            trends = {}
+            for tf_name, tf_value in timeframes.items():
+                rates = mt5.copy_rates_from_pos(symbol, tf_value, 0, 100)
+                if rates is not None and len(rates) >= 50:
+                    ma50 = np.mean(rates[-50:]['close'])
 
-            if recent_range > avg_range * 1.5:
-                volatility = "HIGH"
-            elif recent_range < avg_range * 0.7:
-                volatility = "LOW"
+                    if current_price > ma50 * 1.005:  # 0.5% above MA
+                        trends[tf_name] = "BULLISH"
+                    elif current_price < ma50 * 0.995:  # 0.5% below MA
+                        trends[tf_name] = "BEARISH"
+                    else:
+                        trends[tf_name] = "RANGING"
+
+            # Primary trend (use H4 as main timeframe for decision)
+            trend = trends.get('H4', 'UNKNOWN')
+
+            # Analyze volatility (using H1)
+            rates_h1 = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 100)
+            if rates_h1 is not None and len(rates_h1) >= 20:
+                high_low = rates_h1[-20:]['high'] - rates_h1[-20:]['low']
+                avg_range = np.mean(high_low)
+                recent_range = high_low[-1]
+
+                if recent_range > avg_range * 1.5:
+                    volatility = "HIGH"
+                elif recent_range < avg_range * 0.7:
+                    volatility = "LOW"
+                else:
+                    volatility = "NORMAL"
             else:
-                volatility = "NORMAL"
+                volatility = "UNKNOWN"
 
             # Determine session
             now = datetime.now()
@@ -361,11 +375,11 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             mt5.shutdown()
 
             return {
-                'trend': trend,
+                'trend': trend,  # Primary trend (H4)
+                'trends': trends,  # All timeframes
                 'volatility': volatility,
                 'session': session,
-                'price': current_price,
-                'ma50': ma50
+                'price': current_price
             }
 
         except Exception as e:
@@ -478,10 +492,34 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                    margin: 0 0 15px 0;
                    font-weight: bold;">📈 MARKET CONDITIONS</h3>
 """
-            if 'trend' in mc:
-                html += f"        <p style='color: #FFFFFF; font-size: 16px; margin: 8px 0;'>▸ <strong>Trend:</strong> {mc['trend']}</p>\n"
+
+            # Multi-timeframe trend display
+            if 'trends' in mc:
+                html += "        <p style='color: #FFD700; font-size: 16px; margin: 8px 0 12px 0;'><strong>📊 MULTI-TIMEFRAME TREND ANALYSIS:</strong></p>\n"
+                trends = mc['trends']
+                for tf in ['M15', 'H1', 'H4', 'D1']:
+                    if tf in trends:
+                        trend_value = trends[tf]
+                        # Color code the trends
+                        if trend_value == "BULLISH":
+                            color = "#4CAF50"  # Green
+                            icon = "📈"
+                        elif trend_value == "BEARISH":
+                            color = "#F44336"  # Red
+                            icon = "📉"
+                        else:  # RANGING
+                            color = "#FFC107"  # Yellow
+                            icon = "↔️"
+
+                        # Highlight H4 (primary timeframe)
+                        if tf == "H4":
+                            html += f"        <p style='color: {color}; font-size: 17px; margin: 6px 0 6px 20px; font-weight: bold;'>{icon} <strong>{tf}: {trend_value}</strong> ⭐ (PRIMARY)</p>\n"
+                        else:
+                            html += f"        <p style='color: {color}; font-size: 15px; margin: 4px 0 4px 20px;'>{icon} {tf}: {trend_value}</p>\n"
+                html += "        <hr style='border: none; border-top: 1px solid #333; margin: 12px 0;'>\n"
+
             if 'volatility' in mc:
-                html += f"        <p style='color: #FFFFFF; font-size: 16px; margin: 8px 0;'>▸ <strong>Volatility:</strong> {mc['volatility']}</p>\n"
+                html += f"        <p style='color: #FFFFFF; font-size: 16px; margin: 8px 0;'>▸ <strong>Volatility (H1):</strong> {mc['volatility']}</p>\n"
             if 'session' in mc:
                 html += f"        <p style='color: #FFFFFF; font-size: 16px; margin: 8px 0;'>▸ <strong>Session:</strong> {mc['session']}</p>\n"
             html += "    </div>\n"
