@@ -28,6 +28,7 @@ from widgets.risk_reward_widget import RiskRewardWidget
 from widgets.equity_curve_widget import EquityCurveWidget
 from widgets.trade_journal_widget import TradeJournalWidget
 from widgets.dashboard_cards_widget import DashboardCardsWidget
+from widgets.trade_validator_widget import TradeValidatorWidget
 
 from core.mt5_connector import MT5Connector
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode
@@ -147,6 +148,13 @@ class EnhancedMainWindow(QMainWindow):
         self.analysis_tabs = QTabWidget()
         self.analysis_tabs.setTabPosition(QTabWidget.TabPosition.North)
 
+        # Tab 0: TRADE VALIDATOR (NEW!)
+        validator_tab = QWidget()
+        validator_layout = QVBoxLayout(validator_tab)
+        self.validator_widget = TradeValidatorWidget()
+        validator_layout.addWidget(self.validator_widget)
+        self.analysis_tabs.addTab(validator_tab, "🎯 Trade Check")
+
         # Tab 1: PRICE ACTION COMMENTARY
         commentary_tab = QWidget()
         commentary_layout = QVBoxLayout(commentary_tab)
@@ -257,6 +265,9 @@ class EnhancedMainWindow(QMainWindow):
             self.dashboard_cards.set_symbol(symbol)
 
         # Update ALL analysis tab widgets with new symbol
+        if hasattr(self, 'validator_widget'):
+            self.validator_widget.set_symbol(symbol)
+
         if hasattr(self, 'commentary_widget'):
             self.commentary_widget.set_symbol(symbol)
 
