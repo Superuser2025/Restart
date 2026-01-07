@@ -389,7 +389,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             return None
 
     def display_analysis(self, symbol, direction, analysis):
-        """Display analysis results in the results panel - PROFESSIONAL GRADE"""
+        """Display analysis results - CLEAN PROFESSIONAL DESIGN"""
 
         approved = analysis['approved']
         ml_signal = analysis['ml_signal']
@@ -398,190 +398,127 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         reasons = analysis['reasons']
         warnings = analysis['warnings']
 
-        # Determine overall recommendation with traffic light colors
+        # Determine overall recommendation
         if approved:
             decision = "GO FOR IT"
+            decision_color = "#4CAF50"  # Green
             decision_icon = "✅"
-            bg_color = "#1B5E20"  # Dark green background
-            border_color = "#4CAF50"  # Bright green border
-            text_color = "#FFFFFF"  # White text
         elif ml_signal == "WAIT":
             decision = "WAIT"
+            decision_color = "#FFC107"  # Yellow
             decision_icon = "⚠"
-            bg_color = "#F57F17"  # Dark yellow/orange background
-            border_color = "#FFC107"  # Bright yellow border
-            text_color = "#FFFFFF"  # White text
         else:
             decision = "SKIP THIS"
+            decision_color = "#F44336"  # Red
             decision_icon = "❌"
-            bg_color = "#B71C1C"  # Dark red background
-            border_color = "#F44336"  # Bright red border
-            text_color = "#FFFFFF"  # White text
 
-        # Build professional HTML output with high contrast
+        # Build CLEAN HTML output
         html = f"""
-<div style="padding: 20px; background-color: #0a0a0a; font-family: 'Segoe UI', Arial, sans-serif;">
+<div style="padding: 15px; background-color: #1e1e1e; font-family: 'Segoe UI', Arial, sans-serif; color: #fff;">
 
-    <!-- MAIN DECISION BOX (Traffic Light Style) -->
-    <div style="background: linear-gradient(135deg, {bg_color} 0%, {bg_color}dd 100%);
-                border: 4px solid {border_color};
-                border-radius: 12px;
-                padding: 30px;
-                text-align: center;
-                margin-bottom: 25px;
-                box-shadow: 0 8px 16px rgba(0,0,0,0.4);">
-        <div style="font-size: 72px; margin-bottom: 15px;">{decision_icon}</div>
-        <h1 style="color: {text_color};
-                   font-size: 42px;
-                   font-weight: bold;
-                   margin: 0 0 10px 0;
-                   text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">{decision}</h1>
-        <p style="color: {text_color};
-                  font-size: 24px;
-                  margin: 0;
-                  opacity: 0.95;">{symbol} {direction}</p>
+    <!-- DECISION -->
+    <div style="background-color: #2a2a2a; padding: 25px; border-radius: 8px; text-align: center; margin-bottom: 20px; border-left: 6px solid {decision_color};">
+        <div style="font-size: 48px; margin-bottom: 10px;">{decision_icon}</div>
+        <h1 style="color: {decision_color}; font-size: 36px; margin: 0 0 8px 0;">{decision}</h1>
+        <p style="color: #ccc; font-size: 20px; margin: 0;">{symbol} {direction}</p>
     </div>
 
-    <!-- PROBABILITY DISPLAY -->
-    <div style="background-color: #1a1a1a;
-                border: 2px solid #333;
-                border-radius: 8px;
-                padding: 20px;
-                margin-bottom: 20px;">
-        <table style="width: 100%; border-collapse: collapse;">
+    <!-- ML STATS -->
+    <div style="background-color: #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+        <h3 style="color: #64B5F6; margin: 0 0 15px 0; font-size: 18px;">📊 ML PREDICTION</h3>
+        <table style="width: 100%; color: #fff;">
             <tr>
-                <td style="padding: 12px 0; border-bottom: 1px solid #333;">
-                    <span style="color: #aaa; font-size: 16px;">ML Signal:</span>
-                </td>
-                <td style="padding: 12px 0; border-bottom: 1px solid #333; text-align: right;">
-                    <span style="color: {border_color}; font-size: 20px; font-weight: bold;">{ml_signal}</span>
-                </td>
+                <td style="padding: 8px 0; color: #aaa;">Signal:</td>
+                <td style="padding: 8px 0; text-align: right; color: {decision_color}; font-size: 20px; font-weight: bold;">{ml_signal}</td>
             </tr>
             <tr>
-                <td style="padding: 12px 0; border-bottom: 1px solid #333;">
-                    <span style="color: #aaa; font-size: 16px;">Win Probability:</span>
-                </td>
-                <td style="padding: 12px 0; border-bottom: 1px solid #333; text-align: right;">
-                    <span style="color: #FFFFFF; font-size: 24px; font-weight: bold;">{probability:.1f}%</span>
-                </td>
+                <td style="padding: 8px 0; color: #aaa;">Win Probability:</td>
+                <td style="padding: 8px 0; text-align: right; font-size: 22px; font-weight: bold;">{probability:.1f}%</td>
             </tr>
             <tr>
-                <td style="padding: 12px 0;">
-                    <span style="color: #aaa; font-size: 16px;">Model Confidence:</span>
-                </td>
-                <td style="padding: 12px 0; text-align: right;">
-                    <span style="color: #FFFFFF; font-size: 20px; font-weight: bold;">{confidence:.1f}%</span>
-                </td>
+                <td style="padding: 8px 0; color: #aaa;">Confidence:</td>
+                <td style="padding: 8px 0; text-align: right; font-size: 18px; font-weight: bold;">{confidence:.1f}%</td>
             </tr>
         </table>
     </div>
-
-    <!-- MARKET CONDITIONS -->
 """
 
+        # MULTI-TIMEFRAME TRENDS
+        if analysis['market_conditions'] and 'trends' in analysis['market_conditions']:
+            mc = analysis['market_conditions']
+            trends = mc['trends']
+
+            html += """
+    <div style="background-color: #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+        <h3 style="color: #FFD700; margin: 0 0 15px 0; font-size: 18px;">📈 MULTI-TIMEFRAME TRENDS</h3>
+"""
+            for tf in ['M15', 'H1', 'H4', 'D1']:
+                if tf in trends:
+                    trend_val = trends[tf]
+                    if trend_val == "BULLISH":
+                        trend_color = "#4CAF50"
+                        trend_icon = "📈"
+                    elif trend_val == "BEARISH":
+                        trend_color = "#F44336"
+                        trend_icon = "📉"
+                    else:
+                        trend_color = "#FFC107"
+                        trend_icon = "↔️"
+
+                    # Mark H4 as primary
+                    if tf == "H4":
+                        html += f"""        <div style="padding: 10px; margin: 5px 0; background-color: #333; border-radius: 5px; border-left: 4px solid {trend_color};">
+            <span style="color: {trend_color}; font-size: 16px; font-weight: bold;">{trend_icon} {tf}: {trend_val} ⭐ PRIMARY</span>
+        </div>\n"""
+                    else:
+                        html += f"""        <div style="padding: 8px; margin: 5px 0; background-color: #333; border-radius: 5px;">
+            <span style="color: {trend_color}; font-size: 15px;">{trend_icon} {tf}: {trend_val}</span>
+        </div>\n"""
+
+            html += "    </div>\n"
+
+        # SESSION & VOLATILITY
         if analysis['market_conditions']:
             mc = analysis['market_conditions']
             html += """
-    <div style="background-color: #1a1a1a;
-                border-left: 4px solid #2196F3;
-                border-radius: 8px;
-                padding: 20px;
-                margin-bottom: 20px;">
-        <h3 style="color: #2196F3;
-                   font-size: 20px;
-                   margin: 0 0 15px 0;
-                   font-weight: bold;">📈 MARKET CONDITIONS</h3>
+    <div style="background-color: #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+        <h3 style="color: #9C27B0; margin: 0 0 15px 0; font-size: 18px;">⏰ MARKET INFO</h3>
 """
-
-            # Multi-timeframe trend display
-            if 'trends' in mc:
-                html += "        <p style='color: #FFD700; font-size: 16px; margin: 8px 0 12px 0;'><strong>📊 MULTI-TIMEFRAME TREND ANALYSIS:</strong></p>\n"
-                trends = mc['trends']
-                for tf in ['M15', 'H1', 'H4', 'D1']:
-                    if tf in trends:
-                        trend_value = trends[tf]
-                        # Color code the trends
-                        if trend_value == "BULLISH":
-                            color = "#4CAF50"  # Green
-                            icon = "📈"
-                        elif trend_value == "BEARISH":
-                            color = "#F44336"  # Red
-                            icon = "📉"
-                        else:  # RANGING
-                            color = "#FFC107"  # Yellow
-                            icon = "↔️"
-
-                        # Highlight H4 (primary timeframe)
-                        if tf == "H4":
-                            html += f"        <p style='color: {color}; font-size: 17px; margin: 6px 0 6px 20px; font-weight: bold;'>{icon} <strong>{tf}: {trend_value}</strong> ⭐ (PRIMARY)</p>\n"
-                        else:
-                            html += f"        <p style='color: {color}; font-size: 15px; margin: 4px 0 4px 20px;'>{icon} {tf}: {trend_value}</p>\n"
-                html += "        <hr style='border: none; border-top: 1px solid #333; margin: 12px 0;'>\n"
-
-            if 'volatility' in mc:
-                html += f"        <p style='color: #FFFFFF; font-size: 16px; margin: 8px 0;'>▸ <strong>Volatility (H1):</strong> {mc['volatility']}</p>\n"
             if 'session' in mc:
-                html += f"        <p style='color: #FFFFFF; font-size: 16px; margin: 8px 0;'>▸ <strong>Session:</strong> {mc['session']}</p>\n"
+                html += f"        <p style='margin: 8px 0; font-size: 15px;'>▸ <strong>Session:</strong> {mc['session']}</p>\n"
+            if 'volatility' in mc:
+                html += f"        <p style='margin: 8px 0; font-size: 15px;'>▸ <strong>Volatility (H1):</strong> {mc['volatility']}</p>\n"
             html += "    </div>\n"
 
         # POSITIVE FACTORS
         if reasons:
             html += """
-    <div style="background-color: #1a1a1a;
-                border-left: 4px solid #4CAF50;
-                border-radius: 8px;
-                padding: 20px;
-                margin-bottom: 20px;">
-        <h3 style="color: #4CAF50;
-                   font-size: 20px;
-                   margin: 0 0 15px 0;
-                   font-weight: bold;">✅ POSITIVE FACTORS</h3>
+    <div style="background-color: #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
+        <h3 style="color: #4CAF50; margin: 0 0 12px 0; font-size: 18px;">✅ POSITIVE FACTORS</h3>
 """
             for reason in reasons:
-                html += f"        <p style='color: #FFFFFF; font-size: 16px; margin: 8px 0; line-height: 1.5;'>▸ {reason}</p>\n"
+                html += f"        <p style='margin: 6px 0; font-size: 14px; line-height: 1.4;'>• {reason}</p>\n"
             html += "    </div>\n"
 
         # WARNING FACTORS
         if warnings:
             html += """
-    <div style="background-color: #1a1a1a;
-                border-left: 4px solid #F44336;
-                border-radius: 8px;
-                padding: 20px;
-                margin-bottom: 20px;">
-        <h3 style="color: #F44336;
-                   font-size: 20px;
-                   margin: 0 0 15px 0;
-                   font-weight: bold;">❌ WARNING FACTORS</h3>
+    <div style="background-color: #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #F44336;">
+        <h3 style="color: #F44336; margin: 0 0 12px 0; font-size: 18px;">❌ WARNING FACTORS</h3>
 """
             for warning in warnings:
-                html += f"        <p style='color: #FFFFFF; font-size: 16px; margin: 8px 0; line-height: 1.5;'>▸ {warning}</p>\n"
+                html += f"        <p style='margin: 6px 0; font-size: 14px; line-height: 1.4;'>• {warning}</p>\n"
             html += "    </div>\n"
 
-        # FINAL VERDICT BOX
+        # VERDICT
         verdict_text = "ML APPROVES THIS TRADE" if approved else "LOW PROBABILITY - WAIT FOR BETTER SETUP"
         html += f"""
-    <div style="background-color: #1a1a1a;
-                border: 3px solid {border_color};
-                border-radius: 8px;
-                padding: 25px;
-                text-align: center;">
-        <h2 style="color: {border_color};
-                   font-size: 28px;
-                   margin: 0 0 10px 0;
-                   font-weight: bold;">{decision_icon} VERDICT</h2>
-        <p style="color: #FFFFFF;
-                  font-size: 20px;
-                  margin: 0;
-                  font-weight: 500;">{verdict_text}</p>
+    <div style="background-color: #2a2a2a; padding: 20px; border-radius: 8px; text-align: center; border: 2px solid {decision_color};">
+        <h3 style="color: {decision_color}; margin: 0 0 8px 0; font-size: 20px;">{decision_icon} VERDICT</h3>
+        <p style="color: #fff; font-size: 16px; margin: 0;">{verdict_text}</p>
     </div>
 
-    <!-- FOOTER NOTE -->
-    <p style="text-align: center;
-              color: #666;
-              font-size: 13px;
-              margin-top: 20px;
-              font-style: italic;">
+    <p style="text-align: center; color: #666; font-size: 12px; margin-top: 15px;">
         Note: Check spread yourself before executing
     </p>
 </div>
