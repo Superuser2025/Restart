@@ -12,6 +12,7 @@
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
 #include <Trade\AccountInfo.mqh>
+#include "JSONExporter.mqh"
 
 //+------------------------------------------------------------------+
 //| TRADING PROFILE ENUMERATION                                       |
@@ -719,6 +720,7 @@ void AddPriceActionComment(string text, color text_color, int priority, datetime
 //| GLOBAL ML SYSTEM                                                  |
 //+------------------------------------------------------------------+
 CMLTradingSystem* ml_system = NULL;
+CJSONExporter jsonExporter;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                    |
@@ -855,6 +857,20 @@ int OnInit()
         Print("ML System disabled (ML_Enabled = false)");
     }
 
+    // Initialize JSON Exporter
+    if(!jsonExporter.Init("ML_Data\\market_data.json"))
+    {
+        Print("WARNING: JSON Exporter initialization failed");
+    }
+    else
+    {
+        Print("✓ JSON Exporter initialized successfully");
+    }
+
+    // Set timer for data export (every 10 seconds)
+    EventSetTimer(10);
+    Print("✓ Timer set for 10-second data export");
+
     return INIT_SUCCEEDED;
 }
 
@@ -863,6 +879,9 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+    // Kill timer
+    EventKillTimer();
+
     // Release indicators
     if(h_EMA_200 != INVALID_HANDLE) IndicatorRelease(h_EMA_200);
     if(h_EMA_Higher != INVALID_HANDLE) IndicatorRelease(h_EMA_Higher);
@@ -1826,6 +1845,72 @@ void OnChartEvent(const int id,
             }
         }
     }
+}
+
+//+------------------------------------------------------------------+
+//| Timer function - Exports data every 10 seconds                   |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+    ExportMarketDataToJSON();
+}
+
+//+------------------------------------------------------------------+
+//| Export Market Data to JSON for Python                            |
+//+------------------------------------------------------------------+
+void ExportMarketDataToJSON()
+{
+    jsonExporter.BeginExport();
+
+    // Basic market info
+    jsonExporter.AddString("symbol", Symbol());
+    jsonExporter.AddString("timeframe", EnumToString(Period()));
+    jsonExporter.AddLong("timestamp", TimeCurrent());
+    jsonExporter.AddDouble("bid", SymbolInfoDouble(Symbol(), SYMBOL_BID), 5);
+    jsonExporter.AddDouble("ask", SymbolInfoDouble(Symbol(), SYMBOL_ASK), 5);
+
+    double spread = (SymbolInfoDouble(Symbol(), SYMBOL_ASK) - SymbolInfoDouble(Symbol(), SYMBOL_BID)) / _Point;
+    jsonExporter.AddDouble("spread", spread, 2);
+
+    // Account info
+    jsonExporter.AddDouble("account_balance", AccountInfoDouble(ACCOUNT_BALANCE), 2);
+    jsonExporter.AddDouble("account_equity", AccountInfoDouble(ACCOUNT_EQUITY), 2);
+    jsonExporter.AddDouble("account_margin", AccountInfoDouble(ACCOUNT_MARGIN), 2);
+    jsonExporter.AddDouble("account_free_margin", AccountInfoDouble(ACCOUNT_FREEMARGIN), 2);
+
+    // Trading status
+    jsonExporter.AddBool("auto_trading", EnableTrading);
+    jsonExporter.AddInt("positions_total", PositionsTotal());
+    jsonExporter.AddInt("orders_total", OrdersTotal());
+
+    // Calculate total P&L
+    double total_pnl = 0.0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        if(PositionSelectByTicket(PositionGetTicket(i)))
+        {
+            total_pnl += PositionGetDouble(POSITION_PROFIT);
+        }
+    }
+    jsonExporter.AddDouble("total_pnl", total_pnl, 2);
+
+    // ML System status
+    jsonExporter.AddBool("ml_enabled", ML_Enabled);
+
+    // Trading profile
+    string profile_name = "";
+    switch(TradingProfile)
+    {
+        case PROFILE_M5_SCALPING: profile_name = "M5_SCALPING"; break;
+        case PROFILE_M15_INTRADAY: profile_name = "M15_INTRADAY"; break;
+        case PROFILE_H1_SWING: profile_name = "H1_SWING"; break;
+        case PROFILE_H4_POSITION: profile_name = "H4_POSITION"; break;
+        case PROFILE_D1_INVESTOR: profile_name = "D1_INVESTOR"; break;
+        default: profile_name = "CUSTOM"; break;
+    }
+    jsonExporter.AddString("trading_profile", profile_name);
+
+    jsonExporter.EndExport();
 }
 
 //+------------------------------------------------------------------+
