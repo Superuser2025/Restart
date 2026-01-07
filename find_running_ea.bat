@@ -30,7 +30,7 @@ if exist "InstitutionalTradingRobot_v3.ex5" (
     dir "InstitutionalTradingRobot_v3.ex5" | find "InstitutionalTradingRobot"
     echo.
 
-    echo This is your COMPILED (running) EA.
+    echo This is your COMPILED EA - currently running.
     echo.
     echo To find the SOURCE file (.mq5):
     echo 1. Open MT5
