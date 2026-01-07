@@ -175,25 +175,25 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         # Read ML prediction
         ml_data = self.read_ml_prediction(symbol)
 
+        # Start with initial ML assessment
+        ml_allows_trade = False
+
         if ml_data:
             analysis['ml_signal'] = ml_data.get('signal', 'UNKNOWN')
             analysis['probability'] = ml_data.get('probability', 0.0) * 100  # Convert to percentage
             analysis['confidence'] = ml_data.get('confidence', 0.0) * 100
 
-            # Check if ML approves
+            # Check if ML approves (initial gate)
             if analysis['ml_signal'] == 'ENTER':
-                analysis['approved'] = True
+                ml_allows_trade = True
                 analysis['reasons'].append(f"ML model shows high win probability ({analysis['probability']:.1f}%)")
                 analysis['reasons'].append(f"Model confidence is good ({analysis['confidence']:.1f}%)")
             elif analysis['ml_signal'] == 'WAIT':
-                analysis['approved'] = False
                 analysis['warnings'].append(f"ML model shows moderate probability ({analysis['probability']:.1f}%)")
                 analysis['warnings'].append("Wait for better setup")
             else:  # SKIP
-                analysis['approved'] = False
                 analysis['warnings'].append(f"ML model shows low probability ({analysis['probability']:.1f}%)")
                 analysis['warnings'].append("Not recommended to enter")
-
         else:
             analysis['warnings'].append("ML prediction file not found")
             analysis['warnings'].append("Proceeding without ML analysis")
@@ -202,37 +202,53 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         market_conditions = self.get_market_conditions(symbol)
         analysis['market_conditions'] = market_conditions
 
-        # Analyze market conditions
-        if market_conditions:
-            # Trend
+        # CRITICAL: Check trend alignment - REJECT if trading against trend
+        trend_aligned = False
+        if market_conditions and direction != "CHECK":
             trend = market_conditions.get('trend', 'UNKNOWN')
             if trend != 'UNKNOWN':
                 if direction == "BUY" and trend == "BULLISH":
+                    trend_aligned = True
                     analysis['reasons'].append("Trend is bullish (aligned with BUY)")
                 elif direction == "SELL" and trend == "BEARISH":
+                    trend_aligned = True
                     analysis['reasons'].append("Trend is bearish (aligned with SELL)")
-                elif direction == "CHECK":
-                    analysis['reasons'].append(f"Current trend: {trend}")
-                else:
-                    analysis['warnings'].append(f"Trading against {trend} trend")
+                elif direction == "BUY" and trend == "BEARISH":
+                    trend_aligned = False
+                    analysis['warnings'].append("⚠ CRITICAL: Trading AGAINST bearish trend (counter-trend BUY)")
+                    analysis['warnings'].append("This is a counter-trend trade - HIGH RISK")
+                elif direction == "SELL" and trend == "BULLISH":
+                    trend_aligned = False
+                    analysis['warnings'].append("⚠ CRITICAL: Trading AGAINST bullish trend (counter-trend SELL)")
+                    analysis['warnings'].append("This is a counter-trend trade - HIGH RISK")
+                elif trend == "RANGING":
+                    trend_aligned = True  # Ranging = neutral, allow either direction
+                    analysis['reasons'].append("Market is ranging (no strong trend)")
+            else:
+                trend_aligned = True  # If we can't determine trend, don't block
+        else:
+            trend_aligned = True  # If no market data or CHECK mode, don't block on trend
 
-            # Volatility
+        # FINAL DECISION: Must pass BOTH ML gate AND trend alignment
+        analysis['approved'] = ml_allows_trade and trend_aligned
+
+        # Add explanation if rejected due to trend
+        if ml_allows_trade and not trend_aligned:
+            analysis['warnings'].append("❌ REJECTED: ML approves but direction fights the trend")
+
+        # Analyze volatility and session (additional context)
+        if market_conditions:
             volatility = market_conditions.get('volatility', 'UNKNOWN')
             if volatility == 'LOW':
                 analysis['reasons'].append("Volatility is low (good for entry)")
             elif volatility == 'HIGH':
                 analysis['warnings'].append("Volatility is high (choppy price action)")
 
-            # Session
             session = market_conditions.get('session', 'UNKNOWN')
             if session in ['LONDON', 'NEW_YORK', 'OVERLAP']:
                 analysis['reasons'].append(f"{session.title()} session (high liquidity)")
             elif session == 'ASIAN':
                 analysis['warnings'].append("Asian session (lower liquidity)")
-
-        # Final decision
-        if not analysis['approved'] and len(analysis['warnings']) > len(analysis['reasons']):
-            analysis['approved'] = False
 
         return analysis
 
