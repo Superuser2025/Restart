@@ -237,8 +237,35 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                     # RANGING markets: REJECT all trades - no clear direction
                     trend_aligned = False
                     analysis['warnings'].append("⚠ H4 is RANGING - no clear trend direction")
-                    analysis['warnings'].append("Cannot recommend BUY or SELL in ranging market")
-                    analysis['warnings'].append("Wait for breakout or trend to establish")
+
+                    # Add specific guidance based on range position
+                    range_info = market_conditions.get('range_info')
+                    if range_info:
+                        zone = range_info['zone']
+                        position_pct = range_info['position_pct']
+
+                        # Provide context-specific advice
+                        if zone == "UPPER":
+                            analysis['warnings'].append(f"💡 Price is at {position_pct:.1f}% of range (UPPER zone - near resistance)")
+                            if direction == "BUY":
+                                analysis['warnings'].append("⚠ BUY at range top = HIGH RISK (likely to reverse down)")
+                            elif direction == "SELL":
+                                analysis['warnings'].append("💭 SELL from range top COULD work IF it breaks resistance")
+                                analysis['warnings'].append("⚠ But wait for confirmation - premature entry risky")
+                        elif zone == "LOWER":
+                            analysis['warnings'].append(f"💡 Price is at {position_pct:.1f}% of range (LOWER zone - near support)")
+                            if direction == "SELL":
+                                analysis['warnings'].append("⚠ SELL at range bottom = HIGH RISK (likely to reverse up)")
+                            elif direction == "BUY":
+                                analysis['warnings'].append("💭 BUY from range bottom COULD work IF it holds support")
+                                analysis['warnings'].append("⚠ But wait for confirmation - premature entry risky")
+                        else:
+                            analysis['warnings'].append(f"💡 Price is at {position_pct:.1f}% of range (MIDDLE zone)")
+                            analysis['warnings'].append("⚠ No edge in the middle - wait for price to reach boundaries")
+                    else:
+                        analysis['warnings'].append("Cannot recommend BUY or SELL in ranging market")
+                        analysis['warnings'].append("Wait for breakout or trend to establish")
+
                     if volatility == "HIGH":
                         analysis['warnings'].append("High volatility makes this even more uncertain")
             else:
@@ -350,6 +377,62 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             # Primary trend (use H4 as main timeframe for decision)
             trend = trends.get('H4', 'UNKNOWN')
 
+            # RANGING MARKET ANALYSIS - Calculate range position
+            range_info = None
+            if trend == "RANGING":
+                rates_h4 = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, 100)
+                if rates_h4 is not None and len(rates_h4) >= 50:
+                    # Find recent swing high/low (last 50 bars on H4)
+                    range_high = np.max(rates_h4[-50:]['high'])
+                    range_low = np.min(rates_h4[-50:]['low'])
+                    range_size = range_high - range_low
+
+                    # Calculate position within range (0-100%)
+                    if range_size > 0:
+                        position_pct = ((current_price - range_low) / range_size) * 100
+
+                        # Determine zone
+                        if position_pct >= 70:
+                            zone = "UPPER"
+                            zone_desc = "near resistance"
+                        elif position_pct <= 30:
+                            zone = "LOWER"
+                            zone_desc = "near support"
+                        else:
+                            zone = "MIDDLE"
+                            zone_desc = "in the middle"
+
+                        # Count boundary touches (how many times price touched upper/lower 10% of range)
+                        upper_boundary = range_high * 0.98  # Within 2% of high
+                        lower_boundary = range_low * 1.02   # Within 2% of low
+
+                        upper_touches = np.sum(rates_h4[-50:]['high'] >= upper_boundary)
+                        lower_touches = np.sum(rates_h4[-50:]['low'] <= lower_boundary)
+
+                        # Calculate how long ranging (consecutive ranging bars)
+                        ma50_h4 = np.mean(rates_h4[-50:]['close'])
+                        ranging_bars = 0
+                        for i in range(len(rates_h4)-1, -1, -1):
+                            close_price = rates_h4[i]['close']
+                            if ma50_h4 * 0.995 <= close_price <= ma50_h4 * 1.005:
+                                ranging_bars += 1
+                            else:
+                                break
+
+                        range_info = {
+                            'high': range_high,
+                            'low': range_low,
+                            'size': range_size,
+                            'size_pips': range_size * 10000,  # Approximate pips for FX
+                            'position_pct': position_pct,
+                            'zone': zone,
+                            'zone_desc': zone_desc,
+                            'upper_touches': upper_touches,
+                            'lower_touches': lower_touches,
+                            'ranging_bars': ranging_bars,
+                            'ranging_hours': ranging_bars * 4  # H4 bars to hours
+                        }
+
             # Analyze volatility (using H1)
             rates_h1 = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 100)
             if rates_h1 is not None and len(rates_h1) >= 20:
@@ -389,7 +472,8 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                 'trends': trends,  # All timeframes
                 'volatility': volatility,
                 'session': session,
-                'price': current_price
+                'price': current_price,
+                'range_info': range_info  # RANGING market details (if applicable)
             }
 
         except Exception as e:
@@ -483,6 +567,104 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                         html += f"    <p style='margin: 10px 0; font-size: 16px; color: {trend_color}; padding-left: 20px;'>{trend_icon} {tf}: {trend_val}</p>\n"
 
             html += "\n    <hr style='border: none; border-top: 1px solid #444; margin: 25px 0;'>\n"
+
+        # RANGING MARKET DETAILS
+        if analysis['market_conditions'] and analysis['market_conditions'].get('range_info'):
+            range_info = analysis['market_conditions']['range_info']
+
+            # Determine color based on zone
+            if range_info['zone'] == "UPPER":
+                zone_color = "#F44336"  # Red
+                zone_icon = "🔴"
+            elif range_info['zone'] == "LOWER":
+                zone_color = "#4CAF50"  # Green
+                zone_icon = "🟢"
+            else:
+                zone_color = "#FFC107"  # Yellow
+                zone_icon = "🟡"
+
+            html += f"""
+    <h3 style="color: #FF9800; margin: 0 0 20px 0; font-size: 20px; font-weight: bold;">↔️ RANGING MARKET ANALYSIS</h3>
+
+    <div style="padding: 20px; border: 2px solid #FF9800; border-radius: 8px; margin-bottom: 20px;">
+        <!-- Range Boundaries -->
+        <table style="width: 100%; color: #fff; margin-bottom: 20px;">
+            <tr>
+                <td style="padding: 10px 0; color: #bbb; font-size: 15px;">Range High:</td>
+                <td style="padding: 10px 0; text-align: right; font-size: 18px; font-weight: bold; color: #F44336;">{range_info['high']:.5f}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px 0; color: #bbb; font-size: 15px;">Current Price:</td>
+                <td style="padding: 10px 0; text-align: right; font-size: 20px; font-weight: bold; color: {zone_color};">{analysis['market_conditions']['price']:.5f}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px 0; color: #bbb; font-size: 15px;">Range Low:</td>
+                <td style="padding: 10px 0; text-align: right; font-size: 18px; font-weight: bold; color: #4CAF50;">{range_info['low']:.5f}</td>
+            </tr>
+        </table>
+
+        <!-- Position Indicator -->
+        <div style="margin: 25px 0;">
+            <p style="color: #ccc; font-size: 15px; margin: 0 0 10px 0;">Price Position in Range:</p>
+            <div style="background-color: #333; height: 40px; border-radius: 5px; position: relative; overflow: hidden;">
+                <!-- Range bar background -->
+                <div style="position: absolute; left: 0; top: 0; width: 30%; height: 100%; background-color: rgba(76, 175, 80, 0.3);"></div>
+                <div style="position: absolute; left: 70%; top: 0; width: 30%; height: 100%; background-color: rgba(244, 67, 54, 0.3);"></div>
+
+                <!-- Position marker -->
+                <div style="position: absolute; left: {range_info['position_pct']}%; top: 50%; transform: translateX(-50%) translateY(-50%); font-size: 24px;">
+                    {zone_icon}
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                <span style="color: #4CAF50; font-size: 13px;">🟢 Support Zone</span>
+                <span style="color: {zone_color}; font-size: 16px; font-weight: bold;">{range_info['position_pct']:.1f}% ({range_info['zone']})</span>
+                <span style="color: #F44336; font-size: 13px;">Resistance Zone 🔴</span>
+            </div>
+        </div>
+
+        <!-- Range Statistics -->
+        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #555;">
+            <p style="margin: 8px 0; font-size: 15px; color: #ddd;">▸ <strong style="color: #fff;">Range Size:</strong> {range_info['size_pips']:.1f} pips</p>
+            <p style="margin: 8px 0; font-size: 15px; color: #ddd;">▸ <strong style="color: #fff;">Upper Boundary Tests:</strong> {range_info['upper_touches']} times</p>
+            <p style="margin: 8px 0; font-size: 15px; color: #ddd;">▸ <strong style="color: #fff;">Lower Boundary Tests:</strong> {range_info['lower_touches']} times</p>
+            <p style="margin: 8px 0; font-size: 15px; color: #ddd;">▸ <strong style="color: #fff;">Ranging Duration:</strong> {range_info['ranging_bars']} bars (~{range_info['ranging_hours']} hours)</p>
+        </div>
+
+        <!-- Trading Suggestion -->
+        <div style="margin-top: 20px; padding: 15px; background-color: rgba(255, 152, 0, 0.1); border-left: 4px solid #FF9800; border-radius: 4px;">
+            <p style="margin: 0; font-size: 14px; color: #FFB74D; font-weight: bold;">💡 RANGING MARKET STRATEGY:</p>
+"""
+
+            # Add zone-specific advice
+            if range_info['zone'] == "UPPER":
+                html += """
+            <p style="margin: 8px 0 0 0; font-size: 13px; color: #ddd; line-height: 1.6;">
+                Price is near resistance. Consider SELL if rejection occurs, but WAIT for confirmation.
+                Avoid BUY unless breakout is confirmed with strong momentum.
+            </p>
+"""
+            elif range_info['zone'] == "LOWER":
+                html += """
+            <p style="margin: 8px 0 0 0; font-size: 13px; color: #ddd; line-height: 1.6;">
+                Price is near support. Consider BUY if bounce occurs, but WAIT for confirmation.
+                Avoid SELL unless breakdown is confirmed with strong momentum.
+            </p>
+"""
+            else:
+                html += """
+            <p style="margin: 8px 0 0 0; font-size: 13px; color: #ddd; line-height: 1.6;">
+                Price is in the middle zone - NO EDGE. Wait for price to reach support or resistance
+                before considering entry. Middle entries in ranging markets have low win rate.
+            </p>
+"""
+
+            html += """
+        </div>
+    </div>
+
+    <hr style='border: none; border-top: 1px solid #444; margin: 25px 0;'>
+"""
 
         # SESSION & VOLATILITY
         if analysis['market_conditions']:
