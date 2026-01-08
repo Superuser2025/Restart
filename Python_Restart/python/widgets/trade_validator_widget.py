@@ -78,6 +78,16 @@ class TradeValidatorWidget(QWidget):
         self.results_display = QTextEdit()
         self.results_display.setReadOnly(True)
         self.results_display.setMinimumHeight(400)
+
+        # Set dark background to match the app theme
+        self.results_display.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: none;
+            }
+        """)
+
         layout.addWidget(self.results_display)
 
         # Initial message
