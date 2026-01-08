@@ -86,7 +86,7 @@ class TradeValidatorWidget(QWidget):
     def show_welcome_message(self):
         """Show welcome message"""
         message = """
-<div style="text-align: center; padding: 20px;">
+<div style="text-align: center; padding: 20px; background-color: #1e1e1e; color: #fff;">
 <h2 style="color: #4CAF50;">Manual Trade Validator Ready</h2>
 <p style="font-size: 14px; color: #aaa;">
 Enter your trade idea above and click "Check Trade" to get ML analysis.
@@ -523,7 +523,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
     def show_error(self, message):
         """Show error message"""
         html = f"""
-<div style="padding: 20px; text-align: center;">
+<div style="padding: 20px; text-align: center; background-color: #1e1e1e; color: #fff;">
     <h3 style="color: #F44336;">❌ Error</h3>
     <p style="color: #aaa;">{message}</p>
 </div>
