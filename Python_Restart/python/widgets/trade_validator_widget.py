@@ -234,13 +234,13 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                     analysis['warnings'].append("⚠ CRITICAL: H4 trend is BULLISH - trading AGAINST trend (counter-trend SELL)")
                     analysis['warnings'].append("This is a counter-trend trade - HIGH RISK")
                 elif trend == "RANGING":
-                    # RANGING markets: INFORM user but don't auto-reject
-                    # Let ML decision stand, but warn about ranging conditions
-                    trend_aligned = True  # Don't block on ranging (ML decides)
-                    analysis['warnings'].append("ℹ️  Market is RANGING on H4 - no clear trend")
-                    analysis['warnings'].append("Check multiple timeframes before entering")
+                    # RANGING markets: REJECT all trades - no clear direction
+                    trend_aligned = False
+                    analysis['warnings'].append("⚠ H4 is RANGING - no clear trend direction")
+                    analysis['warnings'].append("Cannot recommend BUY or SELL in ranging market")
+                    analysis['warnings'].append("Wait for breakout or trend to establish")
                     if volatility == "HIGH":
-                        analysis['warnings'].append("⚠ High volatility - choppy conditions")
+                        analysis['warnings'].append("High volatility makes this even more uncertain")
             else:
                 trend_aligned = True  # If we can't determine trend, don't block
         else:
