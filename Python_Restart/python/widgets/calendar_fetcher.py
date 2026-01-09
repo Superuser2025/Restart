@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 import logging
 
 from widgets.news_impact_predictor import NewsEvent, ImpactLevel
+from core.verbose_mode_manager import vprint
 
 
 class CalendarFetcher:
@@ -58,22 +59,22 @@ class CalendarFetcher:
             try:
                 events = self._fetch_from_mt5(days_ahead)
                 if events:
-                    self.logger.info(f"Fetched {len(events)} events from MT5")
+                    vprint(f"Fetched {len(events)} events from MT5")
                     return events
             except Exception as e:
-                self.logger.warning(f"MT5 calendar fetch failed: {e}")
+                vprint(f"MT5 calendar fetch failed: {e}")
 
         # Try Forex Factory scraping
         try:
             events = self._fetch_from_forex_factory(days_ahead)
             if events:
-                self.logger.info(f"Fetched {len(events)} events from Forex Factory")
+                vprint(f"Fetched {len(events)} events from Forex Factory")
                 return events
         except Exception as e:
-            self.logger.warning(f"Forex Factory fetch failed: {e}")
+            vprint(f"Forex Factory fetch failed: {e}")
 
         # If all fails, return empty list
-        self.logger.warning("No calendar source available, using empty calendar")
+        vprint("No calendar source available, using empty calendar")
         return []
 
     def _fetch_from_mt5(self, days_ahead: int) -> List[NewsEvent]:
@@ -159,31 +160,31 @@ class CalendarFetcher:
         try:
             events = self._fetch_from_investing_api(days_ahead)
             if events:
-                self.logger.info(f"✓ Fetched {len(events)} events from Investing.com API")
+                vprint(f"✓ Fetched {len(events)} events from Investing.com API")
                 return events
         except Exception as e:
-            self.logger.warning(f"Investing.com API failed: {e}")
+            vprint(f"Investing.com API failed: {e}")
 
         # Source 2: Try FCS API (free tier)
         try:
             events = self._fetch_from_fcs_api(days_ahead)
             if events:
-                self.logger.info(f"✓ Fetched {len(events)} events from FCS API")
+                vprint(f"✓ Fetched {len(events)} events from FCS API")
                 return events
         except Exception as e:
-            self.logger.warning(f"FCS API failed: {e}")
+            vprint(f"FCS API failed: {e}")
 
         # Source 3: Try local calendar file (user can maintain their own)
         try:
             events = self._fetch_from_local_file(days_ahead)
             if events:
-                self.logger.info(f"✓ Loaded {len(events)} events from local calendar file")
+                vprint(f"✓ Loaded {len(events)} events from local calendar file")
                 return events
         except Exception as e:
-            self.logger.warning(f"Local calendar file failed: {e}")
+            vprint(f"Local calendar file failed: {e}")
 
         # All sources failed
-        self.logger.warning("All calendar sources failed")
+        vprint("All calendar sources failed")
         return events
 
     def _parse_forex_factory_row(self, row, current_date) -> Optional[NewsEvent]:
@@ -314,12 +315,12 @@ class CalendarFetcher:
                 data = response.json()
                 # Parse JSON response and convert to NewsEvent objects
                 # (Implementation depends on actual API structure)
-                self.logger.info("Investing.com API: Response received but parsing not implemented")
+                vprint("Investing.com API: Response received but parsing not implemented")
             else:
-                self.logger.warning(f"Investing.com API returned status {response.status_code}")
+                vprint(f"Investing.com API returned status {response.status_code}")
 
         except Exception as e:
-            self.logger.debug(f"Investing.com API error: {e}")
+            vprint(f"Investing.com API error: {e}")
 
         return events
 
@@ -336,7 +337,7 @@ class CalendarFetcher:
             pass
 
         except Exception as e:
-            self.logger.debug(f"FCS API error: {e}")
+            vprint(f"FCS API error: {e}")
 
         return events
 
@@ -394,7 +395,7 @@ class CalendarFetcher:
                     continue
 
         except Exception as e:
-            self.logger.debug(f"Local calendar file error: {e}")
+            vprint(f"Local calendar file error: {e}")
 
         return events
 
