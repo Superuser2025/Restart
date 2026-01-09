@@ -661,7 +661,7 @@ class ChartPanel(QWidget):
             display_candles = self.candle_data
 
         # DEBUG: Print how many candles we're actually displaying
-        vvprint(f"[Chart] {self.current_timeframe}: Total={len(self.candle_data)}, Displaying={len(display_candles)}")
+        vprint(f"[Chart] {self.current_timeframe}: Total={len(self.candle_data)}, Displaying={len(display_candles)}")
 
         self.canvas.axes.clear()
 
@@ -785,8 +785,8 @@ class ChartPanel(QWidget):
         fig_width, fig_height = self.canvas.fig.get_size_inches()
         canvas_width = self.canvas.width()
         canvas_height = self.canvas.height()
-        vvprint(f"[Chart] {self.current_timeframe}: Final xlim = {final_xlim}, Expected = (-2, 102)")
-        vvprint(f"[Chart] {self.current_timeframe}: Figure size = {fig_width}x{fig_height} inches, Canvas size = {canvas_width}x{canvas_height} pixels")
+        vprint(f"[Chart] {self.current_timeframe}: Final xlim = {final_xlim}, Expected = (-2, 102)")
+        vprint(f"[Chart] {self.current_timeframe}: Figure size = {fig_width}x{fig_height} inches, Canvas size = {canvas_width}x{canvas_height} pixels")
 
         self.canvas.draw()
         self.canvas.flush_events()
@@ -2189,15 +2189,15 @@ class ChartPanel(QWidget):
     def on_symbol_changed(self, symbol: str):
         """Handle symbol change - allows viewing any symbol independent of EA"""
         vprint(f"=" * 80)
-        vvprint(f"[Chart] on_symbol_changed CALLED: {symbol}")
-        vvprint(f"[Chart] Previous symbol was: {self.current_symbol}")
+        vprint(f"[Chart] on_symbol_changed CALLED: {symbol}")
+        vprint(f"[Chart] Previous symbol was: {self.current_symbol}")
         vprint(f"=" * 80)
 
         # Set loading flag to prevent update_chart from interfering
         self.is_loading = True
 
         self.current_symbol = symbol
-        vvprint(f"[Chart] current_symbol set to: {self.current_symbol}")
+        vprint(f"[Chart] current_symbol set to: {self.current_symbol}")
 
         # Emit signal to notify main window
         self.symbol_changed.emit(symbol)
