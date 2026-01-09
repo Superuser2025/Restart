@@ -150,6 +150,13 @@ class EnhancedMainWindow(QMainWindow):
         self.analysis_tabs = QTabWidget()
         self.analysis_tabs.setTabPosition(QTabWidget.TabPosition.North)
 
+        # Tab 0: TRADE VALIDATOR
+        validator_tab = QWidget()
+        validator_layout = QVBoxLayout(validator_tab)
+        self.validator_widget = TradeValidatorWidget()
+        validator_layout.addWidget(self.validator_widget)
+        self.analysis_tabs.addTab(validator_tab, "🎯 Trade Check")
+
         # Tab 1: PRICE ACTION COMMENTARY
         commentary_tab = QWidget()
         commentary_layout = QVBoxLayout(commentary_tab)
@@ -271,6 +278,9 @@ class EnhancedMainWindow(QMainWindow):
             self.dashboard_cards.set_symbol(symbol)
 
         # Update ALL analysis tab widgets with new symbol
+        if hasattr(self, 'validator_widget'):
+            self.validator_widget.set_symbol(symbol)
+
         if hasattr(self, 'commentary_widget'):
             self.commentary_widget.set_symbol(symbol)
 
@@ -322,7 +332,7 @@ class EnhancedMainWindow(QMainWindow):
             self.wyckoff_chart_widget.update_chart(symbol, wyckoff_data)
             vprint(f"[Main Window] Wyckoff chart updated for {symbol}")
             # Automatically switch to Wyckoff Chart tab to show the results
-            self.analysis_tabs.setCurrentWidget(self.analysis_tabs.widget(6))  # Tab 7 is index 6
+            self.analysis_tabs.setCurrentWidget(self.analysis_tabs.widget(7))  # Tab 8 is index 7
 
     def on_display_mode_changed(self, is_max_mode: bool):
         """Handle MAX MODE toggle - hide/show ONLY analysis tabs to maximize chart in center area"""
