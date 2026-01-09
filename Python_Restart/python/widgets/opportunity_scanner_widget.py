@@ -17,6 +17,7 @@ from core.market_analyzer import market_analyzer
 from core.ai_assist_base import AIAssistMixin
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 from core.ml_integration import ml_integration, get_ml_prediction  # ML INTEGRATION ADDED
+from core.verbose_mode_manager import vprint
 
 
 class OpportunityCard(QFrame):
@@ -321,7 +322,7 @@ class TimeframeGroup(QWidget):
             self.current_popup.move(popup_x, popup_y)
             self.current_popup.show()
 
-            print(f"[MiniChart] Card at Y:{card_global_pos.y()}, Column:{column}, Popup {'RIGHT' if column in [0,2] else 'LEFT'} at X:{popup_x} Y:{popup_y}")
+            vprint(f"[MiniChart] Card at Y:{card_global_pos.y()}, Column:{column}, Popup {'RIGHT' if column in [0,2] else 'LEFT'} at X:{popup_x} Y:{popup_y}")
         else:
             # Fallback if sender not found
             self.current_popup = MiniChartPopup(opportunity, parent=None)
@@ -362,15 +363,15 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.setup_ai_assist("opportunity_scanner")
 
         # Auto-scan timer
-        print(f"[OpportunityScanner] Initializing scanner widget...")
+        vprint(f"[OpportunityScanner] Initializing scanner widget...")
         self.scan_timer = QTimer()
         self.scan_timer.timeout.connect(self.scan_market)
         self.scan_timer.start(30000)
-        print(f"[OpportunityScanner] ✓ Scanner timer started (30s interval)")
+        vprint(f"[OpportunityScanner] ✓ Scanner timer started (30s interval)")
 
         # Initial scan
         QTimer.singleShot(100, self.scan_market)
-        print(f"[OpportunityScanner] ✓ Initial scan scheduled (100ms delay)")
+        vprint(f"[OpportunityScanner] ✓ Initial scan scheduled (100ms delay)")
 
     def init_ui(self):
         """Initialize the user interface - NO HEADER"""
@@ -436,12 +437,12 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.mt5_connector = mt5_connector
         if not self.using_real_data:
             self.using_real_data = True
-            print("[Opportunity Scanner] Switched to REAL MT5 data")
+            vprint("[Opportunity Scanner] Switched to REAL MT5 data")
             self.scan_market()
 
     def scan_market(self):
         """Scan all pairs for opportunities - LIVE MODE USES REAL DATA ONLY"""
-        print("🔴 [Opportunity Scanner] Scanning market...")
+        vprint("🔴 [Opportunity Scanner] Scanning market...")
         self.blink_status()
 
         current_time = datetime.now()
@@ -457,12 +458,12 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         new_opportunities = []
 
         if is_demo_mode():
-            print("    🟡 DEMO MODE - Generating fake opportunities")
+            vprint("    🟡 DEMO MODE - Generating fake opportunities")
             new_opportunities = self.generate_opportunities()
         else:
-            print("    🔴 LIVE MODE - Scanning REAL MT5 data from data_manager")
+            vprint("    🔴 LIVE MODE - Scanning REAL MT5 data from data_manager")
             new_opportunities = self.scan_real_market_data_from_data_manager()
-            print(f"    ✓ Found {len(new_opportunities)} REAL opportunities from live data")
+            vprint(f"    ✓ Found {len(new_opportunities)} REAL opportunities from live data")
 
             # CRITICAL: DO NOT fallback to fake data in live mode
             # If no opportunities, that's reality - show "No Opportunities"
@@ -499,7 +500,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         4. Detects real patterns from price data
         5. Scores by confluence (0-100)
         """
-        print("[Scanner] Generating PROFESSIONAL opportunities with real analysis...")
+        vprint("[Scanner] Generating PROFESSIONAL opportunities with real analysis...")
 
         # Use professional opportunity generator
         all_opportunities = opportunity_generator.generate_opportunities(
@@ -508,11 +509,11 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             max_per_group=20  # Generate enough to filter down
         )
 
-        print(f"[Scanner] Generated {len(all_opportunities)} opportunities from market analysis")
+        vprint(f"[Scanner] Generated {len(all_opportunities)} opportunities from market analysis")
 
         # FALLBACK: If MT5 unavailable or no opportunities, generate synthetic ones
         if len(all_opportunities) < 5:
-            print("[Scanner] Low opportunity count - supplementing with synthetic data...")
+            vprint("[Scanner] Low opportunity count - supplementing with synthetic data...")
             opportunities = self.generate_synthetic_opportunities()
             return opportunities
 
@@ -622,7 +623,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         if multi_symbol_data and len(multi_symbol_data) > 0:
             # SUCCESS: We have multi-symbol + multi-timeframe data from MT5!
-            print(f"    ✓ Fetched REAL data for {len(multi_symbol_data)} symbol-timeframe pairs from MT5")
+            vprint(f"    ✓ Fetched REAL data for {len(multi_symbol_data)} symbol-timeframe pairs from MT5")
 
             # Scan each symbol-timeframe combination for opportunities
             for key, df in multi_symbol_data.items():
@@ -640,16 +641,16 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 opp = self.analyze_opportunity(symbol, timeframe, df)
                 if opp:
                     opportunities.append(opp)
-                    print(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
+                    vprint(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
 
-            print(f"    ✓ Found {len(opportunities)} REAL opportunities across {len(multi_symbol_data)} symbol-timeframe pairs")
+            vprint(f"    ✓ Found {len(opportunities)} REAL opportunities across {len(multi_symbol_data)} symbol-timeframe pairs")
             return opportunities
 
         # STRATEGY 2: Try mt5_connector (JSON file approach)
         all_symbols_data = mt5_connector.get_all_symbols_data()
 
         if all_symbols_data and len(all_symbols_data) > 0:
-            print(f"    ✓ Got REAL data for {len(all_symbols_data)} symbols from MT5 JSON")
+            vprint(f"    ✓ Got REAL data for {len(all_symbols_data)} symbols from MT5 JSON")
 
             for symbol, df in all_symbols_data.items():
                 if df is None or len(df) < 20:
@@ -659,17 +660,17 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                     opp = self.analyze_opportunity(symbol, timeframe, df)
                     if opp:
                         opportunities.append(opp)
-                        print(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
+                        vprint(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
 
-            print(f"    ✓ Found {len(opportunities)} REAL opportunities from JSON")
+            vprint(f"    ✓ Found {len(opportunities)} REAL opportunities from JSON")
             return opportunities
 
         # FALLBACK: Use data_manager for single symbol (current chart symbol)
-        print("    ⚠️ MT5 multi-symbol data not available, using data_manager for current symbol only")
+        vprint("    ⚠️ MT5 multi-symbol data not available, using data_manager for current symbol only")
         candles = data_manager.get_candles()
 
         if not candles or len(candles) < 50:
-            print("    ⚠️ Not enough real candle data yet")
+            vprint("    ⚠️ Not enough real candle data yet")
             return []
 
         # Convert to DataFrame for analysis
@@ -677,14 +678,14 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         current_symbol = data_manager.current_price.get('symbol', 'EURUSD')
         current_timeframe = data_manager.candle_buffer.timeframe or 'M15'
 
-        print(f"    → Analyzing {len(candles)} REAL candles for {current_symbol} {current_timeframe}")
+        vprint(f"    → Analyzing {len(candles)} REAL candles for {current_symbol} {current_timeframe}")
 
         # Analyze current symbol for opportunities
         opp = self.analyze_opportunity(current_symbol, current_timeframe, df)
         if opp:
             opportunities.append(opp)
             setup_desc = ', '.join(opp.get('confluence_reasons', ['Technical Setup']))
-            print(f"    ✓ REAL opportunity found: {opp['direction']} {setup_desc} (quality: {opp['quality_score']})")
+            vprint(f"    ✓ REAL opportunity found: {opp['direction']} {setup_desc} (quality: {opp['quality_score']})")
 
         return opportunities
 
@@ -696,7 +697,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
             # Check if MT5 is initialized
             if not mt5.initialize():
-                print("    ⚠️ MT5 not initialized")
+                vprint("    ⚠️ MT5 not initialized")
                 return {}
 
             symbols_data = {}
@@ -717,7 +718,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'H4': mt5.TIMEFRAME_H4
             }
 
-            print(f"    → Fetching {len(priority_pairs)} symbols × {len(timeframes_to_fetch)} timeframes from MT5...")
+            vprint(f"    → Fetching {len(priority_pairs)} symbols × {len(timeframes_to_fetch)} timeframes from MT5...")
 
             for symbol in priority_pairs:
                 for tf_name, tf_constant in timeframes_to_fetch.items():
@@ -741,20 +742,20 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                             symbols_data[key] = df
 
                             if tf_name == 'M5':  # Print once per symbol
-                                print(f"    ✓ {symbol}: Fetched {len(timeframes_to_fetch)} timeframes (100 candles each)")
+                                vprint(f"    ✓ {symbol}: Fetched {len(timeframes_to_fetch)} timeframes (100 candles each)")
 
                     except Exception as e:
-                        print(f"    ✗ {symbol} {tf_name}: Failed ({str(e)[:30]})")
+                        vprint(f"    ✗ {symbol} {tf_name}: Failed ({str(e)[:30]})")
                         continue
 
-            print(f"    → Total symbol-timeframe combinations: {len(symbols_data)}")
+            vprint(f"    → Total symbol-timeframe combinations: {len(symbols_data)}")
             return symbols_data
 
         except ImportError:
-            print("    ⚠️ MetaTrader5 module not available")
+            vprint("    ⚠️ MetaTrader5 module not available")
             return {}
         except Exception as e:
-            print(f"    ⚠️ MT5 fetch error: {e}")
+            vprint(f"    ⚠️ MT5 fetch error: {e}")
             return {}
 
     def scan_real_market_data(self) -> List[Dict]:
@@ -803,13 +804,13 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
             # TEMPORARILY LOWERED from 65 to 50 to see more opportunities
             if quality_score < 50:
-                print(f"    ✗ {symbol} {timeframe}: Quality too low ({quality_score})")
+                vprint(f"    ✗ {symbol} {timeframe}: Quality too low ({quality_score})")
                 return None
 
             if not reasons:
                 reasons = ['Price Action', 'Technical Setup']
 
-            print(f"    ✓ {symbol} {timeframe}: OPPORTUNITY FOUND! Quality={quality_score}, Reasons={reasons}")
+            vprint(f"    ✓ {symbol} {timeframe}: OPPORTUNITY FOUND! Quality={quality_score}, Reasons={reasons}")
 
             # Determine setup type from reasons
             if 'Trend Alignment' in reasons and 'High R:R' in reasons:
@@ -844,7 +845,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 if (trend == 'BUY' and ml_signal == 'BUY') or (trend == 'SELL' and ml_signal == 'SELL'):
                     ml_boost = 10  # Boost quality if ML agrees
                     reasons.append('ML Confirmation')
-                    print(f"    ✓ ML agrees with {trend} signal (confidence: {ml_confidence}%)")
+                    vprint(f"    ✓ ML agrees with {trend} signal (confidence: {ml_confidence}%)")
 
                 # Regime matching
                 ml_regime_match = ml_pred.get('regime_favorable', True)
@@ -885,7 +886,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             }
 
         except Exception as e:
-            print(f"    ✗ {symbol} {timeframe}: Analysis error - {str(e)}")
+            vprint(f"    ✗ {symbol} {timeframe}: Analysis error - {str(e)}")
             import traceback
             traceback.print_exc()
             return None
@@ -894,7 +895,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         """Update all three groups with filtered opportunities - APPLIES INSTITUTIONAL FILTERS"""
         from core.filter_manager import filter_manager
 
-        print(f"\n[Scanner] update_display() called with {len(self.opportunities)} opportunities")
+        vprint(f"\n[Scanner] update_display() called with {len(self.opportunities)} opportunities")
 
         # Apply institutional filters to all opportunities
         filtered_opportunities = [
@@ -902,25 +903,25 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             if filter_manager.filter_opportunity(opp)
         ]
 
-        print(f"[Scanner] After filter_manager: {len(filtered_opportunities)} opportunities passed")
+        vprint(f"[Scanner] After filter_manager: {len(filtered_opportunities)} opportunities passed")
 
         # Separate by timeframe
         short_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['M1', 'M5', 'M15']]
         medium_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['M30', 'H1', 'H2']]
         long_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['H4', 'H8', 'D1']]
 
-        print(f"[Scanner] Timeframe split: Short={len(short_term)}, Medium={len(medium_term)}, Long={len(long_term)}")
+        vprint(f"[Scanner] Timeframe split: Short={len(short_term)}, Medium={len(medium_term)}, Long={len(long_term)}")
 
         # Update each group (max 12 per group = 3 rows x 4 columns)
         self.short_group.update_opportunities(short_term[:12])
         self.mid_group.update_opportunities(medium_term[:12])
         self.long_group.update_opportunities(long_term[:12])
 
-        print(f"[Scanner] Total opportunities: {len(self.opportunities)}, After filters: {len(filtered_opportunities)}")
+        vprint(f"[Scanner] Total opportunities: {len(self.opportunities)}, After filters: {len(filtered_opportunities)}")
 
     def refresh_with_filters(self):
         """Force refresh of display with current filter settings"""
-        print("[Scanner] Refreshing with new filter settings...")
+        vprint("[Scanner] Refreshing with new filter settings...")
         self.update_display()
 
     def blink_status(self):
@@ -949,7 +950,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
     def on_mode_changed(self, is_demo: bool):
         """Handle demo/live mode changes"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"Opportunity Scanner switching to {mode_text} mode")
+        vprint(f"Opportunity Scanner switching to {mode_text} mode")
         self.update_data()
 
     def analyze_with_ai(self, prediction, widget_data):

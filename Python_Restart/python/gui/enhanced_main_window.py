@@ -484,7 +484,7 @@ class EnhancedMainWindow(QMainWindow):
         mt5_symbol = data.get('symbol', 'UNKNOWN')
         mt5_timeframe = data.get('timeframe', 'UNKNOWN')
 
-        print(f"[MT5 Data] Received data for {mt5_symbol} {mt5_timeframe} - User chart shows: {self.current_symbol}")
+        vprint(f"[MT5 Data] Received data for {mt5_symbol} {mt5_timeframe} - User chart shows: {self.current_symbol}")
 
         # CRITICAL: Update data_manager with MT5 data (this was missing!)
         from core.data_manager import data_manager
@@ -641,7 +641,7 @@ class EnhancedMainWindow(QMainWindow):
         self.mode_action.setText("Disable Live Mode" if checked else "Enable Live Mode")
 
         # Note: Status bar and widget refresh handled by on_demo_mode_changed signal
-        print(f"[Main Window] User toggled to {mode_text} mode via menu")
+        vprint(f"[Main Window] User toggled to {mode_text} mode via menu")
 
     def on_toggle_verbose(self, checked: bool):
         """Toggle verbose console output"""
