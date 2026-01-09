@@ -34,7 +34,9 @@ logging.getLogger('matplotlib').setLevel(logging.ERROR)
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
 from core.data_manager import data_manager
+from core.verbose_mode_manager import vprint
 from core.visual_controls import visual_controls
+from core.verbose_mode_manager import vprint
 
 
 # Simple theme and settings (inline replacement for config module)
@@ -545,9 +547,9 @@ class ChartPanel(QWidget):
             # If no symbol specified, use current_symbol (user's choice)
             if symbol is None:
                 symbol = self.current_symbol
-                print(f"[Chart] load_historical_data: Using current_symbol = {symbol}")
+                vprint(f"[Chart] load_historical_data: Using current_symbol = {symbol}")
             else:
-                print(f"[Chart] load_historical_data: Symbol parameter provided = {symbol}")
+                vprint(f"[Chart] load_historical_data: Symbol parameter provided = {symbol}")
 
             timeframe = timeframe or self.current_timeframe
             mt5_timeframe = self.get_mt5_timeframe(timeframe)
@@ -576,7 +578,7 @@ class ChartPanel(QWidget):
             import pandas as pd
             df = pd.DataFrame(rates)
             data_manager.candle_buffer.update(df, symbol, timeframe)
-            print(f"[Chart] Updated data_manager with {symbol} data - {len(rates)} candles")
+            vprint(f"[Chart] Updated data_manager with {symbol} data - {len(rates)} candles")
 
             return True
 
@@ -659,7 +661,7 @@ class ChartPanel(QWidget):
             display_candles = self.candle_data
 
         # DEBUG: Print how many candles we're actually displaying
-        print(f"[Chart] {self.current_timeframe}: Total={len(self.candle_data)}, Displaying={len(display_candles)}")
+        vvprint(f"[Chart] {self.current_timeframe}: Total={len(self.candle_data)}, Displaying={len(display_candles)}")
 
         self.canvas.axes.clear()
 
@@ -783,8 +785,8 @@ class ChartPanel(QWidget):
         fig_width, fig_height = self.canvas.fig.get_size_inches()
         canvas_width = self.canvas.width()
         canvas_height = self.canvas.height()
-        print(f"[Chart] {self.current_timeframe}: Final xlim = {final_xlim}, Expected = (-2, 102)")
-        print(f"[Chart] {self.current_timeframe}: Figure size = {fig_width}x{fig_height} inches, Canvas size = {canvas_width}x{canvas_height} pixels")
+        vvprint(f"[Chart] {self.current_timeframe}: Final xlim = {final_xlim}, Expected = (-2, 102)")
+        vvprint(f"[Chart] {self.current_timeframe}: Figure size = {fig_width}x{fig_height} inches, Canvas size = {canvas_width}x{canvas_height} pixels")
 
         self.canvas.draw()
         self.canvas.flush_events()
@@ -1575,19 +1577,19 @@ class ChartPanel(QWidget):
                         # Unknown format - skip
                         continue
             else:
-                print(f"[ChartOverlay] ERROR: Unknown candle_data type: {type(self.candle_data)}")
+                vprint(f"[ChartOverlay] ERROR: Unknown candle_data type: {type(self.candle_data)}")
                 return
 
-            print(f"\n[ChartOverlay] ═══ SMART MONEY DETECTION for {self.current_symbol} ═══")
-            print(f"[ChartOverlay] → Analyzing {len(candles)} candles")
+            vprint(f"\n[ChartOverlay] ═══ SMART MONEY DETECTION for {self.current_symbol} ═══")
+            vprint(f"[ChartOverlay] → Analyzing {len(candles)} candles")
 
             # Draw FVGs (Fair Value Gaps) - CHECK VISUAL CONTROL
             if visual_controls.should_draw_fvg_zones():
-                print(f"[ChartOverlay] --- FVG DETECTION ---")
+                vprint(f"[ChartOverlay] --- FVG DETECTION ---")
                 fvgs = fair_value_gap_detector.detect_fair_value_gaps(
                     candles, self.current_symbol, lookback=150, min_gap_pips=3
                 )
-                print(f"[ChartOverlay] Total FVGs: {len(fvgs)}, Unfilled: {len([f for f in fvgs if not f['filled']])}")
+                vprint(f"[ChartOverlay] Total FVGs: {len(fvgs)}, Unfilled: {len([f for f in fvgs if not f['filled']])}")
 
                 if fvgs and len(fvgs) > 0:
                     # Convert to chart format with timestamps
@@ -1599,10 +1601,10 @@ class ChartPanel(QWidget):
                             if 0 <= candle_idx < len(candles):
                                 # Use 'timestamp' field (has real time), not 'time' (often 0)
                                 candle_time = candles[candle_idx].get('timestamp') or candles[candle_idx].get('time')
-                                print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, time={candle_time}")
+                                vprint(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, time={candle_time}")
                             else:
                                 candle_time = None
-                                print(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, BAD INDEX={candle_idx}")
+                                vprint(f"[ChartOverlay]     FVG {i+1}: top={fvg['top']:.5f}, bottom={fvg['bottom']:.5f}, type={fvg['type']}, BAD INDEX={candle_idx}")
 
                             fvg_chart_data.append({
                                 'top': fvg['top'],
@@ -1614,16 +1616,16 @@ class ChartPanel(QWidget):
                                 'candle_index': candle_idx
                             })
                     self.draw_fvg_zones(fvg_chart_data)
-                    print(f"[ChartOverlay]   → Drew {len(fvg_chart_data)} FVG zones")
+                    vprint(f"[ChartOverlay]   → Drew {len(fvg_chart_data)} FVG zones")
 
             # Draw Order Blocks - CHECK VISUAL CONTROL
             if visual_controls.should_draw_order_blocks():
-                print(f"[ChartOverlay] --- ORDER BLOCK DETECTION ---")
+                vprint(f"[ChartOverlay] --- ORDER BLOCK DETECTION ---")
                 order_blocks = order_block_detector.detect_order_blocks(
                     candles, self.current_symbol, lookback=150, min_impulse_pips=8
                 )
                 valid_obs = [ob for ob in order_blocks if ob['valid'] and not ob['mitigated']]
-                print(f"[ChartOverlay] Total OBs: {len(order_blocks)}, Valid: {len(valid_obs)}")
+                vprint(f"[ChartOverlay] Total OBs: {len(order_blocks)}, Valid: {len(valid_obs)}")
 
                 if order_blocks and len(order_blocks) > 0:
                     # Convert to chart format with timestamps
@@ -1635,10 +1637,10 @@ class ChartPanel(QWidget):
                         if 0 <= candle_idx < len(candles):
                             # Use 'timestamp' field (has real time), not 'time' (often 0)
                             candle_time = candles[candle_idx].get('timestamp') or candles[candle_idx].get('time')
-                            print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, time={candle_time}")
+                            vprint(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, time={candle_time}")
                         else:
                             candle_time = None
-                            print(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, BAD INDEX={candle_idx}")
+                            vprint(f"[ChartOverlay]     OB {i+1}: high={ob['price_high']:.5f}, low={ob['price_low']:.5f}, type={ob['type']}, BAD INDEX={candle_idx}")
 
                         ob_chart_data.append({
                             'top': ob['price_high'],
@@ -1649,15 +1651,15 @@ class ChartPanel(QWidget):
                             'candle_index': candle_idx
                         })
                     self.draw_order_block_zones(ob_chart_data)
-                    print(f"[ChartOverlay]   → Drew {len(ob_chart_data)} OB zones")
+                    vprint(f"[ChartOverlay]   → Drew {len(ob_chart_data)} OB zones")
 
             # Draw Liquidity Zones - CHECK VISUAL CONTROL
             if visual_controls.should_draw_liquidity_lines():
-                print(f"[ChartOverlay] --- LIQUIDITY SWEEP DETECTION ---")
+                vprint(f"[ChartOverlay] --- LIQUIDITY SWEEP DETECTION ---")
                 sweeps = liquidity_sweep_detector.detect_liquidity_sweeps(
                     candles, self.current_symbol, lookback=150, tolerance_pips=5
                 )
-                print(f"[ChartOverlay] Total Sweeps: {len(sweeps)}")
+                vprint(f"[ChartOverlay] Total Sweeps: {len(sweeps)}")
 
                 if sweeps and len(sweeps) > 0:
                     # Convert to chart format with timestamps
@@ -1670,14 +1672,14 @@ class ChartPanel(QWidget):
                             'candle_index': sweep.get('candle_index')
                         })
                     self.draw_liquidity_zones(liq_chart_data)
-                    print(f"[ChartOverlay]   → Drew {len(liq_chart_data)} liquidity lines")
+                    vprint(f"[ChartOverlay]   → Drew {len(liq_chart_data)} liquidity lines")
 
             # Draw Legend (if enabled)
             if visual_controls.should_draw_smart_money_legend():
                 self.draw_smart_money_legend()
 
         except Exception as e:
-            print(f"[ChartOverlay] ERROR in draw_chart_overlays: {e}")
+            vprint(f"[ChartOverlay] ERROR in draw_chart_overlays: {e}")
             import traceback
             traceback.print_exc()
 
@@ -1735,7 +1737,7 @@ class ChartPanel(QWidget):
                         dt = datetime.fromtimestamp(timestamp)
                         time_str = dt.strftime('%d.%m %H:%M')
                 except Exception as e:
-                    print(f"[Chart] FVG timestamp={timestamp} (type:{type(timestamp).__name__})")
+                    vprint(f"[Chart] FVG timestamp={timestamp} (type:{type(timestamp).__name__})")
 
             # Add label - DON'T show epoch timestamps!
             if time_str:
@@ -1808,7 +1810,7 @@ class ChartPanel(QWidget):
                         dt = datetime.fromtimestamp(timestamp)
                         time_str = dt.strftime('%d.%m %H:%M')
                 except Exception as e:
-                    print(f"[Chart] OB timestamp={timestamp} (type:{type(timestamp).__name__})")
+                    vprint(f"[Chart] OB timestamp={timestamp} (type:{type(timestamp).__name__})")
 
             # Add label - DON'T show epoch timestamps!
             if time_str:
@@ -1872,7 +1874,7 @@ class ChartPanel(QWidget):
                         dt = datetime.fromtimestamp(timestamp)
                         time_str = dt.strftime('%d.%m %H:%M')
                 except Exception as e:
-                    print(f"[Chart] LIQ timestamp={timestamp} (type:{type(timestamp).__name__})")
+                    vprint(f"[Chart] LIQ timestamp={timestamp} (type:{type(timestamp).__name__})")
 
             # Add label - DON'T show epoch timestamps!
             if time_str:
@@ -1979,7 +1981,7 @@ class ChartPanel(QWidget):
                 )
 
         except Exception as e:
-            print(f"[Chart] Error drawing legend: {e}")
+            vprint(f"[Chart] Error drawing legend: {e}")
             import traceback
             traceback.print_exc()
 
@@ -2133,18 +2135,18 @@ class ChartPanel(QWidget):
 
             # ALWAYS reload data to get new candles from MT5
             # This is needed so the chart actually updates with market movement
-            print(f"[Chart] Reloading data at {datetime.now().strftime('%H:%M:%S')}")
+            vprint(f"[Chart] Reloading data at {datetime.now().strftime('%H:%M:%S')}")
             success = self.load_historical_data()  # CORRECT METHOD NAME
 
             # CRITICAL: Redraw the chart with new data!
             if success:
                 self.plot_candlesticks()
-                print(f"[Chart] ✓ Chart redrawn with {len(self.candle_data)} candles")
+                vprint(f"[Chart] ✓ Chart redrawn with {len(self.candle_data)} candles")
             else:
-                print(f"[Chart] ✗ Failed to load data from MT5")
+                vprint(f"[Chart] ✗ Failed to load data from MT5")
 
         except Exception as e:
-            print(f"[Chart] Error updating: {e}")
+            vprint(f"[Chart] Error updating: {e}")
             if hasattr(self, 'connection_label'):
                 self.connection_label.setText("🔴 MT5: Error")
                 self.connection_label.setStyleSheet(f"""
@@ -2186,16 +2188,16 @@ class ChartPanel(QWidget):
 
     def on_symbol_changed(self, symbol: str):
         """Handle symbol change - allows viewing any symbol independent of EA"""
-        print(f"=" * 80)
-        print(f"[Chart] on_symbol_changed CALLED: {symbol}")
-        print(f"[Chart] Previous symbol was: {self.current_symbol}")
-        print(f"=" * 80)
+        vprint(f"=" * 80)
+        vvprint(f"[Chart] on_symbol_changed CALLED: {symbol}")
+        vvprint(f"[Chart] Previous symbol was: {self.current_symbol}")
+        vprint(f"=" * 80)
 
         # Set loading flag to prevent update_chart from interfering
         self.is_loading = True
 
         self.current_symbol = symbol
-        print(f"[Chart] current_symbol set to: {self.current_symbol}")
+        vvprint(f"[Chart] current_symbol set to: {self.current_symbol}")
 
         # Emit signal to notify main window
         self.symbol_changed.emit(symbol)
@@ -2204,9 +2206,9 @@ class ChartPanel(QWidget):
         if self.mt5_initialized:
             success = self.load_historical_data(symbol=symbol)
             if success:
-                print(f"[Chart] ✓ Loaded {len(self.candle_data)} candles for {symbol} from MT5")
+                vprint(f"[Chart] ✓ Loaded {len(self.candle_data)} candles for {symbol} from MT5")
             else:
-                print(f"[Chart] ✗ Failed to load {symbol} from MT5, trying fallback...")
+                vprint(f"[Chart] ✗ Failed to load {symbol} from MT5, trying fallback...")
                 # Fallback to live data if historical load fails
                 self.candle_data = []
                 self.get_live_mt5_data()
@@ -2216,9 +2218,9 @@ class ChartPanel(QWidget):
                 import pandas as pd
                 data_manager.candle_buffer.symbol = symbol
                 data_manager.candle_buffer.timeframe = self.current_timeframe
-                print(f"[Chart] Updated data_manager to {symbol} (fallback mode)")
+                vprint(f"[Chart] Updated data_manager to {symbol} (fallback mode)")
         else:
-            print(f"[Chart] MT5 not initialized, using live data for {symbol}")
+            vprint(f"[Chart] MT5 not initialized, using live data for {symbol}")
             # MT5 not available, use live data
             self.candle_data = []
             self.get_live_mt5_data()
@@ -2226,7 +2228,7 @@ class ChartPanel(QWidget):
             # CRITICAL: Update data_manager symbol even without MT5
             data_manager.candle_buffer.symbol = symbol
             data_manager.candle_buffer.timeframe = self.current_timeframe
-            print(f"[Chart] Updated data_manager to {symbol} (no MT5 mode)")
+            vprint(f"[Chart] Updated data_manager to {symbol} (no MT5 mode)")
 
         self.plot_candlesticks()
 

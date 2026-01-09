@@ -14,9 +14,13 @@ import pandas as pd
 
 from widgets.session_momentum_scanner import session_momentum_scanner
 from core.ai_assist_base import AIAssistMixin
+from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import is_demo_mode, get_demo_data, demo_mode_manager
+from core.verbose_mode_manager import vprint
 from core.multi_symbol_manager import get_all_symbols, get_active_symbol
+from core.verbose_mode_manager import vprint
 from core.ml_integration import create_ai_suggestion
+from core.verbose_mode_manager import vprint
 
 
 class MomentumListItem(QWidget):
@@ -155,7 +159,7 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
         """Update with live data - MULTI-SYMBOL support via MT5"""
         from core.data_manager import data_manager
 
-        print("    → update_from_live_data() called - fetching multi-symbol data")
+        vvprint("    → update_from_live_data() called - fetching multi-symbol data")
 
         try:
             # STRATEGY 1: Fetch multi-symbol data directly from MT5
@@ -163,11 +167,11 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
 
             if multi_symbol_data and len(multi_symbol_data) > 0:
                 # SUCCESS: We have real multi-symbol data!
-                print(f"    ✓ Got REAL data for {len(multi_symbol_data)} symbols from MT5")
+                vprint(f"    ✓ Got REAL data for {len(multi_symbol_data)} symbols from MT5")
 
                 # Run momentum scan
                 leaderboard = session_momentum_scanner.scan_momentum(multi_symbol_data)
-                print(f"    ✓ LIVE MOMENTUM DATA: Top pair = {leaderboard[0]['symbol']} ({leaderboard[0]['momentum_score']:.0f}% momentum)")
+                vprint(f"    ✓ LIVE MOMENTUM DATA: Top pair = {leaderboard[0]['symbol']} ({leaderboard[0]['momentum_score']:.0f}% momentum)")
                 self.update_momentum_data(leaderboard)
                 self.status_label.setText(f"Live: {len(multi_symbol_data)} symbols scanned")
                 return
@@ -177,18 +181,18 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
             all_symbols_data = mt5_connector.get_all_symbols_data()
 
             if all_symbols_data and len(all_symbols_data) > 0:
-                print(f"    ✓ Got data for {len(all_symbols_data)} symbols from MT5 JSON")
+                vprint(f"    ✓ Got data for {len(all_symbols_data)} symbols from MT5 JSON")
                 leaderboard = session_momentum_scanner.scan_momentum(all_symbols_data)
                 self.update_momentum_data(leaderboard)
                 self.status_label.setText(f"Live: {len(all_symbols_data)} symbols scanned")
                 return
 
             # FALLBACK: Use data_manager for single symbol
-            print("    ⚠️ MT5 multi-symbol data not available, using single symbol fallback")
+            vprint("    ⚠️ MT5 multi-symbol data not available, using single symbol fallback")
             candles = data_manager.get_candles()
 
             if candles and len(candles) > 20:
-                print(f"    → Using single symbol fallback with {len(candles)} REAL candles")
+                vprint(f"    → Using single symbol fallback with {len(candles)} REAL candles")
                 # Create simple momentum data for current symbol
                 current = candles[-1]
                 prev = candles[-20]
@@ -226,7 +230,7 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
                 self.status_label.setText("Live: Waiting for data...")
 
         except Exception as e:
-            print(f"[Session Momentum] Error fetching live data: {e}")
+            vprint(f"[Session Momentum] Error fetching live data: {e}")
             self.status_label.setText("Live: Error fetching data")
 
     def fetch_multi_symbol_data_from_mt5(self) -> Dict[str, pd.DataFrame]:
@@ -244,7 +248,7 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
             # Get all symbols
             symbols = get_all_symbols()
 
-            print(f"    → Fetching data from MT5 for {len(symbols)} symbols...")
+            vprint(f"    → Fetching data from MT5 for {len(symbols)} symbols...")
 
             for symbol in symbols:
                 try:
@@ -260,19 +264,19 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
                             df['time'] = pd.to_datetime(df['time'], unit='s')
 
                         symbols_data[symbol] = df
-                        print(f"    ✓ {symbol}: Got {len(df)} candles - Last close: {df['close'].iloc[-1]:.5f}")
+                        vprint(f"    ✓ {symbol}: Got {len(df)} candles - Last close: {df['close'].iloc[-1]:.5f}")
 
                 except Exception as e:
-                    print(f"    ✗ {symbol}: Failed ({str(e)[:50]})")
+                    vprint(f"    ✗ {symbol}: Failed ({str(e)[:50]})")
                     continue
 
             return symbols_data
 
         except ImportError:
-            print("    ⚠️ MetaTrader5 module not available")
+            vprint("    ⚠️ MetaTrader5 module not available")
             return {}
         except Exception as e:
-            print(f"    ⚠️ MT5 fetch error: {e}")
+            vprint(f"    ⚠️ MT5 fetch error: {e}")
             return {}
 
     def update_data(self):
@@ -287,7 +291,7 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
                 self.update_momentum_data(demo_data)
                 self.status_label.setText(f"Demo Mode - {len(symbols)} symbols")
         else:
-            print("🔴 [Session Momentum] LIVE MODE - Fetching REAL MT5 data from data_manager")
+            vprint("🔴 [Session Momentum] LIVE MODE - Fetching REAL MT5 data from data_manager")
             # Get live data
             self.update_from_live_data()
 
@@ -298,7 +302,7 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
     def on_mode_changed(self, is_demo: bool):
         """Handle demo/live mode changes"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"Session Momentum widget switching to {mode_text} mode")
+        vprint(f"Session Momentum widget switching to {mode_text} mode")
         self.update_data()
 
     def analyze_with_ai(self, prediction, widget_data):

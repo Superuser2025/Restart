@@ -14,7 +14,9 @@ import pandas as pd
 from widgets.volatility_position_sizer import (volatility_position_sizer,
                                                VolatilityRegime, TrendStrength)
 from core.ai_assist_base import AIAssistMixin
+from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.verbose_mode_manager import vprint
 
 
 class VolatilityPositionWidget(AIAssistMixin, QWidget):
@@ -316,7 +318,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             else:
                 self.sl_input.setValue(current_price + sl_distance)
 
-            print(f"[VolatilityPosition]   → Auto-set Entry: {current_price:.5f}, SL: {self.sl_input.value():.5f}")
+            vprint(f"[VolatilityPosition]   → Auto-set Entry: {current_price:.5f}, SL: {self.sl_input.value():.5f}")
 
             # Auto-calculate position with updated prices
             self.auto_calculate_position()
@@ -332,38 +334,38 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         """Get live data from data_manager and update position sizing"""
         from core.data_manager import data_manager
 
-        print(f"\n[VolatilityPosition] update_from_live_data() called for {self.current_symbol}")
+        vprint(f"\n[VolatilityPosition] update_from_live_data() called for {self.current_symbol}")
 
         # Get candles from data_manager (uses currently loaded symbol)
         candles = data_manager.get_candles(count=100)
 
         if not candles:
-            print(f"[VolatilityPosition] ❌ No data available from data_manager")
+            vprint(f"[VolatilityPosition] ❌ No data available from data_manager")
             self.clear_display()
             return
 
         # Convert to DataFrame
         df = pd.DataFrame(candles)
 
-        print(f"[VolatilityPosition] ✓ Got {len(df)} candles for {self.current_symbol}")
+        vvprint(f"[VolatilityPosition] ✓ Got {len(df)} candles for {self.current_symbol}")
 
         # Show last close price for verification
         if 'close' in df.columns:
             last_close = df['close'].iloc[-1]
-            print(f"[VolatilityPosition]   → Last close: {last_close:.5f}")
+            vprint(f"[VolatilityPosition]   → Last close: {last_close:.5f}")
 
         # Set the market data (this will trigger calculations)
         self.set_market_data(self.current_symbol, df)
 
-        print(f"[VolatilityPosition] ✓ Market data updated successfully")
+        vvprint(f"[VolatilityPosition] ✓ Market data updated successfully")
 
     def update_market_conditions(self):
         """Update volatility and trend displays"""
         if self.current_symbol is None or self.current_data is None:
-            print(f"[VolatilityPosition] ❌ Cannot update - missing symbol or data")
+            vprint(f"[VolatilityPosition] ❌ Cannot update - missing symbol or data")
             return
 
-        print(f"[VolatilityPosition] Calculating market conditions...")
+        vvprint(f"[VolatilityPosition] Calculating market conditions...")
 
         try:
             # Get risk summary
@@ -375,7 +377,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             vol_regime = summary['volatility_regime']
             vol_mult = summary['volatility_multiplier']
 
-            print(f"[VolatilityPosition]   → Volatility: {vol_regime} (×{vol_mult:.2f})")
+            vprint(f"[VolatilityPosition]   → Volatility: {vol_regime} (×{vol_mult:.2f})")
 
             vol_color = self._get_volatility_color(vol_regime)
             self.volatility_label.setText(vol_regime.replace('_', ' '))
@@ -386,7 +388,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             trend_strength = summary['trend_strength']
             trend_mult = summary['trend_multiplier']
 
-            print(f"[VolatilityPosition]   → Trend: {trend_strength} (×{trend_mult:.2f})")
+            vprint(f"[VolatilityPosition]   → Trend: {trend_strength} (×{trend_mult:.2f})")
 
             trend_color = self._get_trend_color(trend_strength)
             self.trend_label.setText(trend_strength.replace('_', ' '))
@@ -397,11 +399,11 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             recommendation = summary['recommendation']
             self.recommendation_label.setText(recommendation)
 
-            print(f"[VolatilityPosition]   → Recommendation: {recommendation[:60]}...")
-            print(f"[VolatilityPosition] ✓ Market conditions updated successfully")
+            vprint(f"[VolatilityPosition]   → Recommendation: {recommendation[:60]}...")
+            vprint(f"[VolatilityPosition] ✓ Market conditions updated successfully")
 
         except Exception as e:
-            print(f"[VolatilityPosition] ❌ Error updating market conditions: {e}")
+            vprint(f"[VolatilityPosition] ❌ Error updating market conditions: {e}")
             import traceback
             traceback.print_exc()
 
@@ -449,13 +451,13 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
                 self.recommendation_label.setText(' '.join(rec_parts))
 
-                print(f"[VolatilityPosition]   → Position: {result['position_size_lots']:.2f} lots at {result['adjusted_risk_pct']:.2f}% risk")
+                vprint(f"[VolatilityPosition]   → Position: {result['position_size_lots']:.2f} lots at {result['adjusted_risk_pct']:.2f}% risk")
 
                 # Emit signal
                 self.position_calculated.emit(result)
 
         except Exception as e:
-            print(f"[VolatilityPosition] ⚠️ Auto-calculate error: {e}")
+            vprint(f"[VolatilityPosition] ⚠️ Auto-calculate error: {e}")
 
     def calculate_position(self):
         """Calculate and display position size (manual button click)"""
@@ -569,26 +571,26 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""
-        print(f"\n[VolatilityPosition] ====== Timer fired: update_data() ======")
+        vprint(f"\n[VolatilityPosition] ====== Timer fired: update_data() ======")
 
         if is_demo_mode():
-            print(f"[VolatilityPosition] Mode: DEMO - loading sample conditions")
+            vprint(f"[VolatilityPosition] Mode: DEMO - loading sample conditions")
             # Load demo volatility data
             self.load_sample_conditions()
         else:
-            print(f"[VolatilityPosition] Mode: LIVE - fetching real data")
+            vprint(f"[VolatilityPosition] Mode: LIVE - fetching real data")
             # Get live data
             self.update_from_live_data()
 
         # Update AI if enabled
         if self.ai_enabled and self.current_data is not None:
-            print(f"[VolatilityPosition] AI enabled - updating suggestions")
+            vprint(f"[VolatilityPosition] AI enabled - updating suggestions")
             self.update_ai_suggestions()
 
     def on_mode_changed(self, is_demo: bool):
         """Handle demo/live mode changes"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"Volatility Position Sizer switching to {mode_text} mode")
+        vprint(f"Volatility Position Sizer switching to {mode_text} mode")
         self.update_data()
 
     def analyze_with_ai(self, prediction, widget_data):
