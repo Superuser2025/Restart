@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                            QLineEdit, QPushButton, QTextEdit, QFrame)
+                            QLineEdit, QPushButton, QTextEdit, QFrame, QCheckBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
@@ -18,6 +18,14 @@ try:
     MT5_AVAILABLE = True
 except ImportError:
     MT5_AVAILABLE = False
+
+# Import Wyckoff analyzer
+try:
+    from analysis.wyckoff_analyzer import WyckoffAnalyzer, WyckoffPhase
+    WYCKOFF_AVAILABLE = True
+except ImportError:
+    WYCKOFF_AVAILABLE = False
+    print("Warning: Wyckoff analyzer not available")
 
 
 class TradeValidatorWidget(QWidget):
@@ -29,6 +37,14 @@ class TradeValidatorWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.current_symbol = "EURUSD"
+        self.wyckoff_enabled = False  # Toggle for Wyckoff analysis
+
+        # Initialize Wyckoff analyzer if available
+        if WYCKOFF_AVAILABLE:
+            self.wyckoff_analyzer = WyckoffAnalyzer()
+        else:
+            self.wyckoff_analyzer = None
+
         self.init_ui()
 
     def init_ui(self):
@@ -66,6 +82,39 @@ class TradeValidatorWidget(QWidget):
         input_layout.addWidget(self.check_button)
 
         layout.addWidget(input_frame)
+
+        # === WYCKOFF TOGGLE ===
+        if WYCKOFF_AVAILABLE:
+            wyckoff_frame = QFrame()
+            wyckoff_layout = QHBoxLayout(wyckoff_frame)
+            wyckoff_layout.setContentsMargins(5, 5, 5, 5)
+
+            self.wyckoff_checkbox = QCheckBox("🔵 Enable Wyckoff LPS/LPSY Analysis")
+            self.wyckoff_checkbox.setChecked(False)
+            self.wyckoff_checkbox.stateChanged.connect(self.toggle_wyckoff)
+            wyckoff_font = QFont()
+            wyckoff_font.setPointSize(10)
+            wyckoff_font.setBold(True)
+            self.wyckoff_checkbox.setFont(wyckoff_font)
+            self.wyckoff_checkbox.setStyleSheet("""
+                QCheckBox {
+                    color: #64B5F6;
+                    padding: 5px;
+                }
+                QCheckBox::indicator {
+                    width: 20px;
+                    height: 20px;
+                }
+            """)
+            wyckoff_layout.addWidget(self.wyckoff_checkbox)
+
+            # Info label
+            wyckoff_info = QLabel("(Detects accumulation/distribution phases, LPS/LPSY entry points)")
+            wyckoff_info.setStyleSheet("color: #888; font-size: 9pt;")
+            wyckoff_layout.addWidget(wyckoff_info)
+
+            wyckoff_layout.addStretch()
+            layout.addWidget(wyckoff_frame)
 
         # === RESULTS SECTION ===
         results_label = QLabel("📊 ANALYSIS RESULT:")
@@ -117,6 +166,12 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 </div>
 """
         self.results_display.setHtml(message)
+
+    def toggle_wyckoff(self, state):
+        """Toggle Wyckoff analysis on/off"""
+        self.wyckoff_enabled = (state == Qt.CheckState.Checked.value)
+        status = "ENABLED" if self.wyckoff_enabled else "DISABLED"
+        print(f"Wyckoff LPS/LPSY analysis {status}")
 
     def validate_trade(self):
         """Validate the trade input"""
@@ -211,6 +266,45 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         # Get market conditions
         market_conditions = self.get_market_conditions(symbol)
         analysis['market_conditions'] = market_conditions
+
+        # WYCKOFF ANALYSIS (if enabled)
+        wyckoff_data = None
+        if self.wyckoff_enabled and self.wyckoff_analyzer and MT5_AVAILABLE:
+            # Analyze multiple timeframes
+            wyckoff_multi_tf = {}
+
+            timeframes = {
+                'H4': mt5.TIMEFRAME_H4,
+                'H1': mt5.TIMEFRAME_H1,
+                'M15': mt5.TIMEFRAME_M15
+            }
+
+            for tf_name, tf_value in timeframes.items():
+                wyckoff_result = self.wyckoff_analyzer.analyze_symbol(symbol, tf_value, bars=100)
+                if wyckoff_result:
+                    wyckoff_multi_tf[tf_name] = wyckoff_result
+
+            if wyckoff_multi_tf:
+                wyckoff_data = wyckoff_multi_tf
+                analysis['wyckoff'] = wyckoff_data
+
+                # Add Wyckoff insights to reasons/warnings based on H4 (primary timeframe)
+                if 'H4' in wyckoff_multi_tf:
+                    h4_wyckoff = wyckoff_multi_tf['H4']
+                    phase = h4_wyckoff['current_phase']
+                    signals = h4_wyckoff['signals']
+
+                    # Add phase information
+                    analysis['reasons'].append(f"🔵 Wyckoff Phase: {phase.value}")
+
+                    # Add LPS/LPSY signals
+                    if signals['action'] != 'WAIT':
+                        if signals['direction'] == direction or direction == "CHECK":
+                            analysis['reasons'].append(f"🔵 Wyckoff: {signals['action']} signal detected ({signals['confidence']})")
+                            for reason in signals['reasons'][:3]:  # Top 3 reasons
+                                analysis['reasons'].append(f"  • {reason}")
+                        else:
+                            analysis['warnings'].append(f"⚠ Wyckoff suggests {signals['action']} but you want {direction}")
 
         # CRITICAL: Check trend alignment - REJECT if trading against trend
         trend_aligned = False
@@ -738,6 +832,112 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             if 'volatility' in mc:
                 html += f"    <p style='margin: 10px 0; font-size: 17px; color: #ddd;'>▸ <strong style='color: #fff;'>Volatility (H1):</strong> {mc['volatility']}</p>\n"
             html += "\n    <hr style='border: none; border-top: 1px solid #444; margin: 25px 0;'>\n"
+
+        # WYCKOFF LPS/LPSY ANALYSIS
+        if 'wyckoff' in analysis and analysis['wyckoff']:
+            wyckoff_data = analysis['wyckoff']
+
+            html += """
+    <h3 style="color: #00BFFF; margin: 0 0 20px 0; font-size: 20px; font-weight: bold;">🔵 WYCKOFF LPS/LPSY ANALYSIS</h3>
+"""
+
+            # Display each timeframe's Wyckoff analysis
+            for tf_name in ['H4', 'H1', 'M15']:
+                if tf_name not in wyckoff_data:
+                    continue
+
+                tf_data = wyckoff_data[tf_name]
+                phase = tf_data['current_phase']
+                lps_lpsy = tf_data.get('lps_lpsy')
+                signals = tf_data['signals']
+                volume_analysis = tf_data['volume_analysis']
+
+                # Timeframe colors
+                if tf_name == 'H4':
+                    tf_color = "#FF9800"
+                elif tf_name == 'H1':
+                    tf_color = "#2196F3"
+                else:  # M15
+                    tf_color = "#9C27B0"
+
+                # Phase colors
+                phase_colors = {
+                    'ACCUMULATION': '#00FF00',
+                    'MARKUP': '#4CAF50',
+                    'DISTRIBUTION': '#FF0000',
+                    'MARKDOWN': '#F44336',
+                    'UNKNOWN': '#888888'
+                }
+                phase_color = phase_colors.get(phase.value, '#888888')
+
+                html += f"""
+    <div style="padding: 20px; border: 2px solid {tf_color}; border-radius: 8px; margin-bottom: 20px;">
+        <h4 style="color: {tf_color}; margin: 0 0 15px 0; font-size: 18px; font-weight: bold;">📊 {tf_name} Timeframe</h4>
+
+        <!-- Wyckoff Phase -->
+        <div style="padding: 15px; background-color: rgba(0, 191, 255, 0.1); border-left: 4px solid {phase_color}; margin-bottom: 15px;">
+            <p style="margin: 0; font-size: 15px; color: #ddd;">
+                <strong style="color: {phase_color};">Phase:</strong> {phase.value}
+            </p>
+        </div>
+"""
+
+                # Show LPS/LPSY if detected
+                if lps_lpsy:
+                    lps_type = lps_lpsy['type']
+                    lps_color = '#00FF00' if lps_type == 'LPS' else '#FF0000'
+                    lps_icon = '🟢' if lps_type == 'LPS' else '🔴'
+
+                    confirmation = "CONFIRMED ✅" if lps_lpsy['confirmed'] else "PENDING ⏳"
+                    strength = lps_lpsy['strength']
+
+                    html += f"""
+        <!-- LPS/LPSY Detection -->
+        <div style="padding: 15px; background-color: rgba(0, 255, 0, 0.05); border: 2px solid {lps_color}; border-radius: 6px; margin-bottom: 15px;">
+            <h5 style="color: {lps_color}; margin: 0 0 10px 0; font-size: 16px;">{lps_icon} {lps_type} Detected ({strength})</h5>
+            <p style="margin: 5px 0; font-size: 14px; color: #ddd;">Status: {confirmation}</p>
+            <p style="margin: 5px 0; font-size: 14px; color: #ddd;">Entry: {lps_lpsy['entry_trigger']:.5f}</p>
+            <p style="margin: 5px 0; font-size: 14px; color: #ddd;">Stop Loss: {lps_lpsy['stop_loss']:.5f}</p>
+            <p style="margin: 5px 0; font-size: 13px; color: #aaa; font-style: italic;">{lps_lpsy['description']}</p>
+        </div>
+"""
+
+                # Show signals
+                if signals['action'] != 'WAIT':
+                    signal_color = '#00FF00' if signals['action'] == 'BUY' else '#FF0000'
+
+                    html += f"""
+        <!-- Wyckoff Signals -->
+        <div style="padding: 12px; background-color: rgba(255, 255, 255, 0.03); border-left: 4px solid {signal_color}; margin-bottom: 15px;">
+            <p style="margin: 0 0 8px 0; font-size: 15px; color: {signal_color}; font-weight: bold;">
+                Signal: {signals['action']} ({signals['confidence']})
+            </p>
+"""
+                    for reason in signals['reasons'][:3]:
+                        html += f"            <p style='margin: 4px 0 4px 10px; font-size: 13px; color: #ddd;'>• {reason}</p>\n"
+
+                    html += """
+        </div>
+"""
+
+                # Volume analysis
+                if volume_analysis:
+                    html += f"""
+        <!-- Volume Analysis -->
+        <div style="padding: 10px; background-color: rgba(0, 0, 0, 0.2); border-radius: 4px;">
+            <p style="margin: 0 0 6px 0; font-size: 14px; color: #FFD700; font-weight: bold;">Volume Analysis:</p>
+            <p style="margin: 4px 0; font-size: 13px; color: #ddd;">▸ {volume_analysis.get('effort_result', 'N/A')}</p>
+            <p style="margin: 4px 0; font-size: 13px; color: #ddd;">▸ {volume_analysis.get('divergence', 'N/A')}</p>
+        </div>
+"""
+
+                html += """
+    </div>
+"""
+
+            html += """
+    <hr style='border: none; border-top: 1px solid #444; margin: 25px 0;'>
+"""
 
         # POSITIVE FACTORS
         if reasons:
