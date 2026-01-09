@@ -33,6 +33,7 @@ class TradeValidatorWidget(QWidget):
 
     # Signals
     validation_completed = pyqtSignal(str, bool)  # symbol, approved
+    wyckoff_analysis_ready = pyqtSignal(str, dict)  # symbol, wyckoff_data
 
     def __init__(self):
         super().__init__()
@@ -198,6 +199,10 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 
         # Emit signal
         self.validation_completed.emit(symbol, analysis['approved'])
+
+        # Emit Wyckoff analysis signal if available
+        if 'wyckoff' in analysis and analysis['wyckoff']:
+            self.wyckoff_analysis_ready.emit(symbol, analysis['wyckoff'])
 
     def parse_trade_command(self, text):
         """

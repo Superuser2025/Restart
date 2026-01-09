@@ -29,6 +29,7 @@ from widgets.equity_curve_widget import EquityCurveWidget
 from widgets.trade_journal_widget import TradeJournalWidget
 from widgets.dashboard_cards_widget import DashboardCardsWidget
 from widgets.trade_validator_widget import TradeValidatorWidget
+from widgets.wyckoff_chart_widget import WyckoffChartWidget
 
 from core.mt5_connector import MT5Connector
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode
@@ -197,6 +198,17 @@ class EnhancedMainWindow(QMainWindow):
         news_layout.addWidget(self.news_widget)
         self.analysis_tabs.addTab(news_tab, "📰 News")
 
+        # Tab 7: WYCKOFF CHART
+        wyckoff_chart_tab = QWidget()
+        wyckoff_chart_layout = QVBoxLayout(wyckoff_chart_tab)
+        wyckoff_chart_layout.setContentsMargins(0, 0, 0, 0)
+        self.wyckoff_chart_widget = WyckoffChartWidget()
+        wyckoff_chart_layout.addWidget(self.wyckoff_chart_widget)
+        self.analysis_tabs.addTab(wyckoff_chart_tab, "📊 Wyckoff Chart")
+
+        # Connect validator to chart widget
+        self.validator_widget.wyckoff_analysis_ready.connect(self.on_wyckoff_analysis_ready)
+
         layout.addWidget(self.analysis_tabs, 1)  # 20% height
 
         return widget
@@ -302,6 +314,8 @@ class EnhancedMainWindow(QMainWindow):
         if hasattr(self, 'journal_widget'):
             self.journal_widget.set_symbol(symbol)
 
+        # Note: Wyckoff chart widget doesn't need set_symbol() - it updates via signal
+
         self.update_all_data()
 
     def on_timeframe_changed(self, timeframe: str):
@@ -309,6 +323,15 @@ class EnhancedMainWindow(QMainWindow):
         self.current_timeframe = timeframe
         self.status_label.setText(f"Timeframe changed to: {timeframe}")
         self.update_all_data()
+
+    def on_wyckoff_analysis_ready(self, symbol: str, wyckoff_data: dict):
+        """Handle Wyckoff analysis completion - update chart widget"""
+        print(f"[Main Window] Wyckoff analysis ready for {symbol}")
+        if hasattr(self, 'wyckoff_chart_widget'):
+            self.wyckoff_chart_widget.update_chart(symbol, wyckoff_data)
+            print(f"[Main Window] Wyckoff chart updated for {symbol}")
+            # Automatically switch to Wyckoff Chart tab to show the results
+            self.analysis_tabs.setCurrentWidget(self.analysis_tabs.widget(6))  # Tab 7 is index 6
 
     def on_display_mode_changed(self, is_max_mode: bool):
         """Handle MAX MODE toggle - hide/show ONLY analysis tabs to maximize chart in center area"""
