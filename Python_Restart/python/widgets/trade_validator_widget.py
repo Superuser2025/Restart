@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QLineEdit, QPushButton, QTextEdit, QFrame, QCheckBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
+from core.verbose_mode_manager import vprint
 
 try:
     import MetaTrader5 as mt5
@@ -25,7 +26,8 @@ try:
     WYCKOFF_AVAILABLE = True
 except ImportError:
     WYCKOFF_AVAILABLE = False
-    print("Warning: Wyckoff analyzer not available")
+    from core.verbose_mode_manager import vprint
+    vprint("Warning: Wyckoff analyzer not available")
 
 
 class TradeValidatorWidget(QWidget):
@@ -172,7 +174,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         """Toggle Wyckoff analysis on/off"""
         self.wyckoff_enabled = (state == Qt.CheckState.Checked.value)
         status = "ENABLED" if self.wyckoff_enabled else "DISABLED"
-        print(f"Wyckoff LPS/LPSY analysis {status}")
+        vprint(f"Wyckoff LPS/LPSY analysis {status}")
 
     def validate_trade(self):
         """Validate the trade input"""
