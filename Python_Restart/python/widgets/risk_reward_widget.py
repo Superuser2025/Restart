@@ -275,7 +275,7 @@ class RiskRewardWidget(QWidget, AIAssistMixin):
         import pandas as pd
         df = pd.DataFrame(candles)
 
-        vvprint(f"[RiskReward] ✓ Got {len(df)} candles for {self.current_symbol}")
+        vprint(f"[RiskReward] ✓ Got {len(df)} candles for {self.current_symbol}")
 
         # Show last close price for verification
         if 'close' in df.columns:
@@ -301,7 +301,7 @@ class RiskRewardWidget(QWidget, AIAssistMixin):
         if hasattr(self, 'status_label'):
             self.status_label.setText(f"Live: {symbol}")
 
-        vvprint(f"[RiskReward] ✓ Structure levels updated successfully")
+        vprint(f"[RiskReward] ✓ Structure levels updated successfully")
 
     def apply_dark_theme(self):
         """Apply modern dark theme"""

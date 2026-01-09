@@ -227,7 +227,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
 
-        vvprint("🔴 [Order Flow] LIVE MODE - Attempting to fetch real order flow data")
+        vprint("🔴 [Order Flow] LIVE MODE - Attempting to fetch real order flow data")
 
         # Get real candle data to analyze for institutional activity
         candles = data_manager.get_candles()
@@ -247,7 +247,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
 
     def analyze_real_order_flow(self, candles):
         """Analyze real candle data for institutional order flow"""
-        vvprint(f"    → Analyzing {len(candles)} REAL candles for order flow patterns")
+        vprint(f"    → Analyzing {len(candles)} REAL candles for order flow patterns")
 
         # Clear old orders
         self.current_orders = []
@@ -273,7 +273,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
                 }
                 self.current_orders.append(order)
 
-        vvprint(f"    ✓ Found {len(self.current_orders)} potential institutional orders from REAL data")
+        vprint(f"    ✓ Found {len(self.current_orders)} potential institutional orders from REAL data")
 
         # Update display
         self.refresh_display()
@@ -444,7 +444,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
             symbol, df, lookback
         )
 
-        vvprint(f"[Order Flow] Detected {len(detected_orders)} institutional orders in real data")
+        vprint(f"[Order Flow] Detected {len(detected_orders)} institutional orders in real data")
 
         # Emit signals for new orders
         for order in detected_orders:

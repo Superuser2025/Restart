@@ -347,7 +347,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         # Convert to DataFrame
         df = pd.DataFrame(candles)
 
-        vvprint(f"[VolatilityPosition] ✓ Got {len(df)} candles for {self.current_symbol}")
+        vprint(f"[VolatilityPosition] ✓ Got {len(df)} candles for {self.current_symbol}")
 
         # Show last close price for verification
         if 'close' in df.columns:
@@ -357,7 +357,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         # Set the market data (this will trigger calculations)
         self.set_market_data(self.current_symbol, df)
 
-        vvprint(f"[VolatilityPosition] ✓ Market data updated successfully")
+        vprint(f"[VolatilityPosition] ✓ Market data updated successfully")
 
     def update_market_conditions(self):
         """Update volatility and trend displays"""
@@ -365,7 +365,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             vprint(f"[VolatilityPosition] ❌ Cannot update - missing symbol or data")
             return
 
-        vvprint(f"[VolatilityPosition] Calculating market conditions...")
+        vprint(f"[VolatilityPosition] Calculating market conditions...")
 
         try:
             # Get risk summary

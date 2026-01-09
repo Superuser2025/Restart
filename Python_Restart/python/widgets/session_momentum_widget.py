@@ -159,7 +159,7 @@ class SessionMomentumWidget(QWidget, AIAssistMixin):
         """Update with live data - MULTI-SYMBOL support via MT5"""
         from core.data_manager import data_manager
 
-        vvprint("    → update_from_live_data() called - fetching multi-symbol data")
+        vprint("    → update_from_live_data() called - fetching multi-symbol data")
 
         try:
             # STRATEGY 1: Fetch multi-symbol data directly from MT5
