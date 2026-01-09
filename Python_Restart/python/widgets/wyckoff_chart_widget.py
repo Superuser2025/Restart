@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import matplotlib.dates as mdates
+from core.verbose_mode_manager import vprint
 
 try:
     import MetaTrader5 as mt5
