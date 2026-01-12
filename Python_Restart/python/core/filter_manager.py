@@ -226,11 +226,11 @@ class FilterManager:
         if self.regime_strategy:
             regime_match = opportunity.get('regime_match', True)
             if not regime_match:
-                vvprint(f"[Filter] ❌ {symbol} {timeframe}: Regime mismatch")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Regime mismatch")
                 return False
 
         # Passed all enabled filters
-        vvprint(f"[Filter] ✅ {symbol} {timeframe}: PASSED all filters!")
+        vprint(f"[Filter] ✅ {symbol} {timeframe}: PASSED all filters!")
         return True
 
     def get_active_filters(self) -> list:
