@@ -301,15 +301,19 @@ class WyckoffChartWidget(QWidget):
     def _overlay_wyckoff(self, ax, times, rates, wyckoff_data):
         """
         Overlay Wyckoff analysis on chart
-        
+
         Args:
             ax: Matplotlib axis
             times: List of datetime objects
             rates: MT5 rates data
             wyckoff_data: Wyckoff analysis for this timeframe
         """
+        vprint(f"[Wyckoff Chart] _overlay_wyckoff called with data: {wyckoff_data.keys() if wyckoff_data else 'None'}")
+
         # Get LPS/LPSY if detected
         lps_lpsy = wyckoff_data.get('lps_lpsy')
+        vprint(f"[Wyckoff Chart] LPS/LPSY data: {lps_lpsy}")
+
         if lps_lpsy:
             lps_index = lps_lpsy['index']
             if lps_index < len(times):
@@ -386,8 +390,11 @@ class WyckoffChartWidget(QWidget):
                        
         # Add clean phase label at top-left (minimal, no explanations)
         phase = wyckoff_data.get('current_phase')
+        vprint(f"[Wyckoff Chart] Phase data: {phase}")
+
         if phase:
             phase_text = f"Phase: {phase.value}"
+            vprint(f"[Wyckoff Chart] Adding phase label: {phase_text}")
             phase_colors = {
                 'ACCUMULATION': '#00ff00',
                 'MARKUP': '#4CAF50',
