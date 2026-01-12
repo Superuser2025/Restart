@@ -400,9 +400,9 @@ class WyckoffChartWidget(QWidget):
                 'MARKUP': '#4CAF50',
                 'DISTRIBUTION': '#ff0000',
                 'MARKDOWN': '#F44336',
-                'UNKNOWN': '#888888'
+                'UNKNOWN': '#FFD700'  # Changed to gold so it's visible!
             }
-            phase_color = phase_colors.get(phase.value, '#888888')
+            phase_color = phase_colors.get(phase.value, '#FFD700')
 
             # Simple phase label only - all explanations in text panel below
             ax.text(0.02, 0.98, phase_text, transform=ax.transAxes,
@@ -426,10 +426,10 @@ class WyckoffChartWidget(QWidget):
                    verticalalignment='top', horizontalalignment='right',
                    bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.6))
 
-        # Add legend for entry/stop lines - positioned to avoid overlap
-        ax.legend(loc='upper right', bbox_to_anchor=(0.98, 0.90),
-                 facecolor='#2a2a2a', edgecolor='#666',
-                 labelcolor='#fff', fontsize=9, framealpha=0.9)
+            # Only show legend when there are entry/stop lines to display
+            ax.legend(loc='upper right', bbox_to_anchor=(0.98, 0.90),
+                     facecolor='#2a2a2a', edgecolor='#666',
+                     labelcolor='#fff', fontsize=9, framealpha=0.9)
                  
     def _style_chart(self, ax_price, ax_volume, symbol):
         """Apply styling to charts"""
