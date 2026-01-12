@@ -877,6 +877,9 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                 }
                 phase_color = phase_colors.get(phase.value, '#888888')
 
+                # Get phase interpretation
+                phase_interpretation = self._get_phase_interpretation(phase.value, direction)
+
                 html += f"""
     <div style="padding: 20px; border: 2px solid {tf_color}; border-radius: 8px; margin-bottom: 20px;">
         <h4 style="color: {tf_color}; margin: 0 0 15px 0; font-size: 18px; font-weight: bold;">📊 {tf_name} Timeframe</h4>
@@ -886,6 +889,16 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             <p style="margin: 0; font-size: 15px; color: #ddd;">
                 <strong style="color: {phase_color};">Phase:</strong> {phase.value}
             </p>
+        </div>
+
+        <!-- Phase Interpretation -->
+        <div style="padding: 15px; background-color: rgba(255, 215, 0, 0.08); border-left: 4px solid #FFD700; margin-bottom: 15px;">
+            <h5 style="color: #FFD700; margin: 0 0 10px 0; font-size: 15px; font-weight: bold;">📚 What This Means:</h5>
+            <p style="margin: 5px 0; font-size: 14px; color: #ddd; line-height: 1.6;">{phase_interpretation['meaning']}</p>
+            <p style="margin: 8px 0 5px 0; font-size: 13px; color: #FFD700; font-weight: bold;">Trading Strategy:</p>
+            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{phase_interpretation['strategy']}</p>
+            <p style="margin: 8px 0 5px 0; font-size: 13px; color: #FFA500; font-weight: bold;">⚠️ Watch For:</p>
+            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{phase_interpretation['watch_for']}</p>
         </div>
 """
 
@@ -898,6 +911,9 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                     confirmation = "CONFIRMED ✅" if lps_lpsy['confirmed'] else "PENDING ⏳"
                     strength = lps_lpsy['strength']
 
+                    # Get LPS/LPSY interpretation
+                    signal_interpretation = self._get_lps_lpsy_interpretation(lps_type, strength, lps_lpsy['confirmed'], direction)
+
                     html += f"""
         <!-- LPS/LPSY Detection -->
         <div style="padding: 15px; background-color: rgba(0, 255, 0, 0.05); border: 2px solid {lps_color}; border-radius: 6px; margin-bottom: 15px;">
@@ -906,6 +922,18 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             <p style="margin: 5px 0; font-size: 14px; color: #ddd;">Entry: {lps_lpsy['entry_trigger']:.5f}</p>
             <p style="margin: 5px 0; font-size: 14px; color: #ddd;">Stop Loss: {lps_lpsy['stop_loss']:.5f}</p>
             <p style="margin: 5px 0; font-size: 13px; color: #aaa; font-style: italic;">{lps_lpsy['description']}</p>
+        </div>
+
+        <!-- LPS/LPSY Interpretation -->
+        <div style="padding: 15px; background-color: rgba(135, 206, 250, 0.08); border-left: 4px solid #87CEEB; margin-bottom: 15px;">
+            <h5 style="color: #87CEEB; margin: 0 0 10px 0; font-size: 15px; font-weight: bold;">💡 Trading Implications:</h5>
+            <p style="margin: 5px 0; font-size: 14px; color: #ddd; line-height: 1.6;">{signal_interpretation['meaning']}</p>
+            <p style="margin: 8px 0 5px 0; font-size: 13px; color: #87CEEB; font-weight: bold;">Recommended Action:</p>
+            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{signal_interpretation['action']}</p>
+            <p style="margin: 8px 0 5px 0; font-size: 13px; color: #FF6B6B; font-weight: bold;">Risk Management:</p>
+            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{signal_interpretation['risk']}</p>
+            <p style="margin: 8px 0 5px 0; font-size: 13px; color: #FFA500; font-weight: bold;">Confirmation Needed:</p>
+            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{signal_interpretation['confirmation']}</p>
         </div>
 """
 
@@ -929,12 +957,23 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 
                 # Volume analysis
                 if volume_analysis:
+                    # Get volume interpretation
+                    volume_interpretation = self._get_volume_interpretation(volume_analysis, phase.value)
+
                     html += f"""
         <!-- Volume Analysis -->
-        <div style="padding: 10px; background-color: rgba(0, 0, 0, 0.2); border-radius: 4px;">
+        <div style="padding: 10px; background-color: rgba(0, 0, 0, 0.2); border-radius: 4px; margin-bottom: 15px;">
             <p style="margin: 0 0 6px 0; font-size: 14px; color: #FFD700; font-weight: bold;">Volume Analysis:</p>
             <p style="margin: 4px 0; font-size: 13px; color: #ddd;">▸ {volume_analysis.get('effort_result', 'N/A')}</p>
             <p style="margin: 4px 0; font-size: 13px; color: #ddd;">▸ {volume_analysis.get('divergence', 'N/A')}</p>
+        </div>
+
+        <!-- Volume Interpretation -->
+        <div style="padding: 12px; background-color: rgba(138, 43, 226, 0.08); border-left: 4px solid #8A2BE2; margin-bottom: 15px;">
+            <h5 style="color: #8A2BE2; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">📊 Volume Tells Us:</h5>
+            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{volume_interpretation['meaning']}</p>
+            <p style="margin: 8px 0 5px 0; font-size: 12px; color: #8A2BE2; font-weight: bold;">Market Implication:</p>
+            <p style="margin: 5px 0; font-size: 12px; color: #ddd; line-height: 1.4;">{volume_interpretation['implication']}</p>
         </div>
 """
 
@@ -989,6 +1028,172 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 </div>
 """
         self.results_display.setHtml(html)
+
+    def _get_phase_interpretation(self, phase: str, trade_direction: str) -> dict:
+        """
+        Get educational interpretation for Wyckoff phase
+        Returns meaning, strategy, and what to watch for
+        """
+        interpretations = {
+            'ACCUMULATION': {
+                'meaning': "Smart money (institutions) is quietly buying while retail traders are fearful. Price is in a range as large players accumulate positions without pushing price up. This phase typically follows a downtrend and precedes a new uptrend.",
+                'strategy': "Look for LONG opportunities, especially at LPS (Last Point of Support). Wait for price to break above the trading range with volume confirmation before entering aggressively. Be patient - accumulation can last weeks or months.",
+                'watch_for': "Spring (false breakdown below support to trap sellers), Secondary Tests (retests of lows on lower volume), Signs of Strength (rallies on increasing volume). Avoid selling during this phase - the trend is preparing to reverse UP."
+            },
+            'MARKUP': {
+                'meaning': "The uptrend is in full force. Smart money has accumulated their positions and is now allowing price to rise. Retail traders are starting to notice and jump in, providing liquidity for institutional exits later.",
+                'strategy': "Trail stops on existing LONG positions. Look for pullbacks to support (former resistance) for additional entries, but be selective. As markup matures, reduce position sizes - the easy money has been made.",
+                'watch_for': "Signs of weakness (price advances on decreasing volume), Buying Climaxes (parabolic moves that exhaust buyers), Distribution signals (high volume selling near tops). When LPSYs appear, it's time to exit longs and consider shorts."
+            },
+            'DISTRIBUTION': {
+                'meaning': "Smart money is quietly selling while retail traders are euphoric. Price is in a range as large players distribute their positions without crashing the price. This phase typically follows an uptrend and precedes a new downtrend.",
+                'strategy': "Look for SHORT opportunities, especially at LPSY (Last Point of Supply). Wait for price to break below the trading range with volume confirmation before entering aggressively. Exit all long positions - the party is ending.",
+                'watch_for': "Upthrust (false breakout above resistance to trap buyers), Secondary Tests (retests of highs on lower volume), Signs of Weakness (declines on increasing volume). Avoid buying during this phase - the trend is preparing to reverse DOWN."
+            },
+            'MARKDOWN': {
+                'meaning': "The downtrend is in full force. Smart money has distributed their positions and is now allowing price to fall. Retail traders are holding losing positions hoping for recovery, providing liquidity for institutional buying later.",
+                'strategy': "Trail stops on existing SHORT positions. Look for rallies to resistance (former support) for additional short entries, but be selective. As markdown matures, reduce position sizes and watch for accumulation signals.",
+                'watch_for': "Signs of strength (price declines on decreasing volume), Selling Climaxes (panic selling that exhausts sellers), Accumulation signals (high volume buying near bottoms). When LPSs appear, it's time to exit shorts and consider longs."
+            },
+            'UNKNOWN': {
+                'meaning': "The market structure is unclear or transitioning between phases. This often occurs during low volatility periods, news events, or when institutional players are inactive.",
+                'strategy': "WAIT for clarity. Reduce position sizes or stay flat. Let the market tell you what it wants to do. Trading unclear structures leads to losses - the best trade is often no trade.",
+                'watch_for': "Increasing volume and volatility (institutions returning), Clear breaks of support/resistance, Wyckoff events appearing (Springs, Upthrusts, LPS/LPSY). Be patient - opportunities will come when structure clarifies."
+            }
+        }
+
+        interpretation = interpretations.get(phase, interpretations['UNKNOWN'])
+
+        # Add trade-specific context
+        if phase == 'ACCUMULATION' and trade_direction == 'BUY':
+            interpretation['strategy'] = "✅ EXCELLENT TIMING! " + interpretation['strategy']
+        elif phase == 'DISTRIBUTION' and trade_direction == 'SELL':
+            interpretation['strategy'] = "✅ EXCELLENT TIMING! " + interpretation['strategy']
+        elif phase == 'ACCUMULATION' and trade_direction == 'SELL':
+            interpretation['strategy'] = "⚠️ CAUTION - Selling during accumulation fights the smart money! " + interpretation['strategy']
+        elif phase == 'DISTRIBUTION' and trade_direction == 'BUY':
+            interpretation['strategy'] = "⚠️ CAUTION - Buying during distribution fights the smart money! " + interpretation['strategy']
+
+        return interpretation
+
+    def _get_lps_lpsy_interpretation(self, signal_type: str, strength: str, confirmed: bool, trade_direction: str) -> dict:
+        """
+        Get educational interpretation for LPS/LPSY signals
+        Returns meaning, recommended action, risk management, and confirmation needs
+        """
+        if signal_type == 'LPS':
+            meaning = "Last Point of Support (LPS) is the FINAL low-risk buying opportunity after accumulation. It represents the last time price tests support before markup begins. Smart money uses this point to add final positions before the big move up. This is one of the highest probability trade setups in Wyckoff methodology."
+
+            if strength == 'STRONG':
+                action = "This is a HIGH PROBABILITY long entry. Consider entering at the trigger price with appropriate position sizing. The strong rating indicates multiple confirming factors: volume characteristics, price action structure, and phase alignment."
+            elif strength == 'MODERATE':
+                action = "This is a GOOD long entry opportunity. Consider entering with slightly reduced position size compared to strong signals. Wait for additional confirmation if possible (price holding above LPS on retest, volume drying up)."
+            else:  # WEAK
+                action = "This is a MARGINAL long setup. Only enter with small position size and tight stops. Ideally, wait for stronger confirmation or look for a better LPS setup. Weak signals have lower win rates."
+
+            if confirmed:
+                risk = f"Stop loss is placed below the LPS low. If price breaks below this level, the accumulation structure is invalidated and you must exit. Risk 1-2% of account per trade. The confirmation adds confidence - failure rate is lower on confirmed LPS."
+            else:
+                risk = f"Stop loss is placed below the LPS low. However, this signal is NOT YET CONFIRMED - price hasn't demonstrated follow-through. Consider waiting for confirmation (price moving up from LPS, volume increasing on rallies) or use smaller position size with tighter stops."
+
+            confirmation = "Watch for: (1) Price holding above LPS on any retest, (2) Volume decreasing on pullbacks (no supply), (3) Volume increasing on rallies (demand present), (4) Higher lows forming (uptrend structure). If these appear, add to position."
+
+            # Trade-specific context
+            if trade_direction == 'SELL':
+                action = f"⚠️ WARNING: You want to SELL but LPS suggests BUYING! This is contradictory. LPS marks the end of accumulation and start of markup (uptrend). Selling here fights institutional buying pressure. Reconsider your trade direction or wait for market structure to change."
+            elif trade_direction == 'BUY':
+                action = f"✅ ALIGNMENT CONFIRMED! Your BUY trade aligns with the LPS signal. {action}"
+
+        else:  # LPSY
+            meaning = "Last Point of Supply (LPSY) is the FINAL low-risk selling opportunity after distribution. It represents the last time price tests resistance before markdown begins. Smart money uses this point to add final short positions or exit remaining longs before the big move down. This is one of the highest probability short setups in Wyckoff methodology."
+
+            if strength == 'STRONG':
+                action = "This is a HIGH PROBABILITY short entry. Consider entering at the trigger price with appropriate position sizing. The strong rating indicates multiple confirming factors: volume characteristics, price action structure, and phase alignment."
+            elif strength == 'MODERATE':
+                action = "This is a GOOD short entry opportunity. Consider entering with slightly reduced position size compared to strong signals. Wait for additional confirmation if possible (price failing below LPSY on retest, volume drying up on rallies)."
+            else:  # WEAK
+                action = "This is a MARGINAL short setup. Only enter with small position size and tight stops. Ideally, wait for stronger confirmation or look for a better LPSY setup. Weak signals have lower win rates."
+
+            if confirmed:
+                risk = f"Stop loss is placed above the LPSY high. If price breaks above this level, the distribution structure is invalidated and you must exit. Risk 1-2% of account per trade. The confirmation adds confidence - failure rate is lower on confirmed LPSY."
+            else:
+                risk = f"Stop loss is placed above the LPSY high. However, this signal is NOT YET CONFIRMED - price hasn't demonstrated follow-through. Consider waiting for confirmation (price moving down from LPSY, volume increasing on declines) or use smaller position size with tighter stops."
+
+            confirmation = "Watch for: (1) Price failing below LPSY on any retest, (2) Volume decreasing on rallies (no demand), (3) Volume increasing on declines (supply present), (4) Lower highs forming (downtrend structure). If these appear, add to position."
+
+            # Trade-specific context
+            if trade_direction == 'BUY':
+                action = f"⚠️ WARNING: You want to BUY but LPSY suggests SELLING! This is contradictory. LPSY marks the end of distribution and start of markdown (downtrend). Buying here fights institutional selling pressure. Reconsider your trade direction or wait for market structure to change."
+            elif trade_direction == 'SELL':
+                action = f"✅ ALIGNMENT CONFIRMED! Your SELL trade aligns with the LPSY signal. {action}"
+
+        return {
+            'meaning': meaning,
+            'action': action,
+            'risk': risk,
+            'confirmation': confirmation
+        }
+
+    def _get_volume_interpretation(self, volume_analysis: dict, phase: str) -> dict:
+        """
+        Get educational interpretation for volume analysis
+        Returns meaning and market implications
+        """
+        effort_result = volume_analysis.get('effort_result', '')
+        divergence = volume_analysis.get('divergence', '')
+
+        # Parse effort vs result
+        meaning_parts = []
+        implication_parts = []
+
+        if 'high volume' in effort_result.lower() and 'narrow spread' in effort_result.lower():
+            meaning_parts.append("High volume with narrow price spread indicates ABSORPTION - one side (buyers or sellers) is aggressively taking all available orders but price isn't moving much.")
+            if phase == 'ACCUMULATION':
+                implication_parts.append("In accumulation, this suggests institutions are BUYING everything sellers offer, preventing price from falling. Very bullish - markdown phase is ending.")
+            elif phase == 'DISTRIBUTION':
+                implication_parts.append("In distribution, this suggests institutions are SELLING everything buyers want, preventing price from rising. Very bearish - markup phase is ending.")
+            else:
+                implication_parts.append("This often marks a phase transition - watch for breakout direction.")
+
+        elif 'high volume' in effort_result.lower() and 'wide spread' in effort_result.lower():
+            meaning_parts.append("High volume with wide price spread indicates strong agreement and momentum. Both volume (effort) and price movement (result) are aligned.")
+            if 'up' in effort_result.lower():
+                implication_parts.append("Strong buying pressure. If in accumulation/markup, this confirms uptrend strength. If in distribution, this could be an upthrust (trap).")
+            else:
+                implication_parts.append("Strong selling pressure. If in distribution/markdown, this confirms downtrend strength. If in accumulation, this could be a spring (trap).")
+
+        elif 'low volume' in effort_result.lower() and 'narrow spread' in effort_result.lower():
+            meaning_parts.append("Low volume with narrow price spread indicates lack of interest and uncertainty. Neither buyers nor sellers are committed.")
+            implication_parts.append("Market is in equilibrium or waiting for catalyst. Low probability trading environment - wait for volume to return before taking aggressive positions.")
+
+        elif 'low volume' in effort_result.lower() and 'wide spread' in effort_result.lower():
+            meaning_parts.append("Low volume with wide price spread indicates lack of resistance in the direction of the move. Price is moving easily with little effort.")
+            if phase in ['MARKUP', 'ACCUMULATION']:
+                implication_parts.append("In uptrends, this is 'no supply' - very bullish. Price rises easily because sellers are absent. Trend likely continues up.")
+            elif phase in ['MARKDOWN', 'DISTRIBUTION']:
+                implication_parts.append("In downtrends, this is 'no demand' - very bearish. Price falls easily because buyers are absent. Trend likely continues down.")
+            else:
+                implication_parts.append("Price is moving with ease in current direction. Trend has low resistance.")
+
+        # Parse divergence information
+        if 'bullish' in divergence.lower():
+            meaning_parts.append("Bullish divergence detected: Price making lower lows but volume decreasing. Selling pressure is exhausting.")
+            implication_parts.append("🟢 BULLISH SIGNAL - Sellers are losing control. Watch for accumulation signals and LPS for long entries.")
+        elif 'bearish' in divergence.lower():
+            meaning_parts.append("Bearish divergence detected: Price making higher highs but volume decreasing. Buying pressure is exhausting.")
+            implication_parts.append("🔴 BEARISH SIGNAL - Buyers are losing control. Watch for distribution signals and LPSY for short entries.")
+        elif 'no divergence' in divergence.lower():
+            meaning_parts.append("No divergence: Volume and price are moving in harmony.")
+            implication_parts.append("Trend is healthy and sustainable in current direction. No warning signs yet.")
+
+        # Combine interpretations
+        meaning = " ".join(meaning_parts) if meaning_parts else "Volume analysis provides insight into the battle between buyers and sellers."
+        implication = " ".join(implication_parts) if implication_parts else "Monitor volume patterns for clues about institutional activity."
+
+        return {
+            'meaning': meaning,
+            'implication': implication
+        }
 
     def set_symbol(self, symbol):
         """Update the current symbol"""

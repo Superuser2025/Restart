@@ -308,15 +308,17 @@ class WyckoffChartWidget(QWidget):
                 ax.axhline(y=stop_price, color='#ff6b6b', linestyle='-', 
                           linewidth=2, alpha=0.7, label=f'Stop Loss: {stop_price:.5f}')
                 
-        # Plot Wyckoff events
+        # Plot Wyckoff events with educational annotations
         events = wyckoff_data.get('events', [])
+        event_explanations = self._get_event_explanations()
+
         for event in events[-10:]:  # Last 10 events
             event_index = event['index']
             if event_index < len(times):
                 event_time = times[event_index]
                 event_price = event['price']
                 event_type = event['event'].value
-                
+
                 # Event marker colors
                 event_colors = {
                     'SC': '#ff0000',
@@ -328,18 +330,26 @@ class WyckoffChartWidget(QWidget):
                     'ST': '#ffa500',
                     'ST_DIST': '#ffa500'
                 }
-                
+
                 event_color = event_colors.get(event_type, '#ffffff')
-                
+
                 # Plot event marker
                 ax.scatter(event_time, event_price, s=100, c=event_color,
                           marker='o', zorder=9, edgecolors='white', linewidths=1,
                           alpha=0.8)
-                ax.text(event_time, event_price, f' {event_type}',
-                       fontsize=9, color=event_color, fontweight='bold',
-                       verticalalignment='bottom')
+
+                # Add event label with educational tooltip
+                event_label = f' {event_type}'
+                if event_type in event_explanations:
+                    event_label += f'\n{event_explanations[event_type]}'
+
+                ax.text(event_time, event_price, event_label,
+                       fontsize=8, color=event_color, fontweight='bold',
+                       verticalalignment='bottom', linespacing=1.2,
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor='#1e1e1e',
+                                alpha=0.7, edgecolor=event_color, linewidth=1))
                        
-        # Add phase annotation
+        # Add comprehensive phase annotation with educational content
         phase = wyckoff_data.get('current_phase')
         if phase:
             phase_text = f"Phase: {phase.value}"
@@ -351,15 +361,65 @@ class WyckoffChartWidget(QWidget):
                 'UNKNOWN': '#888888'
             }
             phase_color = phase_colors.get(phase.value, '#888888')
-            
-            ax.text(0.02, 0.98, phase_text, transform=ax.transAxes,
-                   fontsize=14, fontweight='bold', color=phase_color,
-                   verticalalignment='top',
-                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.8))
-                   
+
+            # Get phase educational content
+            phase_guidance = self._get_phase_guidance(phase.value)
+
+            # Phase box with educational content
+            phase_full_text = f"{phase_text}\n{phase_guidance['short_description']}"
+            ax.text(0.02, 0.98, phase_full_text, transform=ax.transAxes,
+                   fontsize=11, fontweight='bold', color=phase_color,
+                   verticalalignment='top', linespacing=1.5,
+                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.8))
+
+            # Add trading guidance box in bottom left
+            guidance_text = f"💡 {phase_guidance['action']}"
+            ax.text(0.02, 0.12, guidance_text, transform=ax.transAxes,
+                   fontsize=10, color='#FFD700', verticalalignment='bottom',
+                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.6),
+                   wrap=True)
+
+        # Add LPS/LPSY educational annotation if present
+        if lps_lpsy:
+            lps_type = lps_lpsy['type']
+            strength = lps_lpsy.get('strength', 'MODERATE')
+            confirmed = lps_lpsy.get('confirmed', False)
+
+            signal_guidance = self._get_signal_guidance(lps_type, strength, confirmed)
+
+            # Add signal interpretation box in upper right
+            signal_text = f"📊 {lps_type} Signal\n{signal_guidance}"
+            ax.text(0.98, 0.88, signal_text, transform=ax.transAxes,
+                   fontsize=10, color='#87CEEB', verticalalignment='top',
+                   horizontalalignment='right', linespacing=1.4,
+                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.7))
+        else:
+            # If no LPS/LPSY, add quick reference guide in that spot
+            guide_text = "📖 Quick Reference\n" + \
+                        "🟢 ↑ LPS = Buy signal\n" + \
+                        "🔴 ↓ LPSY = Sell signal\n" + \
+                        "Green line = Entry trigger\n" + \
+                        "Red line = Stop loss"
+            ax.text(0.98, 0.88, guide_text, transform=ax.transAxes,
+                   fontsize=9, color='#aaa', verticalalignment='top',
+                   horizontalalignment='right', linespacing=1.5,
+                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.85, pad=0.6))
+
+        # Add volume interpretation guide in bottom right
+        volume_analysis = wyckoff_data.get('volume_analysis', {})
+        if volume_analysis:
+            vol_guide = "📊 Volume Key:\n" + \
+                       "High Vol + Narrow = Absorption\n" + \
+                       "Low Vol + Wide = No resistance\n" + \
+                       "High Vol + Wide = Strong move"
+            ax.text(0.98, 0.02, vol_guide, transform=ax.transAxes,
+                   fontsize=8, color='#888', verticalalignment='bottom',
+                   horizontalalignment='right', linespacing=1.4,
+                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.8, pad=0.5))
+
         # Add legend
-        ax.legend(loc='upper right', facecolor='#2a2a2a', edgecolor='#666',
-                 labelcolor='#fff', fontsize=10)
+        ax.legend(loc='center right', facecolor='#2a2a2a', edgecolor='#666',
+                 labelcolor='#fff', fontsize=9)
                  
     def _style_chart(self, ax_price, ax_volume, symbol):
         """Apply styling to charts"""
@@ -402,3 +462,76 @@ class WyckoffChartWidget(QWidget):
         ax.set_xticks([])
         ax.set_yticks([])
         self.canvas.draw()
+
+    def _get_event_explanations(self) -> dict:
+        """
+        Get educational explanations for Wyckoff events
+        Returns brief tooltips for each event type
+        """
+        return {
+            'SC': '(Selling Climax)\nPanic selling exhausts',
+            'BC': '(Buying Climax)\nPanic buying exhausts',
+            'AR': '(Automatic Rally)\nStrong bounce up',
+            'AR_DIST': '(Auto Reaction)\nInitial decline',
+            'SPRING': '(Spring)\nFalse breakdown trap',
+            'UPTHRUST': '(Upthrust)\nFalse breakout trap',
+            'ST': '(Secondary Test)\nRetesting lows',
+            'ST_DIST': '(Secondary Test)\nRetesting highs'
+        }
+
+    def _get_phase_guidance(self, phase: str) -> dict:
+        """
+        Get educational guidance for Wyckoff phase
+        Returns short description and actionable guidance
+        """
+        phase_guides = {
+            'ACCUMULATION': {
+                'short_description': 'Smart money is buying',
+                'action': 'Look for LPS (green arrows) to enter LONG. Avoid selling.'
+            },
+            'MARKUP': {
+                'short_description': 'Uptrend in progress',
+                'action': 'Trail stops on longs. Enter on pullbacks to support.'
+            },
+            'DISTRIBUTION': {
+                'short_description': 'Smart money is selling',
+                'action': 'Look for LPSY (red arrows) to enter SHORT. Exit all longs.'
+            },
+            'MARKDOWN': {
+                'short_description': 'Downtrend in progress',
+                'action': 'Trail stops on shorts. Enter on rallies to resistance.'
+            },
+            'UNKNOWN': {
+                'short_description': 'Market structure unclear',
+                'action': 'Wait for clarity. Reduce position sizes or stay flat.'
+            }
+        }
+        return phase_guides.get(phase, phase_guides['UNKNOWN'])
+
+    def _get_signal_guidance(self, signal_type: str, strength: str, confirmed: bool) -> str:
+        """
+        Get educational guidance for LPS/LPSY signal
+        Returns concise actionable guidance
+        """
+        if signal_type == 'LPS':
+            if strength == 'STRONG' and confirmed:
+                return "✅ HIGH PROBABILITY long entry\nEnter near green line\nStop below LPS marker"
+            elif strength == 'STRONG':
+                return "⏳ STRONG signal, not confirmed\nWait for follow-through\nThen enter long"
+            elif strength == 'MODERATE' and confirmed:
+                return "✅ GOOD long opportunity\nEnter with reduced size\nStop below LPS marker"
+            elif strength == 'MODERATE':
+                return "⏳ MODERATE signal pending\nWait for confirmation\nOr use small position"
+            else:  # WEAK
+                return "⚠️ WEAK signal - Low confidence\nWait for better setup\nOr skip this one"
+        else:  # LPSY
+            if strength == 'STRONG' and confirmed:
+                return "✅ HIGH PROBABILITY short entry\nEnter near red line\nStop above LPSY marker"
+            elif strength == 'STRONG':
+                return "⏳ STRONG signal, not confirmed\nWait for follow-through\nThen enter short"
+            elif strength == 'MODERATE' and confirmed:
+                return "✅ GOOD short opportunity\nEnter with reduced size\nStop above LPSY marker"
+            elif strength == 'MODERATE':
+                return "⏳ MODERATE signal pending\nWait for confirmation\nOr use small position"
+            else:  # WEAK
+                return "⚠️ WEAK signal - Low confidence\nWait for better setup\nOr skip this one"
