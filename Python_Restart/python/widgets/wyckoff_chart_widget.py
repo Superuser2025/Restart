@@ -82,11 +82,44 @@ class WyckoffChartWidget(QWidget):
         self.figure.clear()
         ax = self.figure.add_subplot(111)
         ax.set_facecolor('#1e1e1e')
-        ax.text(0.5, 0.5, 'Enable Wyckoff Analysis and validate a trade\nto see chart with LPS/LPSY overlays',
-                ha='center', va='center', fontsize=14, color='#888',
+
+        # Main instruction
+        ax.text(0.5, 0.6, '📊 Wyckoff Chart Analysis',
+                ha='center', va='center', fontsize=18, color='#64B5F6', weight='bold',
                 transform=ax.transAxes)
+
+        # Step-by-step instructions
+        instructions = [
+            '1. Go to the "🎯 Trade Check" tab',
+            '2. Check "🔵 Enable Wyckoff LPS/LPSY Analysis"',
+            '3. Enter a trade (e.g., "BUY EURUSD")',
+            '4. Click "✓ Check Trade"',
+            '',
+            'The chart will automatically populate with:',
+            '• Candlestick price data',
+            '• LPS/LPSY markers (entry points)',
+            '• Entry trigger lines',
+            '• Stop loss lines',
+            '• Wyckoff events (SC, Spring, BC, UT, etc.)',
+            '• Phase annotations'
+        ]
+
+        y_pos = 0.45
+        for instruction in instructions:
+            color = '#aaa' if instruction else '#666'
+            fontsize = 11 if instruction.startswith('•') else 12
+            weight = 'bold' if instruction.startswith(('1.', '2.', '3.', '4.')) else 'normal'
+            ax.text(0.5, y_pos, instruction,
+                    ha='center', va='center', fontsize=fontsize, color=color,
+                    weight=weight, transform=ax.transAxes)
+            y_pos -= 0.035
+
         ax.set_xticks([])
         ax.set_yticks([])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
         self.canvas.draw()
         
     def on_timeframe_changed(self, timeframe):
