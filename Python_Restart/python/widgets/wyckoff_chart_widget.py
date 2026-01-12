@@ -37,8 +37,8 @@ class WyckoffChartWidget(QWidget):
     def init_ui(self):
         """Initialize the UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(5, 5, 5, 5)  # Minimal margins for more chart space
+        layout.setSpacing(5)
         
         # === TITLE & CONTROLS ===
         controls_layout = QHBoxLayout()
@@ -71,10 +71,10 @@ class WyckoffChartWidget(QWidget):
 
         # === MATPLOTLIB CHART ===
         # Larger figure size to match main chart height for easy comparison
-        self.figure = Figure(figsize=(16, 10), facecolor='#1e1e1e')
+        self.figure = Figure(figsize=(18, 11), facecolor='#1e1e1e')
         self.canvas = FigureCanvas(self.figure)
-        self.canvas.setMinimumHeight(500)  # Ensure minimum height for visibility
-        layout.addWidget(self.canvas)
+        self.canvas.setMinimumHeight(600)  # Larger minimum height to match main chart
+        layout.addWidget(self.canvas, stretch=1)  # Allow canvas to expand and fill space
         
         # Initial empty chart
         self.show_empty_chart()
