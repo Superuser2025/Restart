@@ -144,7 +144,7 @@ class EnhancedMainWindow(QMainWindow):
         self.chart_panel.timeframe_changed.connect(self.on_timeframe_changed)
         self.chart_panel.symbol_changed.connect(self.on_symbol_changed)  # CRITICAL: Connect symbol changes!
         self.chart_panel.display_mode_changed.connect(self.on_display_mode_changed)  # CRITICAL: Connect MAX MODE!
-        layout.addWidget(self.chart_panel, 4)  # 80% height - give chart MORE space!
+        layout.addWidget(self.chart_panel, 3)  # 50% height - balanced with analysis tabs
 
         # === ANALYSIS TABS ===
         self.analysis_tabs = QTabWidget()
@@ -210,7 +210,7 @@ class EnhancedMainWindow(QMainWindow):
         # Connect validator to chart widget
         self.validator_widget.wyckoff_analysis_ready.connect(self.on_wyckoff_analysis_ready)
 
-        layout.addWidget(self.analysis_tabs, 1)  # 20% height
+        layout.addWidget(self.analysis_tabs, 3)  # 50% height - matches main chart for easy comparison
 
         return widget
 

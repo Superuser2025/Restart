@@ -71,9 +71,9 @@ class WyckoffChartWidget(QWidget):
 
         # === MATPLOTLIB CHART ===
         # Larger figure size to match main chart height for easy comparison
-        self.figure = Figure(figsize=(14, 12), facecolor='#1e1e1e')
+        self.figure = Figure(figsize=(16, 10), facecolor='#1e1e1e')
         self.canvas = FigureCanvas(self.figure)
-        self.canvas.setMinimumHeight(600)  # Ensure minimum height for visibility
+        self.canvas.setMinimumHeight(500)  # Ensure minimum height for visibility
         layout.addWidget(self.canvas)
         
         # Initial empty chart
