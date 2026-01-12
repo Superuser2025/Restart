@@ -877,7 +877,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                 }
                 phase_color = phase_colors.get(phase.value, '#888888')
 
-                # Get phase interpretation
+                # Get comprehensive phase interpretation
                 phase_interpretation = self._get_phase_interpretation(phase.value, direction)
 
                 html += f"""
@@ -891,14 +891,33 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             </p>
         </div>
 
-        <!-- Phase Interpretation -->
-        <div style="padding: 15px; background-color: rgba(255, 215, 0, 0.08); border-left: 4px solid #FFD700; margin-bottom: 15px;">
-            <h5 style="color: #FFD700; margin: 0 0 10px 0; font-size: 15px; font-weight: bold;">📚 What This Means:</h5>
-            <p style="margin: 5px 0; font-size: 14px; color: #ddd; line-height: 1.6;">{phase_interpretation['meaning']}</p>
-            <p style="margin: 8px 0 5px 0; font-size: 13px; color: #FFD700; font-weight: bold;">Trading Strategy:</p>
-            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{phase_interpretation['strategy']}</p>
-            <p style="margin: 8px 0 5px 0; font-size: 13px; color: #FFA500; font-weight: bold;">⚠️ Watch For:</p>
-            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{phase_interpretation['watch_for']}</p>
+        <!-- Comprehensive Phase Story -->
+        <div style="padding: 20px; background-color: rgba(255, 215, 0, 0.05); border: 2px solid #FFD700; border-radius: 8px; margin-bottom: 15px;">
+            <h5 style="color: #FFD700; margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">📖 THE COMPLETE MARKET STORY</h5>
+            <div style="padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 6px; margin-bottom: 12px;">
+                <h6 style="color: #87CEEB; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">🎭 What's Really Happening:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{phase_interpretation['story']}</p>
+            </div>
+
+            <div style="padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 6px; margin-bottom: 12px;">
+                <h6 style="color: #FFD700; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">🧠 The Psychology Behind It:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{phase_interpretation['psychology']}</p>
+            </div>
+
+            <div style="padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 6px; margin-bottom: 12px;">
+                <h6 style="color: #4CAF50; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">💰 How Smart Money Operates Here:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{phase_interpretation['smart_money']}</p>
+            </div>
+
+            <div style="padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 6px; margin-bottom: 12px;">
+                <h6 style="color: #FF6B6B; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">⚠️ What Retail Traders Are Doing Wrong:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{phase_interpretation['retail_mistake']}</p>
+            </div>
+
+            <div style="padding: 12px; background-color: rgba(76, 175, 80, 0.15); border-left: 3px solid #4CAF50; border-radius: 6px;">
+                <h6 style="color: #4CAF50; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">✅ Your Trading Strategy:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{phase_interpretation['strategy']}</p>
+            </div>
         </div>
 """
 
@@ -957,23 +976,40 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 
                 # Volume analysis
                 if volume_analysis:
-                    # Get volume interpretation
+                    # Get comprehensive volume interpretation
                     volume_interpretation = self._get_volume_interpretation(volume_analysis, phase.value)
 
                     html += f"""
-        <!-- Volume Analysis -->
+        <!-- Volume Analysis RAW DATA -->
         <div style="padding: 10px; background-color: rgba(0, 0, 0, 0.2); border-radius: 4px; margin-bottom: 15px;">
             <p style="margin: 0 0 6px 0; font-size: 14px; color: #FFD700; font-weight: bold;">Volume Analysis:</p>
             <p style="margin: 4px 0; font-size: 13px; color: #ddd;">▸ {volume_analysis.get('effort_result', 'N/A')}</p>
             <p style="margin: 4px 0; font-size: 13px; color: #ddd;">▸ {volume_analysis.get('divergence', 'N/A')}</p>
         </div>
 
-        <!-- Volume Interpretation -->
-        <div style="padding: 12px; background-color: rgba(138, 43, 226, 0.08); border-left: 4px solid #8A2BE2; margin-bottom: 15px;">
-            <h5 style="color: #8A2BE2; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">📊 Volume Tells Us:</h5>
-            <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.5;">{volume_interpretation['meaning']}</p>
-            <p style="margin: 8px 0 5px 0; font-size: 12px; color: #8A2BE2; font-weight: bold;">Market Implication:</p>
-            <p style="margin: 5px 0; font-size: 12px; color: #ddd; line-height: 1.4;">{volume_interpretation['implication']}</p>
+        <!-- DEEP VOLUME INTERPRETATION -->
+        <div style="padding: 18px; background-color: rgba(138, 43, 226, 0.05); border: 2px solid #8A2BE2; border-radius: 8px; margin-bottom: 15px;">
+            <h5 style="color: #8A2BE2; margin: 0 0 12px 0; font-size: 15px; font-weight: bold;">📊 VOLUME: THE BATTLE BETWEEN BUYERS & SELLERS</h5>
+
+            <div style="padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 6px; margin-bottom: 12px;">
+                <h6 style="color: #FFD700; margin: 0 0 8px 0; font-size: 13px; font-weight: bold;">⚙️ What's Happening Mechanically:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{volume_interpretation['mechanics']}</p>
+            </div>
+
+            <div style="padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 6px; margin-bottom: 12px;">
+                <h6 style="color: #87CEEB; margin: 0 0 8px 0; font-size: 13px; font-weight: bold;">🥊 The Order Book Story:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{volume_interpretation['order_book']}</p>
+            </div>
+
+            <div style="padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 6px; margin-bottom: 12px;">
+                <h6 style="color: #4CAF50; margin: 0 0 8px 0; font-size: 13px; font-weight: bold;">🏦 What Institutions Are Doing:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{volume_interpretation['institutional']}</p>
+            </div>
+
+            <div style="padding: 12px; background-color: rgba(138, 43, 226, 0.15); border-left: 3px solid #8A2BE2; border-radius: 6px;">
+                <h6 style="color: #8A2BE2; margin: 0 0 8px 0; font-size: 13px; font-weight: bold;">💡 What This Means For Your Trade:</h6>
+                <p style="margin: 5px 0; font-size: 13px; color: #ddd; line-height: 1.8;">{volume_interpretation['trade_impact']}</p>
+            </div>
         </div>
 """
 
@@ -1031,34 +1067,44 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 
     def _get_phase_interpretation(self, phase: str, trade_direction: str) -> dict:
         """
-        Get educational interpretation for Wyckoff phase
-        Returns meaning, strategy, and what to watch for
+        Get comprehensive educational interpretation for Wyckoff phase
+        Returns detailed story, psychology, smart money behavior, retail mistakes, and strategy
         """
         interpretations = {
             'ACCUMULATION': {
-                'meaning': "Smart money (institutions) is quietly buying while retail traders are fearful. Price is in a range as large players accumulate positions without pushing price up. This phase typically follows a downtrend and precedes a new uptrend.",
-                'strategy': "Look for LONG opportunities, especially at LPS (Last Point of Support). Wait for price to break above the trading range with volume confirmation before entering aggressively. Be patient - accumulation can last weeks or months.",
-                'watch_for': "Spring (false breakdown below support to trap sellers), Secondary Tests (retests of lows on lower volume), Signs of Strength (rallies on increasing volume). Avoid selling during this phase - the trend is preparing to reverse UP."
-            },
-            'MARKUP': {
-                'meaning': "The uptrend is in full force. Smart money has accumulated their positions and is now allowing price to rise. Retail traders are starting to notice and jump in, providing liquidity for institutional exits later.",
-                'strategy': "Trail stops on existing LONG positions. Look for pullbacks to support (former resistance) for additional entries, but be selective. As markup matures, reduce position sizes - the easy money has been made.",
-                'watch_for': "Signs of weakness (price advances on decreasing volume), Buying Climaxes (parabolic moves that exhaust buyers), Distribution signals (high volume selling near tops). When LPSYs appear, it's time to exit longs and consider shorts."
+                'story': "After a prolonged downtrend has exhausted sellers, a dramatic shift occurs beneath the surface. While the price chart looks boring—stuck in a sideways range with no clear direction—institutional players (banks, hedge funds, market makers) are methodically building LONG positions. They can't just buy aggressively all at once because that would spike the price and force them to pay higher prices for their positions. Instead, they disguise their buying by absorbing EVERY sell order that hits the market. When retail traders panic-sell at support, institutions are there waiting to buy. When weak hands throw in the towel, smart money accumulates their shares. The range you see on the chart IS the accumulation process—institutions need time (weeks or months) to build positions worth hundreds of millions without alerting the market. Each retest of support with LOWER volume tells you sellers are exhausting. Each rally on HIGHER volume tells you buyers are gaining control. This is the calm before the storm.",
+                'psychology': "Fear dominates retail trader psychology. After getting burned by the previous downtrend, most traders are too scared to buy even though prices are at attractive levels. Headlines are negative. Social media traders are bearish. Everyone 'knows' the market is going lower. This pessimism is EXACTLY what institutions need—fearful sellers willing to exit at low prices. Meanwhile, professional traders see opportunity where retail sees danger. They know that when everyone is bearish, there's no one left to sell, which means the next big move must be UP. The psychological battle is asymmetric: retail trades on emotion (fear), institutions trade on structure (accumulation patterns). By the time retail traders feel comfortable buying again, institutions will already be sitting on profitable positions ready to sell to them.",
+                'smart_money': "Institutions operate like stealth submarines. Their primary goal during accumulation is to build MAXIMUM position size at MINIMUM average price without alerting other market participants. How do they do this? (1) They place large BUY orders at support levels to absorb all selling pressure, creating a price floor. (2) They allow 'Springs' (fake breakdowns below support) to trigger retail stop-losses, then aggressively buy the panic selling. (3) They buy on weakness and reduce buying on strength, keeping price rangebound. (4) They use 'Secondary Tests'—deliberately pushing price down to prior lows to see if more sellers emerge. When price holds on LOW volume, it confirms no supply left = mission accomplished. (5) Finally, they engineer an LPS (Last Point of Support), the final spring-loaded test before markup begins. This is your signal that accumulation is nearly complete.",
+                'retail_mistake': "Retail traders make catastrophic mistakes during accumulation. Most damaging: they SELL into support because 'the trend is down' or 'it could go lower.' They're providing the exact liquidity institutions want! They set stop-losses just below obvious support levels (where Springs will trigger them). They wait for 'confirmation' (breakout above the range) before buying—by which time institutions have already accumulated and will sell INTO that breakout. They mistake ranging price action for 'nothing happening' when in reality, the most important positioning is occurring. They trade based on news and sentiment instead of volume and price structure. They sell on fear at the worst possible time. The cruel irony: retail traders are CREATING the accumulation by being fearful sellers, then they'll become enthusiastic buyers during distribution (the opposite of what they should do).",
+                'strategy': f"{'✅ EXCELLENT TIMING! ' if trade_direction == 'BUY' else '⚠️ CAUTION - Selling during accumulation fights the smart money! '}Your strategy: BE THE BUYER when retail is selling. Look for LPS (Last Point of Support) signals which mark the end of accumulation and start of markup. Enter LONG positions when: (1) Price holds at support on decreasing volume (no sellers left), (2) Springs occur (false breakdowns that reverse quickly), (3) Signs of Strength appear (rallies on increasing volume). Set stops below the Spring lows (structure invalidation point). Don't be aggressive until LPS confirms, then load up. Think like an institution: accumulate patiently during fear, distribute during greed. This phase rewards patience and courage. Position sizing: Start with 30% of intended size early in accumulation, add 40% at LPS confirmation, keep 30% for breakout above range. Time horizon: weeks to months. The money is made by WAITING, not trading."
             },
             'DISTRIBUTION': {
-                'meaning': "Smart money is quietly selling while retail traders are euphoric. Price is in a range as large players distribute their positions without crashing the price. This phase typically follows an uptrend and precedes a new downtrend.",
-                'strategy': "Look for SHORT opportunities, especially at LPSY (Last Point of Supply). Wait for price to break below the trading range with volume confirmation before entering aggressively. Exit all long positions - the party is ending.",
-                'watch_for': "Upthrust (false breakout above resistance to trap buyers), Secondary Tests (retests of highs on lower volume), Signs of Weakness (declines on increasing volume). Avoid buying during this phase - the trend is preparing to reverse DOWN."
+                'story': "Markup has run its course and institutions are now sitting on massive profitable long positions. But there's a problem: they can't just dump everything at once—that would crash the price and they'd get terrible exits. So they create a DISTRIBUTION range, a sideways trading zone near the highs where they methodically SELL their positions to willing buyers (mostly retail traders who are now euphoric and greedy). The chart looks similar to accumulation—boring sideways action—but the underlying mechanics are opposite. Each rally to resistance is met with institutional SELLING. Each dip is bought by retail traders thinking they're 'buying the dip,' but they're actually absorbing institutional supply. Volume spikes on rallies (institutions selling) but price barely moves higher—this is supply overwhelming demand. Secondary tests of highs on LIGHTER volume confirm: fewer buyers at these levels, distribution is working. Upthrusts (fake breakouts above resistance) trap late-arriving bulls, triggering their buys so institutions can sell to them. The range you see IS the distribution in action—this process takes weeks or months because institutions need to exit massive positions without collapsing the market prematurely.",
+                'psychology': "Greed and euphoria dominate retail psychology. The recent uptrend has made everyone money. Social media is full of success stories. News headlines are bullish. Everyone 'knows' prices are going higher. This optimism is EXACTLY what institutions need—greedy buyers willing to chase at high prices. Retail traders think 'buy the dip' is free money because 'dips always get bought.' They're not wrong—dips DO get bought... by them, selling institutions! Meanwhile, professional traders recognize the topping pattern and begin reducing exposure or preparing shorts. The psychological battle: retail trades on greed (FOMO), institutions trade on structure (distribution patterns). By the time retail traders panic and want to sell, institutions will have already exited and will be ready to short into the decline. Retail buys tops because it FEELS safe after a rally. Institutions sell tops because they know nothing rises forever.",
+                'smart_money': "Institutions become stealth sellers. Their goal: unload MAXIMUM position size at MAXIMUM average price without triggering a collapse. How? (1) They place large SELL orders at resistance to cap rallies, creating a price ceiling. (2) They engineer 'Upthrusts'—fake breakouts above resistance that trigger retail buy stops, then aggressively sell into that buying pressure. (3) They sell on strength and reduce selling on weakness, keeping price rangebound. (4) They use 'Secondary Tests'—pushing price back up to prior highs to see if more buyers emerge. When price fails on LOW volume, it confirms no demand left = mission accomplished. (5) They allow small bounces to keep retail hopeful ('see, it's still going up!') while steadily unloading. (6) Finally, they create LPSY (Last Point of Supply), the final high-risk test before markdown begins. This is your signal distribution is complete and collapse is imminent. Every rally you see is an institution saying 'thank you for buying what I need to sell.'",
+                'retail_mistake': "Retail traders commit financial suicide during distribution. Worst mistake: they BUY near resistance because 'momentum is strong' or 'it's breaking out.' They're providing exit liquidity institutions desperately need! They set stop-losses above obvious resistance (where Upthrusts will trigger them). They interpret ranging as 'consolidation before next leg up' when it's actually supply distribution. They chase breakouts above the range—exactly when institutions have finished distribution and are ready to short. They mistake institutional selling volume for 'strength' when price barely moves higher. They believe the bullish news narrative instead of reading volume/price divergences. They buy on greed at the worst possible time. The tragic pattern: retail creates distribution by being greedy buyers, then becomes panic sellers during markdown (again, opposite of optimal). They're always the liquidity provider, never the liquidity taker.",
+                'strategy': f"{'✅ EXCELLENT TIMING! ' if trade_direction == 'SELL' else '⚠️ CAUTION - Buying during distribution fights the smart money! '}Your strategy: BE THE SELLER when retail is buying. EXIT ALL LONG POSITIONS immediately—distribution means the uptrend is over. Look for LPSY (Last Point of Supply) signals marking distribution completion and markdown beginning. Enter SHORT positions when: (1) Price fails at resistance on decreasing volume (no buyers left), (2) Upthrusts occur (false breakouts that reverse quickly), (3) Signs of Weakness appear (declines on increasing volume). Set stops above Upthrust highs (structure invalidation point). Don't be aggressive until LPSY confirms, then short heavily. Think like an institution: distribute during euphoria, accumulate during fear. This phase rewards ruthless discipline and contrarian thinking. Position sizing for shorts: 30% early in distribution, 40% at LPSY, 30% reserved for breakdown below range. Time horizon: weeks to months. The money is made by EXITING what everyone wants to buy."
+            },
+            'MARKUP': {
+                'story': "The accumulation campaign was successful—institutions are now fully loaded with long positions. Now they let the market rise. But here's the secret: institutions don't NEED to do much during markup. They simply stop selling, let normal market mechanics work, and watch retail traders push prices higher for them. The initial breakout from accumulation triggers technical traders ('breakout above range!'). Then momentum traders pile in ('trend is your friend'). Then fundamental traders justify it with news ('economy is strong'). Each group adds buying pressure, and institutions just sit back with their cheaper positions acquired during accumulation. Volume increases on rallies (real demand), price makes consistent higher highs and higher lows (uptrend structure intact). This is the 'easy' phase where everything works. Pullbacks to support (former resistance) are shallow and bought quickly. Dips don't last. Every fundamental seems bullish, every indicator turns green. The trend IS your friend—until it isn't (distribution phase starts).",
+                'psychology': "Psychology transitions from fear (accumulation) to optimism to greed. Early in markup, smart retail traders who bought accumulation start feeling vindicated. Later, cautious investors gain confidence and add positions. By late markup, everyone is bullish—taxi drivers are giving stock tips, your barber is buying, FOMO is everywhere. Each group enters at progressively WORSE prices. Institutions entered at accumulation lows; early retail at breakout; late retail near tops. The psychological trap: markup FEELS safe because price is rising, but actually becomes RISKIER as it progresses because institutions are getting ready to distribute. The best risk/reward was during scary accumulation. By the time everyone feels comfortable (late markup), the smart money is preparing exits. Remember: markets exist to transfer wealth from the impatient to the patient. Markup rewards those who had courage to buy fear (accumulation), and punishes those who wait for confirmation (late markup/early distribution).",
+                'smart_money': "During markup, institutions are in 'hold and lighten' mode. Early markup: they hold positions, occasionally adding on pullbacks to major support. Mid markup: they begin selective profit-taking on rallies to resistance, but overall remain net long. Late markup: they aggressively lighten positions on strength, preparing for distribution phase. Key signs institutions are preparing to distribute: (1) Price advances but gains are diminishing (running into supply), (2) Volume increases on rallies but price barely moves higher (selling into strength), (3) Buying Climaxes appear—parabolic moves that exhaust buyers, (4) Price fails to make new highs despite strong efforts. At this point, smart money transitions from 'hold' to 'prepare to exit' mode. They let retail drive the final rallies, then cap them with heavy selling. The institution's markup playbook: accumulate fear → hold through uncertainty → distribute into greed.",
+                'retail_mistake': "Retail's biggest mistake during markup: waiting too long to enter or chasing late. Many retail traders missed accumulation (too scary) and only notice the uptrend after significant gains already occurred. Then they buy late markup at terrible prices, just as institutions prepare to distribute. Other mistakes: overleveraging because 'trend is strong,' adding positions as price extends further from value, ignoring signs of distribution starting, holding through LPSY signals because they're 'in a strong uptrend.' The painful truth: by the time retail feels confident enough to be fully invested, the move is largely over. They enter late (bad prices) with large size (greed) right when institutions are preparing exits (bad timing). Perfect recipe for buying the top. Smart traders scale OUT during markup; retail scales IN during markup. That's why institutions make money and retail loses it.",
+                'strategy': f"Your strategy: Trail stops on existing longs—lock in profits as you go. DON'T chase here if you're not already in; better to miss the move than buy the top. Look for pullbacks to support (former resistance) for selective additions, but reduce size as markup matures. Watch for distribution signals: price struggling to make new highs, volume spikes with limited upside, LPSYs forming. When distribution begins, EXIT IMMEDIATELY—don't hope for 'one more rally.' Position management: Take 25% profits at first resistance, 25% at second resistance, trail stops on remaining 50%. If late markup shows weakness, exit everything and prepare for shorts. The goal isn't maximizing this trade's profit; it's protecting capital for the next accumulation cycle. Markup is where you REALIZE the gains from accumulation—don't get greedy and give them back during distribution."
             },
             'MARKDOWN': {
-                'meaning': "The downtrend is in full force. Smart money has distributed their positions and is now allowing price to fall. Retail traders are holding losing positions hoping for recovery, providing liquidity for institutional buying later.",
-                'strategy': "Trail stops on existing SHORT positions. Look for rallies to resistance (former support) for additional short entries, but be selective. As markdown matures, reduce position sizes and watch for accumulation signals.",
-                'watch_for': "Signs of strength (price declines on decreasing volume), Selling Climaxes (panic selling that exhausts sellers), Accumulation signals (high volume buying near bottoms). When LPSs appear, it's time to exit shorts and consider longs."
+                'story': "Distribution was successful—institutions have exited most long positions and may now hold shorts. They step aside and let gravity do its work. Markdown is the mirror opposite of markup: price declines consistently, rallies are weak and short-lived, every bounce gets sold. The breakdown from distribution triggers technical traders' stops ('broke support!'). Then margin calls force liquidation ('my account!'). Then panic sellers capitulate ('just get me out!'). Each wave adds selling pressure, and institutions just watch from the sidelines with short positions. Volume increases on declines (real supply), price makes consistent lower lows and lower highs (downtrend intact). This is the 'everything is broken' phase where nothing works for longs. Rallies to resistance are weak and fail quickly. Bounces don't last. Every news item seems bearish, every indicator turns red. The trend IS your enemy if you're long—but your friend if you positioned shorts at LPSY during distribution.",
+                'psychology': "Psychology transitions from greed (distribution) to hope to fear to capitulation. Early markdown, retail holds losing positions hoping for recovery ('it's just a correction'). Mid markdown, hope turns to concern ('maybe I should reduce size'). Late markdown, fear turns to panic ('just sell everything!'). The psychology is backwards: retail should sell early (small losses) but holds hoping; then sells late (large losses) in panic. Meanwhile, institutions who sold at distribution highs watch the decline calmly—maybe even short into rallies. The cruel irony: retail needs to sell when it's psychologically hardest (early downtrend) and should consider buying when it's scariest (late markdown / early accumulation). But emotion dominates, so they do the opposite.",
+                'smart_money': "Institutions are in 'short and cover' mode. Early markdown: they may add shorts on rallies to resistance. Mid markdown: they hold shorts, occasionally covering on panic selloffs. Late markdown: they begin covering shorts aggressively, preparing for accumulation. Key signs institutions are preparing to accumulate: (1) Price declines but losses are diminishing, (2) Volume increases on drops but price barely moves lower (buying into weakness), (3) Selling Climaxes appear—panic moves that exhaust sellers, (4) Price fails to make new lows despite selling pressure. At this point, smart money shifts from 'short' to 'prepare to accumulate' mode. They let retail panic-sell the final lows, then absorb that supply. The institutional markdown playbook: distribute greed → short through fear → accumulate panic.",
+                'retail_mistake': "Retail's mistakes during markdown are catastrophic. They hold losing longs too long ('it'll come back'), they add to losers ('averaging down'), they deny the downtrend ('just a correction'), they panic-sell at bottoms ('I can't take more pain'). By the time they capitulate and sell, institutions are ready to accumulate. The pattern repeats: retail buys tops (distribution greed), holds through declines (denial), sells bottoms (panic). They do everything backwards. Smart traders cut losses quick and look for accumulation signs; retail hopes and holds until forced to exit at the worst prices.",
+                'strategy': f"Your strategy: Trail stops on any remaining shorts—lock in gains. Look for rallies to resistance (former support) for selective short additions, but reduce size as markdown matures and volume shows climactic selling (exhaustion). Watch for accumulation signals: price holding at lows on high volume (buying), Springs forming (final lows), LPS developing. When accumulation begins, COVER ALL SHORTS and prepare to flip LONG. The goal isn't squeezing every pip from the downtrend; it's recognizing the cycle shift to accumulation. Position management for shorts: Take 25% profits at first support break, 25% at second support break, trail stops on remaining 50%. If late markdown shows buying absorption, exit all shorts and start looking for accumulation longs. The real money isn't made shorting markdown—it's made buying the next accumulation phase."
             },
             'UNKNOWN': {
-                'meaning': "The market structure is unclear or transitioning between phases. This often occurs during low volatility periods, news events, or when institutional players are inactive.",
-                'strategy': "WAIT for clarity. Reduce position sizes or stay flat. Let the market tell you what it wants to do. Trading unclear structures leads to losses - the best trade is often no trade.",
-                'watch_for': "Increasing volume and volatility (institutions returning), Clear breaks of support/resistance, Wyckoff events appearing (Springs, Upthrusts, LPS/LPSY). Be patient - opportunities will come when structure clarifies."
+                'story': "The market structure is cloudy and ambiguous. This typically occurs during: (1) Transition periods between phases (accumulation ending, markup starting), (2) Low volatility environments when institutions aren't active, (3) Major news events creating erratic price action, (4) Low-volume holiday periods. Price action lacks clear patterns. Volume is inconsistent. Wyckoff events aren't appearing. Both bullish and bearish cases have merit. This is the market saying: 'I'm not ready to show my hand yet.' Trying to force trades in unclear structure is like sailing without wind—lots of effort, no progress, high risk of going in circles.",
+                'psychology': "Traders feel confused and frustrated. 'Is it going up or down?' Technical indicators give mixed signals. News provides no clarity. This uncertainty is actually healthy—it means no strong directional bias exists yet, which means the next clear move (when it comes) will likely be tradeable. The psychological trap: boredom leads to overtrading. Traders force positions just to 'be in the market' even though there's no edge. Better to accept uncertainty and wait patiently.",
+                'smart_money': "Institutions during unknown phases are either: (1) Inactive—waiting for better opportunities, (2) Testing—probing for areas of supply/demand, or (3) Transitioning—finishing one phase before starting another. They're comfortable doing NOTHING when structure isn't clear. Retail traders can't stand doing nothing. This patience gap is a key edge for professionals. When institutions return with size, you'll see it: volume increases, clear patterns emerge, Wyckoff events appear. Until then, they're content watching from sidelines.",
+                'retail_mistake': "Retail's biggest mistake in unclear structure: overtrading. They force positions in choppy markets, get stopped out repeatedly (death by 1000 cuts), chase false breakouts, revenge trade after losses. They confuse activity with productivity. Better to trade once with clarity than ten times with confusion. Every trade should have edge; if structure is unclear, there's no edge. Waiting IS a position.",
+                'strategy': f"Your strategy: REDUCE SIZE OR STEP ASIDE. This is the hardest thing for active traders—doing nothing. But preserving capital during unclear periods lets you deploy size when clarity returns. If you must trade: use smallest position sizes, widest stops, quickest exits if proven wrong. Better approach: wait for clarity. Watch for: (1) Volume increasing (institutions returning), (2) Clear Wyckoff events forming, (3) Phase structure emerging (accumulation/distribution patterns). When these appear, phase will become clear and tradeable. Until then, paper trade, study structure, prepare watchlists. The trader who waits for clarity and then acts decisively will outperform the trader who constantly trades unclear structure. Sometimes the best trade is no trade. Patience isn't passive; it's active preparation for the next high-probability opportunity."
             }
         }
 
@@ -1136,63 +1182,106 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 
     def _get_volume_interpretation(self, volume_analysis: dict, phase: str) -> dict:
         """
-        Get educational interpretation for volume analysis
-        Returns meaning and market implications
+        Get comprehensive educational interpretation for volume analysis
+        Returns detailed mechanics, order book story, institutional behavior, and trade impact
         """
-        effort_result = volume_analysis.get('effort_result', '')
-        divergence = volume_analysis.get('divergence', '')
+        effort_result = volume_analysis.get('effort_result', '').lower()
+        divergence = volume_analysis.get('divergence', '').lower()
 
-        # Parse effort vs result
-        meaning_parts = []
-        implication_parts = []
+        # Initialize return fields
+        mechanics = ""
+        order_book = ""
+        institutional = ""
+        trade_impact = ""
 
-        if 'high volume' in effort_result.lower() and 'narrow spread' in effort_result.lower():
-            meaning_parts.append("High volume with narrow price spread indicates ABSORPTION - one side (buyers or sellers) is aggressively taking all available orders but price isn't moving much.")
+        # HIGH VOLUME + NARROW SPREAD = ABSORPTION
+        if 'high volume' in effort_result and 'narrow spread' in effort_result:
+            mechanics = "You're witnessing ABSORPTION in real-time. Here's what's physically happening: Thousands of orders are being executed (high volume), but despite all this trading activity, price is barely moving (narrow spread). This is NOT normal—usually high volume causes significant price movement. The lack of movement tells you one side is AGGRESSIVELY absorbing everything the other side throws at them. Think of it like a sponge soaking up water: no matter how much water (volume) you pour, the sponge (absorbing party) just keeps taking it in without overflowing (price staying stable). Every market or limit order hitting the tape is being instantly matched by the opposing side. The order book is in fierce battle, but one side has deeper pockets and refuses to let price move."
+
             if phase == 'ACCUMULATION':
-                implication_parts.append("In accumulation, this suggests institutions are BUYING everything sellers offer, preventing price from falling. Very bullish - markdown phase is ending.")
+                order_book = "Zoom into the order book: Sellers are throwing SELL orders at the BID (market sells) or placing LIMIT sells, trying to push price down or exit positions. But here's what you can't see on the chart—institutions have MASSIVE buy orders sitting at support levels. Every time a seller hits 'sell market order,' an institutional buy order absorbs it instantly. The bid doesn't drop because institutions keep refilling it. It's like a brick wall: sellers keep punching it, but it doesn't break. The high volume represents sellers exhausting their supply. The narrow spread means institutions are defending this price level with huge capital. They WANT sellers to panic here because it lets them accumulate positions at attractive prices without chasing price higher."
+
+                institutional = "Institutions are executing their accumulation playbook perfectly. They've identified this price level as VALUE and committed massive capital to defend it. Their algorithm: 'Buy EVERY dip, absorb EVERY seller, don't let price fall.' They're not trying to push price up yet (that comes in markup)—they're just stopping it from going down while building positions. This is stealth accumulation at its finest. Retail sees 'boring range-bound action.' Institutions see 'successful absorption of supply.' When sellers finally exhaust (volume drops, Springs fail), institutions stop buying and let price rise naturally into markup. The absorption you're seeing NOW is the foundation for the markup move LATER."
+
+                trade_impact = "FOR YOUR TRADE: This is EXTREMELY BULLISH. High volume absorption at support during accumulation is one of the strongest signs that: (1) Institutions are accumulating aggressively, (2) Selling pressure is being exhausted, (3) Price has found a floor that won't break, (4) Markup phase is approaching. DO NOT SELL HERE—you'd be selling to institutional buyers at exactly the wrong time. Instead, consider this a gift: you're seeing real-time evidence of institutional buying. Enter LONG on this absorption, or wait for the Spring/LPS that typically follows. Set stops below the absorbed low (if institutions let price break there, their accumulation failed = your signal to exit). Target: the top of the accumulation range initially, then markup highs. This is the 'easy money' setup that happens once or twice per major cycle."
+
             elif phase == 'DISTRIBUTION':
-                implication_parts.append("In distribution, this suggests institutions are SELLING everything buyers want, preventing price from rising. Very bearish - markup phase is ending.")
-            else:
-                implication_parts.append("This often marks a phase transition - watch for breakout direction.")
+                order_book = "Order book perspective: Buyers are throwing BUY orders at the ASK (market buys) or placing LIMIT buys, trying to push price up or chase momentum. But institutions have MASSIVE sell orders sitting at resistance levels. Every time a buyer hits 'buy market order,' an institutional sell order fills it instantly. The ask doesn't rise because institutions keep refilling it with supply. It's a ceiling: buyers keep pushing, but can't break through. The high volume represents buyers exhausting their capital. The narrow spread means institutions are defending this ceiling with unlimited supply. They WANT buyers to chase here because it lets them distribute (sell) positions at favorable prices without crashing the market."
 
-        elif 'high volume' in effort_result.lower() and 'wide spread' in effort_result.lower():
-            meaning_parts.append("High volume with wide price spread indicates strong agreement and momentum. Both volume (effort) and price movement (result) are aligned.")
-            if 'up' in effort_result.lower():
-                implication_parts.append("Strong buying pressure. If in accumulation/markup, this confirms uptrend strength. If in distribution, this could be an upthrust (trap).")
-            else:
-                implication_parts.append("Strong selling pressure. If in distribution/markdown, this confirms downtrend strength. If in accumulation, this could be a spring (trap).")
+                institutional = "Institutions are executing their distribution playbook. They've identified this price level as OVERVALUED and committed to exit all longs here. Their algorithm: 'Sell EVERY rally, absorb EVERY buyer, don't let price rise.' They're not trying to crash price yet (that comes in markdown)—they're just capping gains while offloading positions. This is stealth distribution. Retail sees 'healthy consolidation before breakout.' Institutions see 'successful distribution of supply.' When buyers finally exhaust (volume drops, Upthrusts fail), institutions step aside and let price collapse naturally into markdown. The distribution you're seeing NOW is what causes the markdown crash LATER."
 
-        elif 'low volume' in effort_result.lower() and 'narrow spread' in effort_result.lower():
-            meaning_parts.append("Low volume with narrow price spread indicates lack of interest and uncertainty. Neither buyers nor sellers are committed.")
-            implication_parts.append("Market is in equilibrium or waiting for catalyst. Low probability trading environment - wait for volume to return before taking aggressive positions.")
+                trade_impact = "FOR YOUR TRADE: This is EXTREMELY BEARISH. High volume absorption at resistance during distribution is one of the strongest signs that: (1) Institutions are distributing (selling) aggressively, (2) Buying pressure is being exhausted, (3) Price has hit a ceiling that won't break, (4) Markdown phase is approaching. EXIT ALL LONGS IMMEDIATELY—you're holding what institutions are desperate to sell. DO NOT BUY HERE—you'd be buying from institutional sellers at exactly the wrong time. Consider SHORT positions: enter on this absorption, or wait for the Upthrust/LPSY that typically follows. Set stops above the absorbed high (if institutions let price break there, their distribution failed). Target: bottom of distribution range initially, then markdown lows. This setup precedes major declines."
 
-        elif 'low volume' in effort_result.lower() and 'wide spread' in effort_result.lower():
-            meaning_parts.append("Low volume with wide price spread indicates lack of resistance in the direction of the move. Price is moving easily with little effort.")
-            if phase in ['MARKUP', 'ACCUMULATION']:
-                implication_parts.append("In uptrends, this is 'no supply' - very bullish. Price rises easily because sellers are absent. Trend likely continues up.")
-            elif phase in ['MARKDOWN', 'DISTRIBUTION']:
-                implication_parts.append("In downtrends, this is 'no demand' - very bearish. Price falls easily because buyers are absent. Trend likely continues down.")
-            else:
-                implication_parts.append("Price is moving with ease in current direction. Trend has low resistance.")
+            else:  # Other phases
+                order_book = "The order book shows intense fighting between buyers and sellers. One side is throwing everything they have (high volume), but the other side is matching every order (narrow spread). It's tug-of-war at equilibrium. Whoever runs out of ammunition first will lose, and price will move sharply in the opposite direction. Watch for volume to dry up—that signals exhaustion of the losing side."
 
-        # Parse divergence information
-        if 'bullish' in divergence.lower():
-            meaning_parts.append("Bullish divergence detected: Price making lower lows but volume decreasing. Selling pressure is exhausting.")
-            implication_parts.append("🟢 BULLISH SIGNAL - Sellers are losing control. Watch for accumulation signals and LPS for long entries.")
-        elif 'bearish' in divergence.lower():
-            meaning_parts.append("Bearish divergence detected: Price making higher highs but volume decreasing. Buying pressure is exhausting.")
-            implication_parts.append("🔴 BEARISH SIGNAL - Buyers are losing control. Watch for distribution signals and LPSY for short entries.")
-        elif 'no divergence' in divergence.lower():
-            meaning_parts.append("No divergence: Volume and price are moving in harmony.")
-            implication_parts.append("Trend is healthy and sustainable in current direction. No warning signs yet.")
+                institutional = "Institutions are clearly active (evidenced by volume large enough to absorb heavy one-sided flow). They're either: (1) Defending a level they consider important, (2) Transitioning between phases, or (3) Testing market appetite at this price. Their willingness to absorb high volume without letting price move indicates strong conviction about this price level's strategic importance. Stay alert—when absorption ends, a sharp move typically follows."
 
-        # Combine interpretations
-        meaning = " ".join(meaning_parts) if meaning_parts else "Volume analysis provides insight into the battle between buyers and sellers."
-        implication = " ".join(implication_parts) if implication_parts else "Monitor volume patterns for clues about institutional activity."
+                trade_impact = "FOR YOUR TRADE: Absorption means imminent volatility. The coiled spring will release soon. Direction depends on who exhausts first: if sellers exhaust (volume drops, price holds), buy the breakout UP. If buyers exhaust (volume drops, price fails), short the breakdown DOWN. Don't trade the chop—wait for resolution. The side being absorbed is losing; trade with the absorber, not against them."
+
+        # HIGH VOLUME + WIDE SPREAD = MOMENTUM/AGREEMENT
+        elif 'high volume' in effort_result and 'wide spread' in effort_result:
+            mechanics = "This is MOMENTUM—effort (volume) and result (price movement) are perfectly aligned. Thousands of orders are executing (high volume) AND price is moving significantly (wide spread). This represents one-sided agreement: either buyers are overwhelming sellers, or sellers are overwhelming buyers. There's no equilibrium, no absorption—just pure directional force. Every market order pushes price further because there's insufficient counter-pressure. The order book is getting steamrolled in one direction. Stops are triggering (adding fuel), momentum traders are piling in (more fuel), and the move feeds on itself."
+
+            if 'up' in effort_result or phase in ['MARKUP', 'ACCUMULATION']:
+                order_book = "The BUY side is winning decisively. Picture the order book: BUY market orders are hitting the ASK aggressively, taking out each price level like dominoes. Limited SELL orders exist to absorb the buying pressure, so price gaps higher with each wave of buys. SELL limit orders at each level get consumed instantly. Sellers who want out have to chase price UP to find buyers—that's STRENGTH. The spread widening means buyers aren't finding resistance—they're pushing into thin air, which accelerates the move. This is what 'strong demand' looks like mechanically: not just buyers present, but buyers OVERWHELMING available supply."
+
+                institutional = "Institutions are either: (1) Leading the move (early markup from accumulation), (2) Allowing it to happen (mid markup), or (3) Selling into it (late markup / distribution). Context matters: If this occurs during accumulation breakout or early markup, institutions are likely buyers letting the move run (they want higher prices to distribute later). If during late markup / distribution, institutions are likely SELLERS using retail buying pressure to exit. Volume profile helps: increasing volume + wid spread = healthy rally (institutions participating). Decreasing volume + wide spread = climax rally (institutions exiting). Pay attention to follow-through: does price consolidate and continue (bullish), or reverse (bearish)?"
+
+                trade_impact = f"FOR YOUR TRADE {'(UPWARD)' if 'up' in effort_result else ''}: High volume + wide spread UP during ACCUMULATION/MARKUP is bullish confirmation. This is the 'Signs of Strength' Wyckoff traders look for. It confirms buyers are in control and markup is underway. IF YOU'RE LONG: Trail stops aggressively—let winners run, but protect profits. IF YOU'RE CONSIDERING entry: wait for pullback to support (former resistance), don't chase. IF YOU'RE SHORT: Cut losses immediately—fighting this strength will hurt. However, be cautious if this occurs during DISTRIBUTION: it might be an Upthrust (bull trap) where institutions sell into euphoric buying. Watch follow-through: strong moves consolidate and continue; climax moves reverse sharply."
+
+            else:  # Downward or markdown/distribution
+                order_book = "The SELL side is winning decisively. Picture the order book: SELL market orders are hitting the BID aggressively, taking out each price level in rapid succession. Limited BUY orders exist to absorb the selling pressure, so price gaps lower with each wave of sells. BUY limit orders at each level get consumed instantly. Buyers who want in have to chase price DOWN to find sellers—that's WEAKNESS. The spread widening means sellers aren't finding support—they're pushing into thin air, which accelerates the decline. This is what 'strong supply' looks like mechanically: not just sellers present, but sellers OVERWHELMING available demand."
+
+                institutional = "Institutions are either: (1) Leading the move (early markdown from distribution), (2) Allowing it to happen (mid markdown), or (3) Buying into it (late markdown / accumulation). Context matters: If this occurs during distribution breakdown or early markdown, institutions are likely sellers/shorts letting the move run. If during late markdown / accumulation, institutions are likely BUYERS using retail panic to accumulate. Volume profile helps: increasing volume + wide spread = healthy decline (institutions participating). Decreasing volume + wide spread = climax decline (institutions covering/buying). Pay attention to follow-through: does price consolidate and continue down (bearish), or reverse up (bullish)?"
+
+                trade_impact = "FOR YOUR TRADE (DOWNWARD): High volume + wide spread DOWN during DISTRIBUTION/MARKDOWN is bearish confirmation. This is the 'Signs of Weakness' Wyckoff traders watch for. It confirms sellers are in control and markdown is underway. IF YOU'RE SHORT: Trail stops—lock in profits while letting the move play out. IF YOU'RE LONG: Cut losses immediately and exit. IF YOU'RE CONSIDERING SHORTS: Wait for rally to resistance (former support), don't chase. However, be cautious if this occurs during ACCUMULATION: it might be a Spring (bear trap) where institutions buy into panic selling. Watch follow-through: strong declines consolidate and continue; climax declines reverse sharply (selling exhaustion)."
+
+        # LOW VOLUME + NARROW SPREAD = INDECISION/APATHY
+        elif 'low volume' in effort_result and 'narrow spread' in effort_result:
+            mechanics = "This is APATHY—nobody cares. Low volume means few orders are executing. Narrow spread means price isn't moving. Both buyers and sellers are absent or indecisive. The order book is thin on both sides: not many buy orders, not many sell orders. No institutional interest, no retail interest, no momentum, no volatility. This is the 'dead zone' where trading is frustrating and unprofitable. Price drifts aimlessly. Spreads widen (less liquidity). Slippage increases. Nothing matters because nobody's participating."
+
+            order_book = "Imagine an order book with scattered, small orders on both sides. A BUY market order moves price up slightly (thin asks), then a SELL market order moves it back down (thin bids). Neither side has conviction. Market makers are in control by default—they widen spreads and clip retail traders on both sides. There's no large institutional orders (those create volume and movement). Just random retail positions being opened/closed with minimal impact. The book is 'balanced' but only because neither side cares, not because of equilibrium from strong participants."
+
+            institutional = "Institutions are ABSENT. Low volume environments occur when smart money is on holiday, between major market phases, or waiting for catalysts (news, data releases, events). They're not accumulating (that creates volume at lows), not distributing (that creates volume at highs), not marking up or down (that creates movement). They're simply not participating. This is retail-only trading—and retail doesn't move markets. Without institutional participation, there's no edge, no trends, no meaningful structure. Just noise."
+
+            trade_impact = "FOR YOUR TRADE: AVOID TRADING THIS ENVIRONMENT. Low volume + narrow spread is a profit graveyard. Why? (1) No trends to ride, (2) Wide spreads eat your edge, (3) False breakouts everywhere (thin books mean small orders can cause spikes), (4) Whipsaws constant (no directional conviction), (5) Opportunity cost (capital deployed here could be deployed in better setups). Better strategy: WAIT. Preserve capital, study structure, prepare watchlists. When institutions return (volume increases, patterns form), THEN trade aggressively. The trader who can do nothing during low-probability environments and go all-in during high-probability environments will massively outperform the trader who trades constantly. Patience IS a position. Boredom is not a reason to trade."
+
+        # LOW VOLUME + WIDE SPREAD = NO RESISTANCE
+        elif 'low volume' in effort_result and 'wide spread' in effort_result:
+            mechanics = "This is the 'NO RESISTANCE' scenario—price moves significantly (wide spread) on minimal volume (low effort). This seems counterintuitive: how can price move a lot with little activity? Answer: lack of opposition. The side opposing the move is ABSENT from the market. If price is rising, it means no sellers are defending higher levels—buy orders easily push price up because asks are thin. If price is falling, it means no buyers are defending lower levels—sell orders easily push price down because bids are thin. It's like pushing a door you expect to be locked but finding it wide open—you stumble forward with minimal effort."
+
+            if phase in ['MARKUP', 'ACCUMULATION'] or 'up' in effort_result:
+                order_book = "Order book perspective: Price is rising, but it's not due to aggressive buying (volume is low). Instead, the ASK side of the book is THIN—few sell orders are posted. Each small buy order 'climbs the ladder' of asks, moving price up easily. Sellers aren't defending higher prices; they're either: (1) Not interested in selling (holding), or (2) Already sold (exhausted during accumulation). This is the classic 'NO SUPPLY' condition. Price rises not because buyers are strong, but because sellers are absent. It's passive strength—the path of least resistance is UP."
+
+                institutional = "This is BULLISH and indicates successful accumulation. During accumulation, institutions absorbed all available supply (sellers). Now that selling pressure is exhausted, even modest buying moves price higher—there's no supply to absorb the demand. Institutions don't need to push hard (hence low volume); they just step aside and let natural dynamics work. The lack of resistance confirms their accumulation was successful and markdown/distribution phase truly ended. This setup typically occurs: (1) After Spring (false low) traps sellers, (2) At LPS (last point of support), or (3) Early markup when retail hasn't noticed yet."
+
+                trade_impact = "FOR YOUR TRADE: This is a STRONG BUY signal. Low volume + wide spread UP = 'NO SUPPLY' = very bullish. It means: (1) Sellers are exhausted (already sold during accumulation), (2) No institutional resistance to upside (they want higher prices), (3) Trend can continue with minimal effort (efficient move), (4) Any real buying will accelerate move significantly. STRATEGY: Hold longs with trailing stops, add on any pullbacks to support. This is the 'effortless uptrend' that can run for weeks/months. Don't overthink it—absence of supply is pure bullishness. Only concern: watch for increased volume at resistance (supply returning). But while volume stays low and price rises easily, stay long and enjoy the ride. This is what 'easy money' looks like."
+
+            elif phase in ['MARKDOWN', 'DISTRIBUTION'] or 'down' in effort_result:
+                order_book = "Order book perspective: Price is falling, but it's not due to aggressive selling (volume is low). Instead, the BID side of the book is THIN—few buy orders are posted. Each small sell order 'descends the ladder' of bids, moving price down easily. Buyers aren't defending lower prices; they're either: (1) Not interested in buying (afraid), or (2) Already bought and holding losing positions (stuck). This is the classic 'NO DEMAND' condition. Price falls not because sellers are strong, but because buyers are absent. It's passive weakness—the path of least resistance is DOWN."
+
+                institutional = "This is BEARISH and indicates successful distribution. During distribution, institutions offloaded their positions to willing buyers (retail). Now that buying pressure is exhausted, even modest selling moves price lower—there's no demand to absorb the supply. Institutions don't need to push hard (hence low volume); they just step aside and let gravity work. The lack of support confirms their distribution was successful and markup phase truly ended. This setup typically occurs: (1) After Upthrust (false high) traps buyers, (2) At LPSY (last point of supply), or (3) Early markdown when retail is still hopeful."
+
+                trade_impact = "FOR YOUR TRADE: This is a STRONG SELL signal. Low volume + wide spread DOWN = 'NO DEMAND' = very bearish. It means: (1) Buyers are exhausted (already bought during distribution), (2) No institutional support (they want lower prices), (3) Trend can continue with minimal effort (efficient decline), (4) Any real selling will accelerate move significantly. STRATEGY: If long, EXIT immediately. If short, hold with trailing stops or add on any rallies to resistance. This is the 'effortless downtrend' that can run for weeks/months. Don't try to catch falling knives—absence of demand is pure bearishness. Only concern: watch for increased volume at support (demand returning). But while volume stays low and price falls easily, stay flat or short. This is how markup gains are given back."
+
+        # Handle divergences
+        divergence_insight = ""
+        if 'bullish' in divergence:
+            divergence_insight = " ADDITIONALLY: Bullish divergence detected—price making lower lows but volume decreasing. This means selling pressure is EXHAUSTING. Each new low requires less volume (effort), indicating sellers are running out of ammunition. When sellers exhaust, buyers take control by default. This is a strong early warning of trend reversal from down to up. Combined with current volume pattern, it reinforces the bullish case. Watch for Accumulation signals (Spring, LPS) to confirm the reversal."
+        elif 'bearish' in divergence:
+            divergence_insight = " ADDITIONALLY: Bearish divergence detected—price making higher highs but volume decreasing. This means buying pressure is EXHAUSTING. Each new high requires less volume (effort), indicating buyers are running out of ammunition. When buyers exhaust, sellers take control by default. This is a strong early warning of trend reversal from up to down. Combined with current volume pattern, it reinforces the bearish case. Watch for Distribution signals (Upthrust, LPSY) to confirm the reversal."
+        elif 'no divergence' in divergence:
+            divergence_insight = " ADDITIONALLY: No divergence present—volume and price are moving in harmony. This indicates the current trend is healthy and sustainable. There are no warning signs of exhaustion yet. Trends tend to continue until divergences appear, so the path of least resistance remains in the current direction. Stay with the trend until volume/price harmony breaks."
+
+        # Add divergence insight to trade_impact
+        trade_impact += divergence_insight
 
         return {
-            'meaning': meaning,
-            'implication': implication
+            'mechanics': mechanics,
+            'order_book': order_book,
+            'institutional': institutional,
+            'trade_impact': trade_impact
         }
 
     def set_symbol(self, symbol):
