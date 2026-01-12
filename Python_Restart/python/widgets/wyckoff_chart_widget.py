@@ -384,7 +384,7 @@ class WyckoffChartWidget(QWidget):
                        bbox=dict(boxstyle='round,pad=0.3', facecolor='#1e1e1e',
                                 alpha=0.7, edgecolor=event_color, linewidth=1))
                        
-        # Add comprehensive phase annotation with educational content
+        # Add clean phase label at top-left (minimal, no explanations)
         phase = wyckoff_data.get('current_phase')
         if phase:
             phase_text = f"Phase: {phase.value}"
@@ -397,64 +397,31 @@ class WyckoffChartWidget(QWidget):
             }
             phase_color = phase_colors.get(phase.value, '#888888')
 
-            # Get phase educational content
-            phase_guidance = self._get_phase_guidance(phase.value)
+            # Simple phase label only - all explanations in text panel below
+            ax.text(0.02, 0.98, phase_text, transform=ax.transAxes,
+                   fontsize=12, fontweight='bold', color=phase_color,
+                   verticalalignment='top',
+                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.6))
 
-            # Phase box with educational content
-            phase_full_text = f"{phase_text}\n{phase_guidance['short_description']}"
-            ax.text(0.02, 0.98, phase_full_text, transform=ax.transAxes,
-                   fontsize=11, fontweight='bold', color=phase_color,
-                   verticalalignment='top', linespacing=1.5,
-                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.8))
-
-            # Add trading guidance box in bottom left
-            guidance_text = f"💡 {phase_guidance['action']}"
-            ax.text(0.02, 0.12, guidance_text, transform=ax.transAxes,
-                   fontsize=10, color='#FFD700', verticalalignment='bottom',
-                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.6),
-                   wrap=True)
-
-        # Add LPS/LPSY educational annotation if present
+        # Add LPS/LPSY label if present (minimal - details in text panel below)
         if lps_lpsy:
             lps_type = lps_lpsy['type']
             strength = lps_lpsy.get('strength', 'MODERATE')
             confirmed = lps_lpsy.get('confirmed', False)
 
-            signal_guidance = self._get_signal_guidance(lps_type, strength, confirmed)
+            lps_color = '#00FF00' if lps_type == 'LPS' else '#FF0000'
+            status = "✅" if confirmed else "⏳"
 
-            # Add signal interpretation box - MOVED TO MIDDLE RIGHT to avoid blocking
-            signal_text = f"📊 {lps_type} Signal\n{signal_guidance}"
-            ax.text(0.98, 0.60, signal_text, transform=ax.transAxes,
-                   fontsize=10, color='#87CEEB', verticalalignment='center',
-                   horizontalalignment='right', linespacing=1.4,
-                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.7))
+            # Simple label at top-right - full analysis in text panel below
+            signal_label = f"{lps_type} {strength} {status}"
+            ax.text(0.98, 0.98, signal_label, transform=ax.transAxes,
+                   fontsize=11, fontweight='bold', color=lps_color,
+                   verticalalignment='top', horizontalalignment='right',
+                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.6))
 
-        # Quick reference guide - MOVED TO BOTTOM LEFT
-        guide_text = "📖 Quick Reference\n" + \
-                    "🟢 ↑ LPS = Buy signal\n" + \
-                    "🔴 ↓ LPSY = Sell signal\n" + \
-                    "Green line = Entry\n" + \
-                    "Red line = Stop"
-        ax.text(0.02, 0.02, guide_text, transform=ax.transAxes,
-               fontsize=8, color='#aaa', verticalalignment='bottom',
-               linespacing=1.4,
-               bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.85, pad=0.5))
-
-        # Add volume interpretation guide in bottom right
-        volume_analysis = wyckoff_data.get('volume_analysis', {})
-        if volume_analysis:
-            vol_guide = "📊 Volume Key:\n" + \
-                       "High Vol + Narrow = Absorption\n" + \
-                       "Low Vol + Wide = No resistance\n" + \
-                       "High Vol + Wide = Strong move"
-            ax.text(0.98, 0.02, vol_guide, transform=ax.transAxes,
-                   fontsize=8, color='#888', verticalalignment='bottom',
-                   horizontalalignment='right', linespacing=1.4,
-                   bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.8, pad=0.5))
-
-        # Add legend
-        ax.legend(loc='center right', facecolor='#2a2a2a', edgecolor='#666',
-                 labelcolor='#fff', fontsize=9)
+        # Add legend for entry/stop lines
+        ax.legend(loc='upper center', facecolor='#2a2a2a', edgecolor='#666',
+                 labelcolor='#fff', fontsize=9, ncol=3)
                  
     def _style_chart(self, ax_price, ax_volume, symbol):
         """Apply styling to charts"""
