@@ -68,10 +68,12 @@ class WyckoffChartWidget(QWidget):
         controls_layout.addWidget(self.refresh_btn)
         
         layout.addLayout(controls_layout)
-        
+
         # === MATPLOTLIB CHART ===
-        self.figure = Figure(figsize=(12, 8), facecolor='#1e1e1e')
+        # Larger figure size to match main chart height for easy comparison
+        self.figure = Figure(figsize=(14, 12), facecolor='#1e1e1e')
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumHeight(600)  # Ensure minimum height for visibility
         layout.addWidget(self.canvas)
         
         # Initial empty chart
@@ -202,9 +204,10 @@ class WyckoffChartWidget(QWidget):
         
         # Clear figure and create subplots
         self.figure.clear()
-        
+
         # Create 2 subplots: price chart and volume
-        gs = self.figure.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.05)
+        # Height ratio [4, 1] gives more space to price chart for better visibility
+        gs = self.figure.add_gridspec(2, 1, height_ratios=[4, 1], hspace=0.08)
         ax_price = self.figure.add_subplot(gs[0])
         ax_volume = self.figure.add_subplot(gs[1], sharex=ax_price)
         
