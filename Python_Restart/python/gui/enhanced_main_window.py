@@ -323,14 +323,26 @@ class EnhancedMainWindow(QMainWindow):
         """Handle timeframe change"""
         self.current_timeframe = timeframe
         self.status_label.setText(f"Timeframe changed to: {timeframe}")
+
+        # Sync Wyckoff chart if it has data
+        if hasattr(self, 'wyckoff_chart_widget') and self.wyckoff_chart_widget.wyckoff_data:
+            vprint(f"[Main Window] Main chart timeframe changed to {timeframe}, syncing Wyckoff chart")
+            self.wyckoff_chart_widget.update_chart(
+                self.wyckoff_chart_widget.current_symbol,
+                self.wyckoff_chart_widget.wyckoff_data,
+                timeframe
+            )
+
         self.update_all_data()
 
     def on_wyckoff_analysis_ready(self, symbol: str, wyckoff_data: dict):
         """Handle Wyckoff analysis completion - update chart widget"""
         vprint(f"[Main Window] Wyckoff analysis ready for {symbol}")
         if hasattr(self, 'wyckoff_chart_widget'):
-            self.wyckoff_chart_widget.update_chart(symbol, wyckoff_data)
-            vprint(f"[Main Window] Wyckoff chart updated for {symbol}")
+            # Pass the main chart's current timeframe for alignment
+            main_timeframe = self.current_timeframe if hasattr(self, 'current_timeframe') else 'H4'
+            self.wyckoff_chart_widget.update_chart(symbol, wyckoff_data, main_timeframe)
+            vprint(f"[Main Window] Wyckoff chart updated for {symbol} ({main_timeframe})")
             # Automatically switch to Wyckoff Chart tab to show the results
             self.analysis_tabs.setCurrentWidget(self.analysis_tabs.widget(7))  # Tab 8 is index 7
 

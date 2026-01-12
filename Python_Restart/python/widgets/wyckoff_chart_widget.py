@@ -133,16 +133,34 @@ class WyckoffChartWidget(QWidget):
         if self.wyckoff_data and self.current_symbol:
             self.plot_wyckoff_chart(self.current_symbol, self.wyckoff_data)
             
-    def update_chart(self, symbol, wyckoff_data):
+    def update_chart(self, symbol, wyckoff_data, main_chart_timeframe=None):
         """
         Update chart with Wyckoff analysis data
-        
+
         Args:
             symbol: Trading symbol
             wyckoff_data: Dict containing Wyckoff analysis for multiple timeframes
+            main_chart_timeframe: Timeframe from main chart (e.g., "H4", "H1")
         """
         self.current_symbol = symbol
         self.wyckoff_data = wyckoff_data
+
+        # Sync with main chart's timeframe if provided
+        if main_chart_timeframe:
+            # Map main chart timeframes to our timeframe format
+            tf_map = {
+                'M15': 'M15',
+                'M30': 'M15',  # Fallback to M15 if M30
+                'H1': 'H1',
+                'H4': 'H4',
+                'D1': 'D1',
+                'W1': 'D1'  # Fallback to D1 if W1
+            }
+            mapped_tf = tf_map.get(main_chart_timeframe, 'H4')
+            self.current_timeframe = mapped_tf
+            self.tf_combo.setCurrentText(mapped_tf)
+            vprint(f"[Wyckoff Chart] Synced to main chart timeframe: {main_chart_timeframe} -> {mapped_tf}")
+
         self.plot_wyckoff_chart(symbol, wyckoff_data)
         
     def plot_wyckoff_chart(self, symbol, wyckoff_data):
