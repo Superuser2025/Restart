@@ -419,9 +419,10 @@ class WyckoffChartWidget(QWidget):
                    verticalalignment='top', horizontalalignment='right',
                    bbox=dict(boxstyle='round', facecolor='#2a2a2a', alpha=0.9, pad=0.6))
 
-        # Add legend for entry/stop lines
-        ax.legend(loc='upper center', facecolor='#2a2a2a', edgecolor='#666',
-                 labelcolor='#fff', fontsize=9, ncol=3)
+        # Add legend for entry/stop lines - positioned to avoid overlap
+        ax.legend(loc='upper right', bbox_to_anchor=(0.98, 0.90),
+                 facecolor='#2a2a2a', edgecolor='#666',
+                 labelcolor='#fff', fontsize=9, framealpha=0.9)
                  
     def _style_chart(self, ax_price, ax_volume, symbol):
         """Apply styling to charts"""
