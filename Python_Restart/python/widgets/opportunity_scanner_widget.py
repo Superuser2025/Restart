@@ -4,8 +4,8 @@ Scans all pairs for high-probability trading setups in real-time
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                            QFrame, QScrollArea, QGridLayout, QSizePolicy, QDialog, QCheckBox)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+                            QFrame, QScrollArea, QGridLayout, QSizePolicy, QDialog, QCheckBox, QGraphicsOpacityEffect)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve, pyqtProperty
 from PyQt6.QtGui import QFont, QMouseEvent
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -26,14 +26,22 @@ class OpportunityCard(QFrame):
     # Signal emitted when card is clicked
     clicked = pyqtSignal(dict)
 
-    def __init__(self, opportunity: Dict, parent=None):
+    def __init__(self, opportunity: Dict, is_new: bool = False, parent=None):
         super().__init__(parent)
         self.opportunity = opportunity
+        self.is_new = is_new  # Track if this is a new/updated card
         self.column_index = 0  # Will be set when added to grid
         self.setObjectName("OpportunityCard")
         self.setMouseTracking(True)  # Enable mouse tracking for hover effects
         self.setCursor(Qt.CursorShape.PointingHandCursor)  # Show hand cursor on hover
+        self.blink_count = 0  # Track number of blinks
+        self.blink_timer = None  # Timer for blinking
+        self.original_border_color = None  # Store original border color
         self.init_ui()
+
+        # Start blinking if this is a new card
+        if self.is_new:
+            QTimer.singleShot(100, self.start_blinking)
 
     def init_ui(self):
         """Initialize the opportunity card UI"""
@@ -152,6 +160,87 @@ class OpportunityCard(QFrame):
             self.clicked.emit(self.opportunity)
         super().mousePressEvent(event)
 
+    def start_blinking(self):
+        """Start the blinking animation to grab attention"""
+        # Store original border color based on quality score
+        score = self.opportunity['quality_score']
+        if score >= 85:
+            self.original_border_color = '#10B981'  # Green
+        elif score >= 70:
+            self.original_border_color = '#3B82F6'  # Blue
+        elif score >= 60:
+            self.original_border_color = '#F59E0B'  # Orange
+        else:
+            self.original_border_color = '#6B7280'  # Gray
+
+        # Start blink timer (blink every 300ms)
+        self.blink_timer = QTimer(self)
+        self.blink_timer.timeout.connect(self.toggle_blink)
+        self.blink_timer.start(300)  # Blink every 300ms
+
+    def toggle_blink(self):
+        """Toggle between highlighted and normal state"""
+        if self.blink_count >= 8:  # Blink 4 times (8 toggles)
+            # Stop blinking and restore original color
+            if self.blink_timer:
+                self.blink_timer.stop()
+                self.blink_timer = None
+            self.restore_original_style()
+            return
+
+        # Alternate between bright highlight and original color
+        if self.blink_count % 2 == 0:
+            # Highlight state - bright yellow/gold border
+            highlight_color = '#FFD700'  # Gold
+            bg_color = self.get_bg_color()
+            self.setStyleSheet(f"""
+                OpportunityCard {{
+                    background-color: {bg_color};
+                    border: 3px solid {highlight_color};
+                    border-radius: 8px;
+                    padding: 6px;
+                }}
+                OpportunityCard QLabel {{
+                    background-color: transparent;
+                    border: none;
+                }}
+            """)
+        else:
+            # Normal state
+            self.restore_original_style()
+
+        self.blink_count += 1
+
+    def restore_original_style(self):
+        """Restore the original card styling"""
+        score = self.opportunity['quality_score']
+        bg_color = self.get_bg_color()
+
+        self.setStyleSheet(f"""
+            OpportunityCard {{
+                background-color: {bg_color};
+                border: 2px solid {self.original_border_color};
+                border-radius: 8px;
+                padding: 6px;
+            }}
+            OpportunityCard QLabel {{
+                background-color: transparent;
+                border: none;
+            }}
+        """)
+
+    def get_bg_color(self):
+        """Get background color based on quality score"""
+        score = self.opportunity['quality_score']
+        if score >= 85:
+            return '#064E3B'  # Green
+        elif score >= 70:
+            return '#1E3A8A'  # Blue
+        elif score >= 60:
+            return '#78350F'  # Orange
+        else:
+            return '#374151'  # Gray
+
 
 class TimeframeGroup(QWidget):
     """Group widget for a specific timeframe range - cards flow left to right"""
@@ -161,6 +250,7 @@ class TimeframeGroup(QWidget):
         self.timeframes = timeframes
         self.opportunities = []
         self.current_popup = None  # Store reference to current popup
+        self.previous_opportunity_keys = set()  # Track previous opportunities for new detection
         self.init_ui()
 
     def init_ui(self):
@@ -200,6 +290,18 @@ class TimeframeGroup(QWidget):
         """Update opportunities - LIMIT TO 12 CARDS MAX, 3 rows × 4 columns"""
         # CRITICAL: Hard limit to 12 cards per timeframe section
         self.opportunities = opportunities[:12]
+
+        # Track current opportunity keys to detect NEW cards
+        current_opportunity_keys = {
+            (opp['symbol'], opp['timeframe'], opp['direction'])
+            for opp in self.opportunities
+        }
+
+        # Detect NEW opportunities (not in previous set)
+        new_opportunity_keys = current_opportunity_keys - self.previous_opportunity_keys
+
+        # Update previous keys for next comparison
+        self.previous_opportunity_keys = current_opportunity_keys
 
         # Clear existing cards
         while self.grid_layout.count():
@@ -245,7 +347,12 @@ class TimeframeGroup(QWidget):
 
         # Add cards in 4-column grid (max 3 rows × 4 cols = 12 cards)
         for idx, opp in enumerate(self.opportunities):
-            card = OpportunityCard(opp)
+            # Check if this opportunity is NEW
+            opp_key = (opp['symbol'], opp['timeframe'], opp['direction'])
+            is_new_card = opp_key in new_opportunity_keys
+
+            # Create card with is_new flag
+            card = OpportunityCard(opp, is_new=is_new_card)
             card.setCursor(Qt.CursorShape.PointingHandCursor)
 
             row = idx // 4  # 4 cards per row

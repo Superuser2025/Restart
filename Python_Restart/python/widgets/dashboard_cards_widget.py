@@ -29,7 +29,7 @@ class DashboardCard(QFrame):
                 background-color: #1a1a2e;
                 border: 1px solid #3B82F6;
                 border-radius: 8px;
-                padding: 10px;
+                padding: 8px;
             }
             QFrame:hover {
                 border: 1px solid #60A5FA;
@@ -38,7 +38,8 @@ class DashboardCard(QFrame):
         """)
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(5)
+        layout.setSpacing(3)
+        layout.setContentsMargins(8, 6, 8, 6)
 
         # Title with icon
         title_label = QLabel(f"{icon} {title}")
@@ -48,23 +49,28 @@ class DashboardCard(QFrame):
 
         # Main value
         self.value_label = QLabel("--")
-        self.value_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        self.value_label.setStyleSheet("color: #ffffff; border: none; padding: 0;")
+        self.value_label.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        self.value_label.setStyleSheet("color: #ffffff; border: none; padding: 2px 0;")
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.value_label.setWordWrap(False)
         layout.addWidget(self.value_label)
 
         # Subtitle
         self.subtitle_label = QLabel("")
-        self.subtitle_label.setFont(QFont("Arial", 8))
-        self.subtitle_label.setStyleSheet("color: #888888; border: none; padding: 0;")
+        self.subtitle_label.setFont(QFont("Arial", 9))
+        self.subtitle_label.setStyleSheet("color: #aaaaaa; border: none; padding: 0; line-height: 1.2;")
         self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.subtitle_label.setWordWrap(True)  # Allow wrapping for long text
+        self.subtitle_label.setMaximumHeight(35)  # Limit height to prevent overflow
         layout.addWidget(self.subtitle_label)
 
     def update_value(self, value: str, subtitle: str = "", color: str = "#ffffff"):
         """Update card value and subtitle"""
         self.value_label.setText(value)
-        self.value_label.setStyleSheet(f"color: {color}; border: none; padding: 0;")
+        self.value_label.setStyleSheet(f"color: {color}; border: none; padding: 2px 0; font-weight: bold;")
         self.subtitle_label.setText(subtitle)
+        # Ensure subtitle stays visible with proper color
+        self.subtitle_label.setStyleSheet("color: #aaaaaa; border: none; padding: 0; line-height: 1.2;")
 
 
 class DashboardCardsWidget(AIAssistMixin, QWidget):
