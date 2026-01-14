@@ -128,7 +128,7 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
         cards_layout.addWidget(self.risk_card)
 
         # Card 4: AI Scenario
-        self.scenario_card = DashboardCard("AI Action", "🤖")
+        self.scenario_card = DashboardCard("AI Action (Account)", "🤖")
         cards_layout.addWidget(self.scenario_card)
 
         # AI checkbox placeholder (placed after cards)
@@ -230,6 +230,8 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
 
     def load_live_data(self):
         """Load live MT5 account data"""
+        from core.market_analyzer import market_analyzer
+
         # Get real account data from data_manager
         account = data_manager.get_account_summary()
         market_state = data_manager.get_market_state()
@@ -250,10 +252,36 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
             "#00aaff"
         )
 
-        # Market card - REAL DATA
+        # Market card - REAL DATA with DIRECT session detection
         trend = market_state.get('bias', 'NEUTRAL')
-        volatility = market_state.get('volatility', 'NORMAL')
-        session = market_state.get('session', 'UNKNOWN')
+
+        # Get REAL-TIME session directly from market_analyzer
+        raw_session = market_analyzer.get_current_session()
+        session_map = {
+            'london_ny_overlap': 'London/NY',
+            'london': 'London',
+            'newyork': 'New York',
+            'asian': 'Asian',
+            'dead': 'Dead Zone'
+        }
+        session = session_map.get(raw_session, 'Unknown')
+
+        # Calculate volatility status (HIGH/NORMAL/LOW)
+        # Get current symbol from data_manager
+        current_symbol = data_manager.current_price.get('symbol', 'EURUSD')
+        try:
+            current_atr = market_analyzer.calculate_atr(current_symbol, 'H1', period=14)
+            avg_atr = market_analyzer.calculate_atr(current_symbol, 'H1', period=50)
+
+            if current_atr > (avg_atr * 1.5):
+                volatility = "HIGH"
+            elif current_atr > (avg_atr * 0.8):
+                volatility = "NORMAL"
+            else:
+                volatility = "LOW"
+        except:
+            # Fallback to data_manager value if calculation fails
+            volatility = market_state.get('volatility', 'NORMAL')
 
         trend_color = "#00ff00" if trend == "BULLISH" else "#ff0000" if trend == "BEARISH" else "#ffaa00"
         self.market_card.update_value(
@@ -294,7 +322,7 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
 
         self.scenario_card.update_value(action, reason, color)
 
-        # Store for AI analysis
+        # Store for AI analysis (with corrected session data)
         self.current_data = {
             'balance': balance,
             'equity': equity,
@@ -303,7 +331,8 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
             'win_rate': win_rate,
             'trend': trend,
             'volatility': volatility,
-            'session': session,
+            'session': session,  # Now uses real-time session from market_analyzer
+            'raw_session': raw_session,  # Store raw session for logic
             'exposure': exposure,
             'margin_used': margin_used_pct,
             'drawdown': drawdown,
