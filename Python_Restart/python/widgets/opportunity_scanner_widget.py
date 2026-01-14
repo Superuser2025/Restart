@@ -180,7 +180,7 @@ class OpportunityCard(QFrame):
 
     def toggle_blink(self):
         """Toggle between highlighted and normal state"""
-        if self.blink_count >= 8:  # Blink 4 times (8 toggles)
+        if self.blink_count >= 200:  # Blink for 1 minute (200 toggles × 300ms = 60 seconds)
             # Stop blinking and restore original color
             if self.blink_timer:
                 self.blink_timer.stop()
