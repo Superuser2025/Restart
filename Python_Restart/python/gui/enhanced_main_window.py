@@ -84,8 +84,8 @@ class EnhancedMainWindow(QMainWindow):
 
         # === OPPORTUNITY SCANNER ===
         self.scanner_widget = OpportunityScannerWidget()
-        self.scanner_widget.setMinimumHeight(300)  # Increased from 260 to 300
-        self.scanner_widget.setMaximumHeight(330)  # Increased from 280 to 330
+        self.scanner_widget.setMinimumHeight(310)  # Optimized to show all 3 rows
+        self.scanner_widget.setMaximumHeight(315)  # Match widget's own max height
         self.scanner_widget.set_mt5_connector(self.mt5_connector)
         main_layout.addWidget(self.scanner_widget)
 

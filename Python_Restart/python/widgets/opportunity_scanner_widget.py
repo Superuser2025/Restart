@@ -45,9 +45,9 @@ class OpportunityCard(QFrame):
 
     def init_ui(self):
         """Initialize the opportunity card UI"""
-        # CRITICAL: Card must expand to fill grid cell
-        self.setMinimumHeight(90)
-        self.setMaximumHeight(95)
+        # CRITICAL: Card must expand to fill grid cell - REDUCED HEIGHT to fit better
+        self.setMinimumHeight(88)  # Reduced from 90
+        self.setMaximumHeight(92)  # Reduced from 95
         self.setMinimumWidth(50)  # Allow cards to shrink if needed
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,  # Expand horizontally to fill cell
@@ -257,13 +257,14 @@ class TimeframeGroup(QWidget):
         """Initialize the group UI"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
+        layout.setSpacing(0)
 
-        # Scroll area
+        # Scroll area - REDUCED height to fit in parent container
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setMinimumHeight(330)  # Height for 3 rows of cards (12 cards / 4 per row = 3 rows)
+        scroll.setMinimumHeight(305)  # Reduced from 330 to 305 to fit better
+        scroll.setMaximumHeight(305)  # Lock height to prevent overflow
         scroll.setStyleSheet("""
             QScrollArea {
                 background-color: #0F1729;
@@ -276,8 +277,8 @@ class TimeframeGroup(QWidget):
 
         # Grid layout - 4 columns, cards flow left-to-right
         self.grid_layout = QGridLayout(scroll_content)
-        self.grid_layout.setSpacing(4)
-        self.grid_layout.setContentsMargins(4, 4, 4, 4)
+        self.grid_layout.setSpacing(3)  # Reduced from 4 to 3
+        self.grid_layout.setContentsMargins(3, 3, 3, 3)  # Reduced from 4 to 3
 
         # CRITICAL: Make all columns equal width so cards resize properly
         for col in range(4):
@@ -369,8 +370,8 @@ class TimeframeGroup(QWidget):
         # Fill remaining slots with spacers if < 12 cards (for even layout)
         for idx in range(len(self.opportunities), 12):
             spacer = QWidget()
-            spacer.setMinimumHeight(90)
-            spacer.setMaximumHeight(95)
+            spacer.setMinimumHeight(88)  # Match reduced card height
+            spacer.setMaximumHeight(92)  # Match reduced card height
             spacer.setMinimumWidth(50)
             spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             spacer.setStyleSheet("background-color: transparent;")
@@ -482,7 +483,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
     def init_ui(self):
         """Initialize the user interface - NO HEADER"""
-        self.setMinimumHeight(320)  # Increased so cards don't get cut off
+        self.setMinimumHeight(310)  # Optimized to fit 3 rows without cutoff
+        self.setMaximumHeight(315)  # Lock height to prevent overflow
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)  # No margins - save space
@@ -490,7 +492,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         # Minimal header for AI checkbox only
         header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(5, 2, 5, 2)
+        header_layout.setContentsMargins(3, 2, 3, 2)  # Reduced from 5 to 3
         header_layout.addStretch()
         self.ai_checkbox_placeholder = header_layout
         layout.addLayout(header_layout)
