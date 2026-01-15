@@ -9,6 +9,15 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from core.license_manager import license_manager
 
+# Development mode support
+try:
+    from core.dev_config import is_dev_mode, get_mode_label
+except ImportError:
+    def is_dev_mode():
+        return False
+    def get_mode_label():
+        return "🔐 PRODUCTION MODE"
+
 
 class LicenseDialog(QDialog):
     """
@@ -269,6 +278,13 @@ def check_license_on_startup() -> bool:
     Check license on application startup
     Returns True if app should continue, False if should exit
     """
+    # Development mode bypass
+    if is_dev_mode():
+        print("=" * 60)
+        print("🔧 DEVELOPMENT MODE - License checks bypassed")
+        print("=" * 60)
+        return True
+
     valid, message, license_data = license_manager.validate_license()
 
     if valid:

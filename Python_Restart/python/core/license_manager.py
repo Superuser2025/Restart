@@ -22,6 +22,14 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
 
+# Development mode support
+try:
+    from core.dev_config import is_dev_mode
+except ImportError:
+    # Fallback if dev_config doesn't exist (production)
+    def is_dev_mode():
+        return False
+
 
 class LicenseManager:
     """
@@ -268,6 +276,17 @@ class LicenseManager:
         Returns:
             (valid: bool, message: str, license_info: Dict or None)
         """
+        # DEVELOPMENT MODE: Bypass license check
+        if is_dev_mode():
+            dev_license = {
+                'tier': 'enterprise',
+                'customer': 'Developer',
+                'features': ['all'],
+                'max_pairs': 999,
+                'ai_analysis': True
+            }
+            return True, "🔧 Development mode - license checks bypassed", dev_license
+
         license_data = self._load_encrypted_license()
 
         if not license_data:
