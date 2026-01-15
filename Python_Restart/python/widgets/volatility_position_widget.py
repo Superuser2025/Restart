@@ -513,7 +513,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
     def on_settings_changed(self):
         """Handle account settings change"""
         # Recalculate if we have data
-        if self.current_symbol and self.current_data:
+        if self.current_symbol and self.current_data is not None and not self.current_data.empty:
             self.update_market_conditions()
 
     def on_trade_params_changed(self):
@@ -583,7 +583,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             self.update_from_live_data()
 
         # Update AI if enabled
-        if self.ai_enabled and self.current_data is not None:
+        if self.ai_enabled and self.current_data is not None and not self.current_data.empty:
             vprint(f"[VolatilityPosition] AI enabled - updating suggestions")
             self.update_ai_suggestions()
 
@@ -606,19 +606,19 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         """
         from core.ml_integration import create_ai_suggestion
 
-        if not self.current_data:
+        if not widget_data:
             return create_ai_suggestion(
                 widget_type="volatility_position",
                 text="Calculate position size to get AI analysis",
                 confidence=0.0
             )
 
-        volatility_regime = self.current_data.get('volatility_regime', 'UNKNOWN')
-        trend_strength = self.current_data.get('trend_strength', 'UNKNOWN')
-        adjusted_risk = self.current_data.get('adjusted_risk_percent', 0)
-        position_size = self.current_data.get('position_size', 0)
-        volatility_mult = self.current_data.get('volatility_multiplier', 1.0)
-        trend_mult = self.current_data.get('trend_multiplier', 1.0)
+        volatility_regime = widget_data.get('volatility_regime', 'UNKNOWN')
+        trend_strength = widget_data.get('trend_strength', 'UNKNOWN')
+        adjusted_risk = widget_data.get('adjusted_risk_percent', 0)
+        position_size = widget_data.get('position_size', 0)
+        volatility_mult = widget_data.get('volatility_multiplier', 1.0)
+        trend_mult = widget_data.get('trend_multiplier', 1.0)
 
         # EXTREME VOLATILITY WARNING
         if volatility_regime == 'EXTREME':
