@@ -299,10 +299,10 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
                 image: none;
                 width: 0px;
                 height: 0px;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-bottom: 7px solid #ffffff;
-                margin: 2px;
+                border-left: 8px solid transparent;
+                border-right: 8px solid transparent;
+                border-bottom: 10px solid #ffffff;
+                margin-top: 3px;
             }
             QDoubleSpinBox::down-button, QSpinBox::down-button {
                 subcontrol-origin: border;
@@ -324,10 +324,10 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
                 image: none;
                 width: 0px;
                 height: 0px;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 7px solid #ffffff;
-                margin: 2px;
+                border-left: 8px solid transparent;
+                border-right: 8px solid transparent;
+                border-top: 10px solid #ffffff;
+                margin-bottom: 3px;
             }
             QPushButton {
                 background-color: #0d7377;
