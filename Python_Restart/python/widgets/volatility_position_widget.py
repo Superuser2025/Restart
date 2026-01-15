@@ -282,52 +282,50 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             QDoubleSpinBox::up-button, QSpinBox::up-button {
                 subcontrol-origin: border;
                 subcontrol-position: top right;
-                width: 25px;
-                height: 16px;
-                border-left: 1px solid #555;
-                border-bottom: 1px solid #555;
+                width: 30px;
+                height: 18px;
+                border-left: 2px solid #555;
+                border-bottom: 2px solid #555;
                 background-color: #3a3a3a;
                 border-top-right-radius: 3px;
             }
             QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover {
-                background-color: #0d7377;
+                background-color: #00aa00;
             }
             QDoubleSpinBox::up-button:pressed, QSpinBox::up-button:pressed {
-                background-color: #0a5a5d;
+                background-color: #008800;
             }
             QDoubleSpinBox::up-arrow, QSpinBox::up-arrow {
                 image: none;
-                width: 0px;
-                height: 0px;
-                border-left: 8px solid transparent;
-                border-right: 8px solid transparent;
-                border-bottom: 10px solid #ffffff;
-                margin-top: 3px;
+                width: 0;
+                height: 0;
+                border-style: solid;
+                border-width: 0 10px 12px 10px;
+                border-color: transparent transparent #ffffff transparent;
             }
             QDoubleSpinBox::down-button, QSpinBox::down-button {
                 subcontrol-origin: border;
                 subcontrol-position: bottom right;
-                width: 25px;
-                height: 16px;
-                border-left: 1px solid #555;
-                border-top: 1px solid #555;
+                width: 30px;
+                height: 18px;
+                border-left: 2px solid #555;
+                border-top: 2px solid #555;
                 background-color: #3a3a3a;
                 border-bottom-right-radius: 3px;
             }
             QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {
-                background-color: #0d7377;
+                background-color: #cc0000;
             }
             QDoubleSpinBox::down-button:pressed, QSpinBox::down-button:pressed {
-                background-color: #0a5a5d;
+                background-color: #aa0000;
             }
             QDoubleSpinBox::down-arrow, QSpinBox::down-arrow {
                 image: none;
-                width: 0px;
-                height: 0px;
-                border-left: 8px solid transparent;
-                border-right: 8px solid transparent;
-                border-top: 10px solid #ffffff;
-                margin-bottom: 3px;
+                width: 0;
+                height: 0;
+                border-style: solid;
+                border-width: 12px 10px 0 10px;
+                border-color: #ffffff transparent transparent transparent;
             }
             QPushButton {
                 background-color: #0d7377;
