@@ -1,0 +1,15 @@
+# License System Dependencies
+# Install with: pip install -r requirements_licensing.txt
+
+# Core license management
+cryptography>=41.0.0      # Encryption for license files
+
+# Optional - for obfuscation/protection
+pyarmor>=8.0.0           # Code obfuscation (commercial license required for selling)
+nuitka>=1.9.0            # Python to C compiler (free alternative)
+
+# Optional - for building executables
+pyinstaller>=6.0.0       # Package application as standalone executable
+
+# Optional - for online license validation (not implemented yet)
+requests>=2.31.0         # HTTP requests for server-based validation
