@@ -5,7 +5,7 @@ PyQt6 widget for displaying volatility-adjusted position sizing
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QGroupBox, QLineEdit, QPushButton, QSpinBox,
-                            QDoubleSpinBox, QFrame, QGridLayout, QCheckBox)
+                            QDoubleSpinBox, QFrame, QGridLayout, QCheckBox, QDialog, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from typing import Dict, Optional
@@ -168,6 +168,15 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         # Calculate button
         self.calculate_btn = QPushButton("📊 Calculate Position Size")
         self.calculate_btn.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        self.calculate_btn.setToolTip(
+            "Calculate lot size based on:\n"
+            "• Entry price and Stop Loss distance\n"
+            "• Current volatility regime (adjusts risk)\n"
+            "• Trend strength (adjusts risk)\n"
+            "• Account balance and base risk %\n\n"
+            "Updates the 'Position Size Results' section below.\n"
+            "Does NOT place any trades - calculation only!"
+        )
         self.calculate_btn.clicked.connect(self.calculate_position)
         trade_layout.addWidget(self.calculate_btn, 3, 0, 1, 2)
 
@@ -582,13 +591,168 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         pass
 
     def set_direction(self, direction: str):
-        """Set trade direction"""
+        """Set trade direction and show mini chart"""
         if direction == 'BUY':
             self.buy_btn.setChecked(True)
             self.sell_btn.setChecked(False)
         else:
             self.buy_btn.setChecked(False)
             self.sell_btn.setChecked(True)
+
+        # Show mini chart popup with entry/SL visualization
+        self.show_trade_visualization(direction)
+
+    def show_trade_visualization(self, direction: str):
+        """
+        Show mini chart popup with entry and stop loss levels visualized
+        Similar to opportunity card mini charts
+        """
+        # Check if we have data
+        if self.current_data is None or self.current_data.empty:
+            vprint("[VolatilityPosition] No data available for chart visualization")
+            return
+
+        # Get entry and stop loss values
+        entry = self.entry_input.value()
+        sl = self.sl_input.value()
+
+        # Validate
+        if entry == 0 or sl == 0:
+            vprint("[VolatilityPosition] Entry or SL is zero, skipping visualization")
+            return
+
+        # Create popup dialog
+        popup = QDialog(self)
+        popup.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        popup.setFixedSize(800, 550)
+
+        # Position popup near the button
+        button = self.buy_btn if direction == 'BUY' else self.sell_btn
+        button_pos = button.mapToGlobal(button.rect().topRight())
+        popup.move(button_pos.x() + 10, button_pos.y() - 250)
+
+        # Create layout
+        layout = QVBoxLayout(popup)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Title
+        title_label = QLabel(f"📊 {direction} Trade Setup - {self.current_symbol}")
+        title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        title_label.setStyleSheet("color: #00aaff; background-color: #1e1e1e; padding: 5px;")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_label)
+
+        # Create matplotlib figure
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+        from matplotlib.figure import Figure
+        import matplotlib.dates as mdates
+        from datetime import datetime
+
+        fig = Figure(figsize=(7.5, 4.5), dpi=100, facecolor='#1E293B')
+        canvas = FigureCanvasQTAgg(fig)
+        canvas.setStyleSheet("background-color: #1E293B;")
+
+        ax = fig.add_subplot(111)
+        ax.set_facecolor('#0F172A')
+
+        # Get last 50 candles
+        df = self.current_data.tail(50).copy()
+
+        # Plot candlesticks
+        times = []
+        for idx, row in df.iterrows():
+            if 'time' in row:
+                try:
+                    if isinstance(row['time'], str):
+                        times.append(datetime.fromisoformat(row['time'].replace('Z', '+00:00')))
+                    else:
+                        times.append(row['time'])
+                except:
+                    times.append(idx)
+            else:
+                times.append(idx)
+
+        # Draw candlesticks
+        for i, (time, row) in enumerate(zip(times, df.itertuples())):
+            open_price = row.open
+            high_price = row.high
+            low_price = row.low
+            close_price = row.close
+
+            color = '#00ff00' if close_price >= open_price else '#ff0000'
+            alpha = 0.8
+
+            # High-low line
+            ax.plot([time, time], [low_price, high_price], color=color, linewidth=1, alpha=alpha)
+
+            # Body rectangle
+            body_height = abs(close_price - open_price)
+            body_bottom = min(open_price, close_price)
+
+            if body_height > 0:
+                from matplotlib.patches import Rectangle
+                rect = Rectangle((mdates.date2num(time) - 0.2, body_bottom),
+                               0.4, body_height,
+                               facecolor=color, edgecolor=color, alpha=alpha, linewidth=0)
+                ax.add_patch(rect)
+            else:
+                # Doji - draw horizontal line
+                ax.plot([mdates.date2num(time) - 0.2, mdates.date2num(time) + 0.2],
+                       [open_price, open_price], color=color, linewidth=1.5, alpha=alpha)
+
+        # Draw entry line (BLUE)
+        ax.axhline(y=entry, color='#3B82F6', linestyle='--', linewidth=2,
+                  label=f'Entry: {entry:.5f}', zorder=10)
+
+        # Draw stop loss line (RED)
+        ax.axhline(y=sl, color='#EF4444', linestyle='--', linewidth=2,
+                  label=f'Stop Loss: {sl:.5f}', zorder=10)
+
+        # Calculate and show pip distance
+        pip_distance = abs(entry - sl)
+        if self.current_symbol.endswith('JPY'):
+            pips = pip_distance * 100
+        else:
+            pips = pip_distance * 10000
+
+        # Add direction indicator
+        direction_color = '#00ff00' if direction == 'BUY' else '#ff0000'
+        direction_text = f"{direction} @ {entry:.5f}\nSL: {sl:.5f} ({pips:.1f} pips)"
+        ax.text(0.02, 0.98, direction_text, transform=ax.transAxes,
+               fontsize=10, verticalalignment='top',
+               bbox=dict(boxstyle='round', facecolor=direction_color, alpha=0.3),
+               color='white', weight='bold')
+
+        # Styling
+        ax.set_xlabel('Time', color='white', fontsize=9)
+        ax.set_ylabel('Price', color='white', fontsize=9)
+        ax.tick_params(colors='white', labelsize=8)
+        ax.legend(loc='upper right', fontsize=8, facecolor='#1E293B', edgecolor='white', labelcolor='white')
+        ax.grid(True, alpha=0.2, color='white', linestyle=':')
+        ax.spines['bottom'].set_color('white')
+        ax.spines['top'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['right'].set_color('white')
+
+        # Format x-axis
+        if len(times) > 0 and isinstance(times[0], datetime):
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+            fig.autofmt_xdate(rotation=45)
+
+        fig.tight_layout()
+
+        layout.addWidget(canvas)
+
+        # Info label
+        info_label = QLabel(f"Click anywhere to close")
+        info_label.setStyleSheet("color: #888888; font-size: 9pt; background-color: #1e1e1e; padding: 3px;")
+        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(info_label)
+
+        # Show popup
+        popup.show()
+        vprint(f"[VolatilityPosition] Mini chart popup shown for {direction} trade")
 
     def _get_volatility_color(self, regime: str) -> str:
         """Get color for volatility regime"""
