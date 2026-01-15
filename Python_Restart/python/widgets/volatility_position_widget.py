@@ -599,6 +599,30 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             self.buy_btn.setChecked(False)
             self.sell_btn.setChecked(True)
 
+        # Update entry and SL for the new direction with current market price
+        from core.data_manager import data_manager
+        candles = data_manager.get_candles(count=5)
+
+        if candles and len(candles) > 0:
+            current_price = candles[-1]['close']
+
+            # Update entry to current price
+            self.entry_input.setValue(current_price)
+
+            # Calculate SL distance (50 pips)
+            if self.current_symbol.endswith('JPY'):
+                sl_distance = 0.50  # 50 pips for JPY pairs
+            else:
+                sl_distance = 0.0050  # 50 pips for other pairs
+
+            # Set SL based on direction
+            if direction == 'BUY':
+                self.sl_input.setValue(current_price - sl_distance)
+            else:  # SELL
+                self.sl_input.setValue(current_price + sl_distance)
+
+            vprint(f"[VolatilityPosition] Updated {direction} setup - Entry: {current_price:.5f}, SL: {self.sl_input.value():.5f}")
+
         # Show mini chart popup with entry/SL visualization
         self.show_trade_visualization(direction)
 
