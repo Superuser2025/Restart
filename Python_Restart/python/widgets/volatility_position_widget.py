@@ -72,17 +72,22 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.balance_input = QDoubleSpinBox()
         self.balance_input.setRange(100, 1000000)
         self.balance_input.setValue(10000)
+        self.balance_input.setSingleStep(100)  # Step by $100
         self.balance_input.setPrefix("$ ")
+        self.balance_input.setMinimumHeight(35)  # Taller for bigger buttons
+        self.balance_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.balance_input.valueChanged.connect(self.on_settings_changed)
         account_layout.addWidget(self.balance_input, 0, 1)
 
         account_layout.addWidget(QLabel("Base Risk %:"), 1, 0)
         self.risk_input = QDoubleSpinBox()
-        self.risk_input.setRange(0.1, 2.0)
+        self.risk_input.setRange(0.1, 5.0)  # Increased max to 5%
         self.risk_input.setValue(0.5)
         self.risk_input.setSingleStep(0.1)
         self.risk_input.setDecimals(1)
         self.risk_input.setSuffix(" %")
+        self.risk_input.setMinimumHeight(35)  # Taller for bigger buttons
+        self.risk_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.risk_input.valueChanged.connect(self.on_settings_changed)
         account_layout.addWidget(self.risk_input, 1, 1)
 
@@ -129,6 +134,9 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.entry_input.setRange(0.0001, 100000)
         self.entry_input.setDecimals(5)
         self.entry_input.setValue(1.10000)
+        self.entry_input.setSingleStep(0.0001)  # Step by 1 pip
+        self.entry_input.setMinimumHeight(35)  # Taller for bigger buttons
+        self.entry_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.entry_input.valueChanged.connect(self.on_trade_params_changed)
         trade_layout.addWidget(self.entry_input, 0, 1)
 
@@ -137,6 +145,9 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.sl_input.setRange(0.0001, 100000)
         self.sl_input.setDecimals(5)
         self.sl_input.setValue(1.09500)
+        self.sl_input.setSingleStep(0.0001)  # Step by 1 pip
+        self.sl_input.setMinimumHeight(35)  # Taller for bigger buttons
+        self.sl_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.sl_input.valueChanged.connect(self.on_trade_params_changed)
         trade_layout.addWidget(self.sl_input, 1, 1)
 
@@ -266,6 +277,57 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
                 border-radius: 3px;
                 padding: 5px;
                 color: #ffffff;
+                min-height: 30px;
+            }
+            QDoubleSpinBox::up-button, QSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 25px;
+                height: 16px;
+                border-left: 1px solid #555;
+                border-bottom: 1px solid #555;
+                background-color: #3a3a3a;
+                border-top-right-radius: 3px;
+            }
+            QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover {
+                background-color: #0d7377;
+            }
+            QDoubleSpinBox::up-button:pressed, QSpinBox::up-button:pressed {
+                background-color: #0a5a5d;
+            }
+            QDoubleSpinBox::up-arrow, QSpinBox::up-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-bottom: 7px solid #ffffff;
+                margin: 2px;
+            }
+            QDoubleSpinBox::down-button, QSpinBox::down-button {
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: 25px;
+                height: 16px;
+                border-left: 1px solid #555;
+                border-top: 1px solid #555;
+                background-color: #3a3a3a;
+                border-bottom-right-radius: 3px;
+            }
+            QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {
+                background-color: #0d7377;
+            }
+            QDoubleSpinBox::down-button:pressed, QSpinBox::down-button:pressed {
+                background-color: #0a5a5d;
+            }
+            QDoubleSpinBox::down-arrow, QSpinBox::down-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 7px solid #ffffff;
+                margin: 2px;
             }
             QPushButton {
                 background-color: #0d7377;
