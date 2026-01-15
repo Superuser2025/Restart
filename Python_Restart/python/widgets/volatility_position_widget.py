@@ -627,10 +627,10 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         popup.setFixedSize(800, 550)
 
-        # Position popup near the button
+        # Position popup to the LEFT of the button
         button = self.buy_btn if direction == 'BUY' else self.sell_btn
-        button_pos = button.mapToGlobal(button.rect().topRight())
-        popup.move(button_pos.x() + 10, button_pos.y() - 250)
+        button_pos = button.mapToGlobal(button.rect().topLeft())
+        popup.move(button_pos.x() - 810, button_pos.y() - 250)
 
         # Create layout
         layout = QVBoxLayout(popup)
