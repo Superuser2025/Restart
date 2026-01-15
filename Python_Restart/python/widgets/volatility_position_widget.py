@@ -607,11 +607,6 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         Show mini chart popup with entry and stop loss levels visualized
         Similar to opportunity card mini charts
         """
-        # Check if we have data
-        if self.current_data is None or self.current_data.empty:
-            vprint("[VolatilityPosition] No data available for chart visualization")
-            return
-
         # Get entry and stop loss values
         entry = self.entry_input.value()
         sl = self.sl_input.value()
@@ -646,8 +641,8 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         # Create matplotlib figure
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
         from matplotlib.figure import Figure
-        import matplotlib.dates as mdates
-        from datetime import datetime
+        from matplotlib.patches import Rectangle
+        from core.data_manager import data_manager
 
         fig = Figure(figsize=(7.5, 4.5), dpi=100, facecolor='#1E293B')
         canvas = FigureCanvasQTAgg(fig)
@@ -656,89 +651,64 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         ax = fig.add_subplot(111)
         ax.set_facecolor('#0F172A')
 
-        # Get last 50 candles
-        df = self.current_data.tail(50).copy()
+        # Get candle data from data_manager (just like opportunity scanner)
+        candles = data_manager.get_candles(count=50)
 
-        # Plot candlesticks
-        times = []
-        for idx, row in df.iterrows():
-            if 'time' in row:
-                try:
-                    if isinstance(row['time'], str):
-                        times.append(datetime.fromisoformat(row['time'].replace('Z', '+00:00')))
-                    else:
-                        times.append(row['time'])
-                except:
-                    times.append(idx)
-            else:
-                times.append(idx)
+        if candles and len(candles) > 0:
+            # Plot last 30 candlesticks using simple index positions
+            last_30_candles = candles[-30:]
+            for i, candle in enumerate(last_30_candles):
+                o, h, l, c = candle['open'], candle['high'], candle['low'], candle['close']
+                color = '#10B981' if c >= o else '#EF4444'
 
-        # Draw candlesticks
-        for i, (time, row) in enumerate(zip(times, df.itertuples())):
-            open_price = row.open
-            high_price = row.high
-            low_price = row.low
-            close_price = row.close
+                # Draw wick
+                ax.plot([i, i], [l, h], color=color, linewidth=0.8)
 
-            color = '#00ff00' if close_price >= open_price else '#ff0000'
-            alpha = 0.8
-
-            # High-low line
-            ax.plot([time, time], [low_price, high_price], color=color, linewidth=1, alpha=alpha)
-
-            # Body rectangle
-            body_height = abs(close_price - open_price)
-            body_bottom = min(open_price, close_price)
-
-            if body_height > 0:
-                from matplotlib.patches import Rectangle
-                rect = Rectangle((mdates.date2num(time) - 0.2, body_bottom),
-                               0.4, body_height,
-                               facecolor=color, edgecolor=color, alpha=alpha, linewidth=0)
+                # Draw body
+                body_height = abs(c - o)
+                body_bottom = min(o, c)
+                rect = Rectangle((i - 0.3, body_bottom), 0.6, body_height,
+                               facecolor=color, edgecolor=color, linewidth=0)
                 ax.add_patch(rect)
+
+            # Draw entry line (BLUE)
+            ax.axhline(y=entry, color='#3B82F6', linestyle='--', linewidth=2,
+                      label=f'Entry: {entry:.5f}', zorder=10)
+
+            # Draw stop loss line (RED)
+            ax.axhline(y=sl, color='#EF4444', linestyle='--', linewidth=2,
+                      label=f'Stop Loss: {sl:.5f}', zorder=10)
+
+            # Calculate and show pip distance
+            pip_distance = abs(entry - sl)
+            if self.current_symbol.endswith('JPY'):
+                pips = pip_distance * 100
             else:
-                # Doji - draw horizontal line
-                ax.plot([mdates.date2num(time) - 0.2, mdates.date2num(time) + 0.2],
-                       [open_price, open_price], color=color, linewidth=1.5, alpha=alpha)
+                pips = pip_distance * 10000
 
-        # Draw entry line (BLUE)
-        ax.axhline(y=entry, color='#3B82F6', linestyle='--', linewidth=2,
-                  label=f'Entry: {entry:.5f}', zorder=10)
+            # Add direction indicator
+            direction_color = '#10B981' if direction == 'BUY' else '#EF4444'
+            direction_text = f"{direction} @ {entry:.5f}\nSL: {sl:.5f}\n({pips:.1f} pips)"
+            ax.text(0.02, 0.98, direction_text, transform=ax.transAxes,
+                   fontsize=10, verticalalignment='top',
+                   bbox=dict(boxstyle='round', facecolor=direction_color, alpha=0.3),
+                   color='white', weight='bold')
 
-        # Draw stop loss line (RED)
-        ax.axhline(y=sl, color='#EF4444', linestyle='--', linewidth=2,
-                  label=f'Stop Loss: {sl:.5f}', zorder=10)
-
-        # Calculate and show pip distance
-        pip_distance = abs(entry - sl)
-        if self.current_symbol.endswith('JPY'):
-            pips = pip_distance * 100
+            ax.legend(loc='upper right', fontsize=8, facecolor='#1E293B', edgecolor='#334155', labelcolor='#F8FAFC')
         else:
-            pips = pip_distance * 10000
-
-        # Add direction indicator
-        direction_color = '#00ff00' if direction == 'BUY' else '#ff0000'
-        direction_text = f"{direction} @ {entry:.5f}\nSL: {sl:.5f} ({pips:.1f} pips)"
-        ax.text(0.02, 0.98, direction_text, transform=ax.transAxes,
-               fontsize=10, verticalalignment='top',
-               bbox=dict(boxstyle='round', facecolor=direction_color, alpha=0.3),
-               color='white', weight='bold')
+            # No data available
+            ax.text(0.5, 0.5, 'No chart data available', ha='center', va='center',
+                   transform=ax.transAxes, color='#94A3B8', fontsize=12)
 
         # Styling
-        ax.set_xlabel('Time', color='white', fontsize=9)
-        ax.set_ylabel('Price', color='white', fontsize=9)
-        ax.tick_params(colors='white', labelsize=8)
-        ax.legend(loc='upper right', fontsize=8, facecolor='#1E293B', edgecolor='white', labelcolor='white')
-        ax.grid(True, alpha=0.2, color='white', linestyle=':')
-        ax.spines['bottom'].set_color('white')
-        ax.spines['top'].set_color('white')
-        ax.spines['left'].set_color('white')
-        ax.spines['right'].set_color('white')
-
-        # Format x-axis
-        if len(times) > 0 and isinstance(times[0], datetime):
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
-            fig.autofmt_xdate(rotation=45)
+        ax.set_xlabel('Candles', color='#94A3B8', fontsize=9)
+        ax.set_ylabel('Price', color='#94A3B8', fontsize=9)
+        ax.tick_params(colors='#94A3B8', labelsize=8)
+        ax.grid(True, alpha=0.2, color='#334155')
+        ax.spines['bottom'].set_color('#94A3B8')
+        ax.spines['top'].set_color('#94A3B8')
+        ax.spines['left'].set_color('#94A3B8')
+        ax.spines['right'].set_color('#94A3B8')
 
         fig.tight_layout()
 
