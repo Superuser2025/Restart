@@ -56,13 +56,30 @@ class WyckoffChartWidget(QWidget):
         # Timeframe selector
         tf_label = QLabel("Timeframe:")
         controls_layout.addWidget(tf_label)
-        
+
         self.tf_combo = QComboBox()
         self.tf_combo.addItems(["M15", "H1", "H4", "D1"])
         self.tf_combo.setCurrentText("H4")
         self.tf_combo.currentTextChanged.connect(self.on_timeframe_changed)
         controls_layout.addWidget(self.tf_combo)
-        
+
+        # Chart type selector
+        chart_type_label = QLabel("  Chart Type:")
+        controls_layout.addWidget(chart_type_label)
+
+        self.chart_type_combo = QComboBox()
+        self.chart_type_combo.addItems([
+            "Candlesticks",
+            "OHLC Bars",
+            "Line Chart",
+            "Heikin Ashi",
+            "Area Chart"
+        ])
+        self.chart_type_combo.setCurrentText("Candlesticks")
+        self.chart_type_combo.currentTextChanged.connect(self.on_chart_type_changed)
+        self.chart_type_combo.setToolTip("Choose visualization style")
+        controls_layout.addWidget(self.chart_type_combo)
+
         # Refresh button
         self.refresh_btn = QPushButton("🔄 Refresh Chart")
         self.refresh_btn.clicked.connect(self.refresh_chart)
@@ -160,7 +177,13 @@ class WyckoffChartWidget(QWidget):
         self.current_timeframe = timeframe
         if self.wyckoff_data and self.current_symbol:
             self.plot_wyckoff_chart(self.current_symbol, self.wyckoff_data)
-            
+
+    def on_chart_type_changed(self, chart_type):
+        """Handle chart type change"""
+        vprint(f"[Wyckoff Chart] Chart type changed to: {chart_type}")
+        if self.wyckoff_data and self.current_symbol:
+            self.plot_wyckoff_chart(self.current_symbol, self.wyckoff_data)
+
     def refresh_chart(self):
         """Refresh the chart"""
         if self.wyckoff_data and self.current_symbol:
@@ -244,10 +267,20 @@ class WyckoffChartWidget(QWidget):
         
         # Convert timestamps to datetime
         times = [datetime.fromtimestamp(r['time']) for r in rates]
-        
-        # Plot candlesticks
-        self._plot_candlesticks(ax_price, times, rates)
-        
+
+        # Plot price chart based on selected type
+        chart_type = self.chart_type_combo.currentText()
+        if chart_type == "Candlesticks":
+            self._plot_candlesticks(ax_price, times, rates)
+        elif chart_type == "OHLC Bars":
+            self._plot_ohlc_bars(ax_price, times, rates)
+        elif chart_type == "Line Chart":
+            self._plot_line_chart(ax_price, times, rates)
+        elif chart_type == "Heikin Ashi":
+            self._plot_heikin_ashi(ax_price, times, rates)
+        elif chart_type == "Area Chart":
+            self._plot_area_chart(ax_price, times, rates)
+
         # Plot volume
         self._plot_volume(ax_volume, times, rates)
         
@@ -287,7 +320,78 @@ class WyckoffChartWidget(QWidget):
             rect = Rectangle((mdates.date2num(t) - width/2, bottom), width, height,
                            facecolor=color, edgecolor=color, alpha=0.8, zorder=2)
             ax.add_patch(rect)
-            
+
+    def _plot_ohlc_bars(self, ax, times, rates):
+        """Plot OHLC bar chart"""
+        opens = rates['open']
+        highs = rates['high']
+        lows = rates['low']
+        closes = rates['close']
+
+        colors = ['#00ff00' if c >= o else '#ff0000' for c, o in zip(closes, opens)]
+
+        width = 0.3
+        for t, o, h, l, c, color in zip(times, opens, highs, lows, closes, colors):
+            # Vertical line (high-low)
+            ax.plot([t, t], [l, h], color=color, linewidth=2, zorder=2)
+            # Open tick (left)
+            ax.plot([mdates.date2num(t) - width, t], [o, o], color=color, linewidth=2, zorder=2)
+            # Close tick (right)
+            ax.plot([t, mdates.date2num(t) + width], [c, c], color=color, linewidth=2, zorder=2)
+
+    def _plot_line_chart(self, ax, times, rates):
+        """Plot simple line chart (close prices only)"""
+        closes = rates['close']
+        ax.plot(times, closes, color='#00aaff', linewidth=2, zorder=2)
+        ax.fill_between(times, closes, alpha=0.1, color='#00aaff', zorder=1)
+
+    def _plot_heikin_ashi(self, ax, times, rates):
+        """Plot Heikin Ashi smoothed candles"""
+        opens = rates['open']
+        highs = rates['high']
+        lows = rates['low']
+        closes = rates['close']
+
+        # Calculate Heikin Ashi values
+        ha_close = (opens + highs + lows + closes) / 4
+        ha_open = np.zeros(len(opens))
+        ha_open[0] = (opens[0] + closes[0]) / 2
+
+        for i in range(1, len(opens)):
+            ha_open[i] = (ha_open[i-1] + ha_close[i-1]) / 2
+
+        ha_high = np.maximum(highs, np.maximum(ha_open, ha_close))
+        ha_low = np.minimum(lows, np.minimum(ha_open, ha_close))
+
+        # Calculate colors
+        colors = ['#00ff00' if ha_close[i] >= ha_open[i] else '#ff0000'
+                 for i in range(len(ha_close))]
+
+        # Plot Heikin Ashi candles
+        width = 0.6
+        for i, (t, o, h, l, c, color) in enumerate(zip(times, ha_open, ha_high, ha_low, ha_close, colors)):
+            # Wick
+            ax.plot([t, t], [l, h], color='#666', linewidth=1, zorder=1)
+            # Body
+            height = abs(c - o)
+            bottom = min(o, c)
+            rect = Rectangle((mdates.date2num(t) - width/2, bottom), width, height,
+                           facecolor=color, edgecolor=color, alpha=0.8, zorder=2)
+            ax.add_patch(rect)
+
+    def _plot_area_chart(self, ax, times, rates):
+        """Plot area chart (filled close prices)"""
+        closes = rates['close']
+
+        # Determine overall trend for color
+        if closes[-1] >= closes[0]:
+            color = '#00ff00'  # Green for uptrend
+        else:
+            color = '#ff0000'  # Red for downtrend
+
+        ax.plot(times, closes, color=color, linewidth=2, zorder=2)
+        ax.fill_between(times, closes, alpha=0.3, color=color, zorder=1)
+
     def _plot_volume(self, ax, times, rates):
         """Plot volume bars"""
         volumes = rates['tick_volume']
