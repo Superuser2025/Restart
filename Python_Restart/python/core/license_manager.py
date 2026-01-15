@@ -18,9 +18,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 import base64
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
 
 # Development mode support
 try:
@@ -29,6 +26,18 @@ except ImportError:
     # Fallback if dev_config doesn't exist (production)
     def is_dev_mode():
         return False
+
+# Cryptography imports (only if not in dev mode or when needed)
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import Pbkdf2HmacKeyDerivationFunction
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+    # Dummy classes for dev mode
+    class Fernet:
+        pass
 
 
 class LicenseManager:
@@ -118,7 +127,13 @@ class LicenseManager:
 
     def _derive_encryption_key(self, machine_id: str) -> bytes:
         """Generate encryption key from master secret and machine ID"""
-        kdf = PBKDF2(
+        if not CRYPTO_AVAILABLE:
+            # Simple fallback for dev mode
+            return base64.urlsafe_b64encode(hashlib.sha256(
+                (self._MASTER_SECRET + machine_id).encode()
+            ).digest())
+
+        kdf = Pbkdf2HmacKeyDerivationFunction(
             algorithm=hashes.SHA256(),
             length=32,
             salt=machine_id.encode()[:16],
