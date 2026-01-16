@@ -725,12 +725,20 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             self.buy_btn.setChecked(False)
             self.sell_btn.setChecked(True)
 
-        # Update entry and SL for the new direction with current market price
-        from core.data_manager import data_manager
-        candles = data_manager.get_candles(count=5)
+        # Update entry and SL for the new direction with current market price from MT5
+        current_price = None
+        try:
+            import MetaTrader5 as mt5
+            if mt5.initialize():
+                rates = mt5.copy_rates_from_pos(self.current_symbol, mt5.TIMEFRAME_H1, 0, 1)
+                mt5.shutdown()
 
-        if candles and len(candles) > 0:
-            current_price = candles[-1]['close']
+                if rates is not None and len(rates) > 0:
+                    current_price = rates[-1]['close']
+        except Exception as e:
+            vprint(f"[VolatilityPosition] ⚠️ Error getting current price: {e}")
+
+        if current_price is not None:
 
             # Update entry to current price
             self.entry_input.setValue(current_price)
@@ -806,8 +814,22 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         ax = fig.add_subplot(111)
         ax.set_facecolor('#0F172A')
 
-        # Get candle data from data_manager (just like opportunity scanner)
-        candles = data_manager.get_candles(count=50)
+        # Get candle data for CURRENT SYMBOL from MT5 directly
+        candles = []
+        try:
+            import MetaTrader5 as mt5
+            if mt5.initialize():
+                rates = mt5.copy_rates_from_pos(self.current_symbol, mt5.TIMEFRAME_H1, 0, 50)
+                mt5.shutdown()
+
+                if rates is not None and len(rates) > 0:
+                    # Convert to candle format
+                    candles = [{'open': r['open'], 'high': r['high'],
+                               'low': r['low'], 'close': r['close']}
+                              for r in rates]
+                    vprint(f"[VolatilityPosition] Loaded {len(candles)} candles for {self.current_symbol} mini chart")
+        except Exception as e:
+            vprint(f"[VolatilityPosition] ⚠️ Error loading chart data: {e}")
 
         if candles and len(candles) > 0:
             # Plot last 30 candlesticks using simple index positions
