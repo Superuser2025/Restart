@@ -385,7 +385,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             class_symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
             if class_symbols:
                 # Add separator with asset class name
-                self.symbol_selector.addItem(f"--- {asset_class.UPPER()} ---")
+                self.symbol_selector.addItem(f"--- {asset_class.upper()} ---")
                 # Make separator non-selectable
                 model = self.symbol_selector.model()
                 item = model.item(self.symbol_selector.count() - 1)
