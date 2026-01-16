@@ -30,16 +30,25 @@ class MultiSymbolManager(QObject):
     def __init__(self):
         super().__init__()
 
-        # Default major pairs
-        self._symbols = [
-            "EURUSD",
-            "GBPUSD",
-            "USDJPY",
-            "AUDUSD",
-            "USDCAD",
-        ]
+        # Load symbols from SymbolManager (MT5 Market Watch)
+        try:
+            from core.symbol_manager import symbol_specs_manager
+            available_symbols = symbol_specs_manager.get_all_symbols()
 
-        self._active_symbol = "EURUSD"
+            if available_symbols:
+                # Use symbols from MT5 (up to 100)
+                self._symbols = available_symbols
+                print(f"[MultiSymbolManager] Loaded {len(self._symbols)} symbols from MT5")
+            else:
+                # Fallback to default major pairs
+                self._symbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"]
+                print("[MultiSymbolManager] No MT5 symbols, using default pairs")
+        except:
+            # Fallback if symbol_manager not available
+            self._symbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"]
+            print("[MultiSymbolManager] Using default pairs (symbol_manager unavailable)")
+
+        self._active_symbol = self._symbols[0] if self._symbols else "EURUSD"
 
         # Symbol-specific data cache
         self._symbol_data = defaultdict(dict)

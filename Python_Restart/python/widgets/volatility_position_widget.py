@@ -17,7 +17,7 @@ from core.ai_assist_base import AIAssistMixin
 from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 from core.verbose_mode_manager import vprint
-from core.symbol_manager import symbol_manager
+from core.symbol_manager import symbol_specs_manager
 
 
 class VolatilityPositionWidget(AIAssistMixin, QWidget):
@@ -369,8 +369,8 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
     def populate_symbol_selector(self):
         """Populate symbol selector with available symbols from SymbolManager"""
-        # Get all symbols from symbol manager
-        symbols = symbol_manager.get_all_symbols()
+        # Get all symbols from symbol specs manager
+        symbols = symbol_specs_manager.get_all_symbols()
 
         if not symbols:
             # Fallback if no symbols loaded
@@ -378,14 +378,14 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             vprint("[VolatilityPosition] ⚠️ No symbols loaded from SymbolManager, using EURUSD fallback")
 
         # Group symbols by asset class for better organization
-        asset_classes = symbol_manager.get_asset_class_summary()
+        asset_classes = symbol_specs_manager.get_asset_class_summary()
 
         # Add symbols grouped by asset class
         for asset_class in ['forex', 'stock', 'index', 'commodity', 'crypto']:
-            class_symbols = symbol_manager.get_symbols_by_asset_class(asset_class)
+            class_symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
             if class_symbols:
                 # Add separator with asset class name
-                self.symbol_selector.addItem(f"--- {asset_class.upper()} ---")
+                self.symbol_selector.addItem(f"--- {asset_class.UPPER()} ---")
                 # Make separator non-selectable
                 model = self.symbol_selector.model()
                 item = model.item(self.symbol_selector.count() - 1)
@@ -393,7 +393,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
                 # Add symbols
                 for symbol in sorted(class_symbols):
-                    specs = symbol_manager.get_symbol_specs(symbol)
+                    specs = symbol_specs_manager.get_symbol_specs(symbol)
                     if specs:
                         # Show symbol with description
                         display_text = f"{symbol} ({specs.asset_class})"
@@ -421,7 +421,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.current_symbol = symbol
 
         # Get symbol specs and show info
-        specs = symbol_manager.get_symbol_specs(symbol)
+        specs = symbol_specs_manager.get_symbol_specs(symbol)
         if specs:
             vprint(f"[VolatilityPosition]   → Asset class: {specs.asset_class}")
             vprint(f"[VolatilityPosition]   → Default SL: {specs.default_sl_distance}")
@@ -453,7 +453,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             self.entry_input.setValue(current_price)
 
             # Auto-set stop loss at appropriate distance for asset class
-            symbol_specs = symbol_manager.get_symbol_specs(symbol)
+            symbol_specs = symbol_specs_manager.get_symbol_specs(symbol)
             if symbol_specs:
                 sl_distance = symbol_specs.default_sl_distance
             else:
@@ -689,7 +689,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             self.entry_input.setValue(current_price)
 
             # Get SL distance from symbol specs (dynamic for all asset classes)
-            symbol_specs = symbol_manager.get_symbol_specs(self.current_symbol)
+            symbol_specs = symbol_specs_manager.get_symbol_specs(self.current_symbol)
             if symbol_specs:
                 sl_distance = symbol_specs.default_sl_distance
                 asset_class = symbol_specs.asset_class
@@ -787,11 +787,11 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
             # Calculate pip/point distance (dynamic for all asset classes)
             pip_distance = abs(entry - sl)
-            symbol_specs = symbol_manager.get_symbol_specs(self.current_symbol)
+            symbol_specs = symbol_specs_manager.get_symbol_specs(self.current_symbol)
             if symbol_specs:
                 # Use symbol manager to calculate proper value
-                pips = symbol_manager.calculate_pip_value(self.current_symbol, pip_distance)
-                unit = symbol_manager.get_display_unit(self.current_symbol)
+                pips = symbol_specs_manager.calculate_pip_value(self.current_symbol, pip_distance)
+                unit = symbol_specs_manager.get_display_unit(self.current_symbol)
             else:
                 # Fallback for unknown symbols
                 pips = pip_distance * 10000

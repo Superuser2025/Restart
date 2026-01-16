@@ -452,4 +452,4 @@ class SymbolManager:
 
 
 # Global singleton instance
-symbol_manager = SymbolManager()
+symbol_specs_manager = SymbolManager()

@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from core.verbose_mode_manager import vprint
-from core.symbol_manager import symbol_manager
+from core.symbol_manager import symbol_specs_manager
 
 try:
     import MetaTrader5 as mt5
@@ -195,7 +195,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         direction, symbol = parsed
 
         # VALIDATE SYMBOL EXISTS
-        symbol_specs = symbol_manager.get_symbol_specs(symbol)
+        symbol_specs = symbol_specs_manager.get_symbol_specs(symbol)
         if not symbol_specs:
             # Symbol doesn't exist - show helpful error with suggestions
             self.show_invalid_symbol_error(symbol)
@@ -1076,7 +1076,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
     def show_invalid_symbol_error(self, invalid_symbol: str):
         """Show detailed error for invalid symbol with suggestions"""
         # Find similar symbols (fuzzy match)
-        all_symbols = symbol_manager.get_all_symbols()
+        all_symbols = symbol_specs_manager.get_all_symbols()
         suggestions = []
 
         # Check for typos - look for symbols with similar letters
@@ -1089,10 +1089,10 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         # If no close matches, show symbols by asset class
         if not suggestions:
             # Get asset class summary
-            asset_summary = symbol_manager.get_asset_class_summary()
+            asset_summary = symbol_specs_manager.get_asset_class_summary()
             by_class = {}
             for asset_class in ['forex', 'stock', 'index', 'commodity', 'crypto']:
-                symbols = symbol_manager.get_symbols_by_asset_class(asset_class)
+                symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
                 if symbols:
                     by_class[asset_class] = symbols[:10]  # First 10 of each
 
@@ -1118,7 +1118,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;">
 """
             for sym in suggestions[:10]:
-                specs = symbol_manager.get_symbol_specs(sym)
+                specs = symbol_specs_manager.get_symbol_specs(sym)
                 asset_badge = specs.asset_class.upper() if specs else "?"
                 badge_color = {
                     'forex': '#2196F3',
@@ -1145,8 +1145,8 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
         <h3 style="color: #2196F3; margin: 0 0 15px 0; font-size: 18px;">📊 Available Symbols</h3>
 """
 
-        total_symbols = symbol_manager.symbol_count()
-        asset_summary = symbol_manager.get_asset_class_summary()
+        total_symbols = symbol_specs_manager.symbol_count()
+        asset_summary = symbol_specs_manager.get_asset_class_summary()
 
         for asset_class in ['forex', 'stock', 'index', 'commodity', 'crypto']:
             if asset_class in asset_summary:
@@ -1159,7 +1159,7 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
                     'crypto': '#00BCD4'
                 }[asset_class]
 
-                symbols = symbol_manager.get_symbols_by_asset_class(asset_class)
+                symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
                 examples = ', '.join(symbols[:5])
 
                 html += f"""
