@@ -17,6 +17,7 @@ from core.ai_assist_base import AIAssistMixin
 from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 from core.verbose_mode_manager import vprint
+from core.symbol_manager import symbol_manager
 
 
 class VolatilityPositionWidget(AIAssistMixin, QWidget):
@@ -375,11 +376,13 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             current_price = df['close'].iloc[-1]
             self.entry_input.setValue(current_price)
 
-            # Auto-set stop loss at a reasonable distance (50 pips for forex)
-            if symbol.endswith('JPY'):
-                sl_distance = 0.50  # 50 pips for JPY pairs
+            # Auto-set stop loss at appropriate distance for asset class
+            symbol_specs = symbol_manager.get_symbol_specs(symbol)
+            if symbol_specs:
+                sl_distance = symbol_specs.default_sl_distance
             else:
-                sl_distance = 0.0050  # 50 pips for other pairs
+                # Fallback
+                sl_distance = 0.0050
 
             # Set SL based on current direction
             if self.buy_btn.isChecked():
@@ -609,11 +612,16 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             # Update entry to current price
             self.entry_input.setValue(current_price)
 
-            # Calculate SL distance (50 pips)
-            if self.current_symbol.endswith('JPY'):
-                sl_distance = 0.50  # 50 pips for JPY pairs
+            # Get SL distance from symbol specs (dynamic for all asset classes)
+            symbol_specs = symbol_manager.get_symbol_specs(self.current_symbol)
+            if symbol_specs:
+                sl_distance = symbol_specs.default_sl_distance
+                asset_class = symbol_specs.asset_class
+                vprint(f"[VolatilityPosition] Using {asset_class} SL distance: {sl_distance}")
             else:
-                sl_distance = 0.0050  # 50 pips for other pairs
+                # Fallback for unknown symbols
+                sl_distance = 0.0050
+                vprint(f"[VolatilityPosition] ⚠️ Unknown symbol {self.current_symbol}, using default SL")
 
             # Set SL based on direction
             if direction == 'BUY':
@@ -701,12 +709,17 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             # Draw stop loss line (RED)
             ax.axhline(y=sl, color='#EF4444', linestyle='--', linewidth=2, zorder=10)
 
-            # Calculate pip distance
+            # Calculate pip/point distance (dynamic for all asset classes)
             pip_distance = abs(entry - sl)
-            if self.current_symbol.endswith('JPY'):
-                pips = pip_distance * 100
+            symbol_specs = symbol_manager.get_symbol_specs(self.current_symbol)
+            if symbol_specs:
+                # Use symbol manager to calculate proper value
+                pips = symbol_manager.calculate_pip_value(self.current_symbol, pip_distance)
+                unit = symbol_manager.get_display_unit(self.current_symbol)
             else:
+                # Fallback for unknown symbols
                 pips = pip_distance * 10000
+                unit = 'pips'
 
             # Label the entry line directly
             ax.text(29, entry, f'  Entry: {entry:.5f}',
@@ -722,7 +735,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
             # Add direction indicator
             direction_color = '#10B981' if direction == 'BUY' else '#EF4444'
-            direction_text = f"{direction}\n({pips:.1f} pips)"
+            direction_text = f"{direction}\n({pips:.1f} {unit})"
             ax.text(0.02, 0.98, direction_text, transform=ax.transAxes,
                    fontsize=10, verticalalignment='top',
                    bbox=dict(boxstyle='round', facecolor=direction_color, alpha=0.3),
