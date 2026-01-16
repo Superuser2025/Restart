@@ -4,13 +4,16 @@ Scans all pairs for high-probability trading setups in real-time
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                            QFrame, QScrollArea, QGridLayout, QSizePolicy, QDialog, QCheckBox, QGraphicsOpacityEffect)
+                            QFrame, QScrollArea, QGridLayout, QSizePolicy, QDialog, QCheckBox, QGraphicsOpacityEffect,
+                            QPushButton, QGroupBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve, pyqtProperty
 from PyQt6.QtGui import QFont, QMouseEvent
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import random
 import pandas as pd
+import json
+import os
 
 from core.opportunity_generator import opportunity_generator
 from core.market_analyzer import market_analyzer
@@ -18,6 +21,7 @@ from core.ai_assist_base import AIAssistMixin
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 from core.ml_integration import ml_integration, get_ml_prediction  # ML INTEGRATION ADDED
 from core.verbose_mode_manager import vprint
+from core.symbol_manager import symbol_specs_manager
 
 
 class OpportunityCard(QFrame):
@@ -437,6 +441,168 @@ class TimeframeGroup(QWidget):
             self.current_popup.show()
 
 
+class SymbolSelectorDialog(QDialog):
+    """Dialog for selecting which symbols to scan for opportunities"""
+
+    def __init__(self, current_symbols: List[str], parent=None):
+        super().__init__(parent)
+        self.current_symbols = current_symbols
+        self.selected_symbols = current_symbols.copy()
+        self.checkboxes = {}
+        self.init_ui()
+
+    def init_ui(self):
+        """Initialize the symbol selector dialog UI"""
+        self.setWindowTitle("Select Symbols to Scan")
+        self.setMinimumSize(700, 600)
+
+        layout = QVBoxLayout(self)
+
+        # Title
+        title = QLabel("Select which symbols to scan for opportunities")
+        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #00aaff; padding: 10px;")
+        layout.addWidget(title)
+
+        # Scroll area for checkboxes
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+
+        # Get all symbols from symbol_specs_manager
+        all_symbols = symbol_specs_manager.get_all_symbols()
+
+        # Group by asset class
+        asset_classes = ['forex', 'stock', 'index', 'commodity', 'crypto']
+
+        for asset_class in asset_classes:
+            symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
+            if not symbols:
+                continue
+
+            # Create group box
+            group_box = QGroupBox(asset_class.upper())
+            group_box.setStyleSheet("""
+                QGroupBox {
+                    color: #00aaff;
+                    font-weight: bold;
+                    font-size: 12pt;
+                    border: 2px solid #00aaff;
+                    border-radius: 5px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 5px;
+                }
+            """)
+
+            group_layout = QVBoxLayout()
+
+            # Add "Select All" / "Deselect All" for this group
+            header_layout = QHBoxLayout()
+            select_all_btn = QPushButton(f"Select All {asset_class.capitalize()}")
+            select_all_btn.clicked.connect(lambda checked, ac=asset_class: self.select_all_in_class(ac, True))
+            deselect_all_btn = QPushButton(f"Deselect All {asset_class.capitalize()}")
+            deselect_all_btn.clicked.connect(lambda checked, ac=asset_class: self.select_all_in_class(ac, False))
+
+            header_layout.addWidget(select_all_btn)
+            header_layout.addWidget(deselect_all_btn)
+            header_layout.addStretch()
+            group_layout.addLayout(header_layout)
+
+            # Add checkboxes for symbols
+            for symbol in sorted(symbols):
+                specs = symbol_specs_manager.get_symbol_specs(symbol)
+                description = specs.description if specs else symbol
+
+                checkbox = QCheckBox(f"{symbol} - {description}")
+                checkbox.setChecked(symbol in self.current_symbols)
+                checkbox.setStyleSheet("color: #ffffff; padding: 5px;")
+                checkbox.stateChanged.connect(lambda state, s=symbol: self.on_symbol_toggled(s, state))
+
+                self.checkboxes[symbol] = checkbox
+                group_layout.addWidget(checkbox)
+
+            group_box.setLayout(group_layout)
+            scroll_layout.addWidget(group_box)
+
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+
+        save_btn = QPushButton("Save Selection")
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981;
+                color: white;
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+            }
+        """)
+        save_btn.clicked.connect(self.accept)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6B7280;
+                color: white;
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #4B5563;
+            }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+
+        button_layout.addStretch()
+        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(save_btn)
+
+        layout.addLayout(button_layout)
+
+        # Apply dark theme
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e1e;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+        """)
+
+    def on_symbol_toggled(self, symbol: str, state: int):
+        """Handle symbol checkbox toggle"""
+        if state == Qt.CheckState.Checked.value:
+            if symbol not in self.selected_symbols:
+                self.selected_symbols.append(symbol)
+        else:
+            if symbol in self.selected_symbols:
+                self.selected_symbols.remove(symbol)
+
+    def select_all_in_class(self, asset_class: str, select: bool):
+        """Select or deselect all symbols in an asset class"""
+        symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
+        for symbol in symbols:
+            if symbol in self.checkboxes:
+                self.checkboxes[symbol].setChecked(select)
+
+    def get_selected_symbols(self) -> List[str]:
+        """Return list of selected symbols"""
+        return self.selected_symbols
+
+
 class OpportunityScannerWidget(AIAssistMixin, QWidget):
     """
     Live Market Opportunity Scanner - Horizontal Flow Layout
@@ -453,13 +619,9 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         self.opportunities = []
 
-        # Expanded symbol list
-        self.pairs_to_scan = [
-            'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-            'NZDUSD', 'USDCHF', 'EURGBP', 'EURJPY', 'GBPJPY',
-            'AUDJPY', 'EURAUD', 'EURNZD', 'GBPAUD', 'GBPNZD',
-            'NZDJPY', 'CHFJPY', 'CADCHF', 'AUDCAD', 'AUDNZD'
-        ]
+        # Load selected symbols from config (or use defaults)
+        self.pairs_to_scan = self.load_scanner_config()
+        vprint(f"[OpportunityScanner] Loaded {len(self.pairs_to_scan)} symbols to scan: {self.pairs_to_scan}")
 
         self.mt5_connector = None
         self.using_real_data = False
@@ -481,6 +643,63 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         QTimer.singleShot(100, self.scan_market)
         vprint(f"[OpportunityScanner] ✓ Initial scan scheduled (100ms delay)")
 
+    def load_scanner_config(self) -> List[str]:
+        """Load selected symbols from config file"""
+        config_path = os.path.join(os.path.dirname(__file__), '../config/scanner_config.json')
+
+        # Try to load from config
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    symbols = config.get('selected_symbols', [])
+                    if symbols:
+                        vprint(f"[OpportunityScanner] Loaded {len(symbols)} symbols from config")
+                        return symbols
+            except Exception as e:
+                vprint(f"[OpportunityScanner] Error loading config: {e}")
+
+        # Default symbols (major forex pairs + popular assets)
+        default_symbols = [
+            'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+            'NZDUSD', 'USDCHF', 'EURGBP', 'EURJPY', 'GBPJPY',
+            'XAUUSD', 'BTCUSD', 'US30', 'NAS100', 'SPX500'
+        ]
+        vprint(f"[OpportunityScanner] Using default symbols")
+        return default_symbols
+
+    def save_scanner_config(self, symbols: List[str]):
+        """Save selected symbols to config file"""
+        config_path = os.path.join(os.path.dirname(__file__), '../config/scanner_config.json')
+
+        # Ensure config directory exists
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+        config = {'selected_symbols': symbols}
+
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            vprint(f"[OpportunityScanner] Saved {len(symbols)} symbols to config")
+        except Exception as e:
+            vprint(f"[OpportunityScanner] Error saving config: {e}")
+
+    def open_symbol_selector(self):
+        """Open symbol selector dialog"""
+        dialog = SymbolSelectorDialog(self.pairs_to_scan, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected = dialog.get_selected_symbols()
+            if selected:
+                self.pairs_to_scan = selected
+                self.save_scanner_config(selected)
+                vprint(f"[OpportunityScanner] Updated symbols to scan: {self.pairs_to_scan}")
+
+                # Update symbol count label
+                self.symbol_count_label.setText(f"Scanning {len(self.pairs_to_scan)} symbols")
+
+                # Rescan market with new symbols
+                self.scan_market()
+
     def init_ui(self):
         """Initialize the user interface - NO HEADER"""
         self.setMinimumHeight(310)  # Optimized to fit 3 rows without cutoff
@@ -490,9 +709,33 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         layout.setContentsMargins(0, 0, 0, 0)  # No margins - save space
         layout.setSpacing(0)  # No spacing - save space
 
-        # Minimal header for AI checkbox only
+        # Minimal header for settings button and AI checkbox
         header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(3, 2, 3, 2)  # Reduced from 5 to 3
+        header_layout.setContentsMargins(3, 2, 3, 2)
+
+        # Settings button on the left
+        settings_btn = QPushButton("⚙️ Select Symbols")
+        settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3B82F6;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #2563EB;
+            }
+        """)
+        settings_btn.clicked.connect(self.open_symbol_selector)
+        header_layout.addWidget(settings_btn)
+
+        # Symbol count label
+        self.symbol_count_label = QLabel(f"Scanning {len(self.pairs_to_scan)} symbols")
+        self.symbol_count_label.setStyleSheet("color: #94A3B8; font-size: 9pt; padding: 0 10px;")
+        header_layout.addWidget(self.symbol_count_label)
+
         header_layout.addStretch()
         self.ai_checkbox_placeholder = header_layout
         layout.addLayout(header_layout)
