@@ -426,12 +426,17 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             vprint(f"[VolatilityPosition]   → Asset class: {specs.asset_class}")
             vprint(f"[VolatilityPosition]   → Default SL: {specs.default_sl_distance}")
 
-        # Load data for new symbol
-        from core.data_manager import data_manager
-        data_manager.load_symbol(symbol)  # This will trigger data update
+        # Notify multi_symbol_manager about the active symbol change
+        from core.multi_symbol_manager import symbol_manager
+        symbol_manager.active_symbol = symbol
 
-        # Update the widget
-        self.update_from_live_data()
+        # Clear current data and wait for data_manager to update with new symbol data
+        self.current_data = None
+
+        # Update display to show we're waiting for data
+        self.clear_display()
+
+        vprint(f"[VolatilityPosition] Waiting for data for symbol: {symbol}")
 
     def set_market_data(self, symbol: str, df: pd.DataFrame):
         """
