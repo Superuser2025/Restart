@@ -143,6 +143,7 @@ class SymbolManagerDialog(QDialog):
             QListWidget::item {
                 padding: 8px;
                 border-bottom: 1px solid #333;
+                color: #ffffff;
             }
             QListWidget::item:selected {
                 background-color: #0d7377;
