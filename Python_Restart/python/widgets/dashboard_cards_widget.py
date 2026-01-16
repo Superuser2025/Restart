@@ -29,7 +29,7 @@ class DashboardCard(QFrame):
                 background-color: #1a1a2e;
                 border: 1px solid #3B82F6;
                 border-radius: 8px;
-                padding: 10px;
+                padding: 8px;
             }
             QFrame:hover {
                 border: 1px solid #60A5FA;
@@ -38,7 +38,8 @@ class DashboardCard(QFrame):
         """)
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(5)
+        layout.setSpacing(3)
+        layout.setContentsMargins(8, 6, 8, 6)
 
         # Title with icon
         title_label = QLabel(f"{icon} {title}")
@@ -48,23 +49,28 @@ class DashboardCard(QFrame):
 
         # Main value
         self.value_label = QLabel("--")
-        self.value_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        self.value_label.setStyleSheet("color: #ffffff; border: none; padding: 0;")
+        self.value_label.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        self.value_label.setStyleSheet("color: #ffffff; border: none; padding: 2px 0;")
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.value_label.setWordWrap(False)
         layout.addWidget(self.value_label)
 
         # Subtitle
         self.subtitle_label = QLabel("")
-        self.subtitle_label.setFont(QFont("Arial", 8))
-        self.subtitle_label.setStyleSheet("color: #888888; border: none; padding: 0;")
+        self.subtitle_label.setFont(QFont("Arial", 9))
+        self.subtitle_label.setStyleSheet("color: #aaaaaa; border: none; padding: 0; line-height: 1.2;")
         self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.subtitle_label.setWordWrap(True)  # Allow wrapping for long text
+        self.subtitle_label.setMaximumHeight(35)  # Limit height to prevent overflow
         layout.addWidget(self.subtitle_label)
 
     def update_value(self, value: str, subtitle: str = "", color: str = "#ffffff"):
         """Update card value and subtitle"""
         self.value_label.setText(value)
-        self.value_label.setStyleSheet(f"color: {color}; border: none; padding: 0;")
+        self.value_label.setStyleSheet(f"color: {color}; border: none; padding: 2px 0; font-weight: bold;")
         self.subtitle_label.setText(subtitle)
+        # Ensure subtitle stays visible with proper color
+        self.subtitle_label.setStyleSheet("color: #aaaaaa; border: none; padding: 0; line-height: 1.2;")
 
 
 class DashboardCardsWidget(AIAssistMixin, QWidget):
@@ -122,7 +128,7 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
         cards_layout.addWidget(self.risk_card)
 
         # Card 4: AI Scenario
-        self.scenario_card = DashboardCard("AI Action", "🤖")
+        self.scenario_card = DashboardCard("AI Action (Account)", "🤖")
         cards_layout.addWidget(self.scenario_card)
 
         # AI checkbox placeholder (placed after cards)
@@ -171,15 +177,25 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
         )
 
         # Market card
-        trends = ["BULLISH", "BEARISH", "NEUTRAL"]
-        trend = random.choice(trends)
+        trends_raw = ["bullish", "bearish", "neutral"]
+        trend_raw = random.choice(trends_raw)
+        # Format with timeframe like live mode
+        if trend_raw == "bullish":
+            trend = "BULLISH (H4)"
+            trend_color = "#00ff00"
+        elif trend_raw == "bearish":
+            trend = "BEARISH (H4)"
+            trend_color = "#ff0000"
+        else:
+            trend = "NEUTRAL (H4)"
+            trend_color = "#ffaa00"
+
         volatility = random.choice(["HIGH", "NORMAL", "LOW"])
         sessions = ["Asian", "London", "New York"]
         session = random.choice(sessions)
 
-        trend_color = "#00ff00" if trend == "BULLISH" else "#ff0000" if trend == "BEARISH" else "#ffaa00"
         self.market_card.update_value(
-            trend,
+            trend,  # Now shows "BULLISH (H4)" in demo mode too
             f"{volatility} Vol | {session} Session",
             trend_color
         )
@@ -213,7 +229,9 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
             'pnl': pnl,
             'pnl_pct': pnl_pct,
             'win_rate': win_rate,
-            'trend': trend,
+            'trend': trend,  # "BULLISH (H4)" format
+            'trend_raw': trend_raw,  # 'bullish', 'bearish', 'neutral' for logic
+            'trend_timeframe': 'H4',  # Explicit timeframe
             'volatility': volatility,
             'session': session,
             'exposure': exposure,
@@ -224,6 +242,8 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
 
     def load_live_data(self):
         """Load live MT5 account data"""
+        from core.market_analyzer import market_analyzer
+
         # Get real account data from data_manager
         account = data_manager.get_account_summary()
         market_state = data_manager.get_market_state()
@@ -244,14 +264,62 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
             "#00aaff"
         )
 
-        # Market card - REAL DATA
-        trend = market_state.get('bias', 'NEUTRAL')
-        volatility = market_state.get('volatility', 'NORMAL')
-        session = market_state.get('session', 'UNKNOWN')
+        # Market card - REAL DATA with DIRECT session detection
+        # Get current chart timeframe from data_manager
+        chart_timeframe = data_manager.current_price.get('timeframe', 'H4')
 
-        trend_color = "#00ff00" if trend == "BULLISH" else "#ff0000" if trend == "BEARISH" else "#ffaa00"
+        # Get current symbol
+        current_symbol = data_manager.current_price.get('symbol', 'EURUSD')
+
+        # Calculate trend OURSELVES on a KNOWN timeframe (H4 as reference)
+        # This ensures we know exactly what TF the trend is based on
+        reference_tf = 'H4'  # Using H4 as the standard reference timeframe
+        try:
+            trend_raw = market_analyzer.get_trend(current_symbol, reference_tf)
+            # Convert to display format
+            if trend_raw == 'bullish':
+                trend = f"BULLISH ({reference_tf})"
+                trend_color = "#00ff00"
+            elif trend_raw == 'bearish':
+                trend = f"BEARISH ({reference_tf})"
+                trend_color = "#ff0000"
+            else:
+                trend = f"NEUTRAL ({reference_tf})"
+                trend_color = "#ffaa00"
+        except:
+            # Fallback to EA's bias if calculation fails
+            trend_raw = market_state.get('bias', 'NEUTRAL')
+            trend = f"{trend_raw} (?)"  # Show ? to indicate unknown TF
+            trend_color = "#00ff00" if trend_raw == "BULLISH" else "#ff0000" if trend_raw == "BEARISH" else "#ffaa00"
+
+        # Get REAL-TIME session directly from market_analyzer
+        raw_session = market_analyzer.get_current_session()
+        session_map = {
+            'london_ny_overlap': 'London/NY',
+            'london': 'London',
+            'newyork': 'New York',
+            'asian': 'Asian',
+            'dead': 'Dead Zone'
+        }
+        session = session_map.get(raw_session, 'Unknown')
+
+        # Calculate volatility status (HIGH/NORMAL/LOW)
+        try:
+            current_atr = market_analyzer.calculate_atr(current_symbol, 'H1', period=14)
+            avg_atr = market_analyzer.calculate_atr(current_symbol, 'H1', period=50)
+
+            if current_atr > (avg_atr * 1.5):
+                volatility = "HIGH"
+            elif current_atr > (avg_atr * 0.8):
+                volatility = "NORMAL"
+            else:
+                volatility = "LOW"
+        except:
+            # Fallback to data_manager value if calculation fails
+            volatility = market_state.get('volatility', 'NORMAL')
+
         self.market_card.update_value(
-            trend,
+            trend,  # Now shows "BULLISH (H4)" with timeframe!
             f"{volatility} Vol | {session} Session",
             trend_color
         )
@@ -279,25 +347,28 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
             action, reason, color = "STOP", "High drawdown!", "#ff0000"
         elif daily_pnl < -100:
             action, reason, color = "REDUCE", "Daily loss limit", "#ff6600"
-        elif trend == "BULLISH" and volatility == "HIGH":
+        elif trend_raw == "bullish" and volatility == "HIGH":
             action, reason, color = "BUY DIP", "Strong trend", "#00ff00"
-        elif trend == "BEARISH" and volatility == "HIGH":
+        elif trend_raw == "bearish" and volatility == "HIGH":
             action, reason, color = "SELL RALLY", "Strong trend", "#ff0000"
         else:
             action, reason, color = "WAIT", "No clear setup", "#ffaa00"
 
         self.scenario_card.update_value(action, reason, color)
 
-        # Store for AI analysis
+        # Store for AI analysis (with corrected session data and explicit timeframe)
         self.current_data = {
             'balance': balance,
             'equity': equity,
             'pnl': daily_pnl,
             'pnl_pct': pnl_pct,
             'win_rate': win_rate,
-            'trend': trend,
+            'trend': trend,  # Now includes timeframe: "BULLISH (H4)"
+            'trend_raw': trend_raw,  # Raw value: 'bullish', 'bearish', 'neutral'
+            'trend_timeframe': reference_tf,  # Explicit timeframe: 'H4'
             'volatility': volatility,
-            'session': session,
+            'session': session,  # Now uses real-time session from market_analyzer
+            'raw_session': raw_session,  # Store raw session for logic
             'exposure': exposure,
             'margin_used': margin_used_pct,
             'drawdown': drawdown,
@@ -325,7 +396,8 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
 
         pnl_pct = self.current_data.get('pnl_pct', 0)
         win_rate = self.current_data.get('win_rate', 0)
-        trend = self.current_data.get('trend', 'NEUTRAL')
+        trend = self.current_data.get('trend', 'NEUTRAL (H4)')  # Display: "BULLISH (H4)"
+        trend_raw = self.current_data.get('trend_raw', 'neutral')  # For logic: 'bullish', 'bearish', 'neutral'
         volatility = self.current_data.get('volatility', 'NORMAL')
         exposure = self.current_data.get('exposure', 0)
         drawdown = self.current_data.get('drawdown', 0)
@@ -361,8 +433,8 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
             )
 
         # OPPORTUNITY: Trending market + good stats
-        if trend in ["BULLISH", "BEARISH"] and volatility == "NORMAL" and exposure < 2.5:
-            direction = "LONG" if trend == "BULLISH" else "SHORT"
+        if trend_raw in ["bullish", "bearish"] and volatility == "NORMAL" and exposure < 2.5:
+            direction = "LONG" if trend_raw == "bullish" else "SHORT"
             return create_ai_suggestion(
                 widget_type="dashboard_cards",
                 text=f"📈 TRENDING MARKET: {trend} with normal volatility. Look for {direction} pullback entries. Low exposure ({exposure:.1f}%) = room to add quality trades.",
@@ -402,7 +474,7 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
             )
 
         # NEUTRAL MARKET: Patience
-        if trend == "NEUTRAL" and volatility == "LOW":
+        if trend_raw == "neutral" and volatility == "LOW":
             return create_ai_suggestion(
                 widget_type="dashboard_cards",
                 text="↔️ CHOPPY MARKET: Neutral trend, low volatility. Avoid trading chop. Wait for breakout or clear direction. Patience pays!",

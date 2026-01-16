@@ -5,7 +5,7 @@ PyQt6 widget for displaying volatility-adjusted position sizing
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QGroupBox, QLineEdit, QPushButton, QSpinBox,
-                            QDoubleSpinBox, QFrame, QGridLayout, QCheckBox)
+                            QDoubleSpinBox, QFrame, QGridLayout, QCheckBox, QDialog, QSizePolicy, QComboBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from typing import Dict, Optional
@@ -14,7 +14,10 @@ import pandas as pd
 from widgets.volatility_position_sizer import (volatility_position_sizer,
                                                VolatilityRegime, TrendStrength)
 from core.ai_assist_base import AIAssistMixin
+from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.verbose_mode_manager import vprint
+from core.symbol_manager import symbol_specs_manager
 
 
 class VolatilityPositionWidget(AIAssistMixin, QWidget):
@@ -38,6 +41,9 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.init_ui()
         self.setup_ai_assist("volatility_position")
 
+        # Load real account balance
+        self.load_account_balance()
+
         # Auto-refresh timer to get live data
         from PyQt6.QtCore import QTimer
         self.refresh_timer = QTimer()
@@ -59,6 +65,16 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         header_layout.addWidget(title)
         header_layout.addStretch()
+
+        # Symbol selector
+        header_layout.addWidget(QLabel("Symbol:"))
+        self.symbol_selector = QComboBox()
+        self.symbol_selector.setMinimumWidth(150)
+        self.symbol_selector.setMaximumWidth(200)
+        self.populate_symbol_selector()
+        self.symbol_selector.currentTextChanged.connect(self.on_symbol_changed)
+        header_layout.addWidget(self.symbol_selector)
+
         self.ai_checkbox_placeholder = header_layout
         layout.addLayout(header_layout)
 
@@ -70,17 +86,22 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.balance_input = QDoubleSpinBox()
         self.balance_input.setRange(100, 1000000)
         self.balance_input.setValue(10000)
+        self.balance_input.setSingleStep(100)  # Step by $100
         self.balance_input.setPrefix("$ ")
+        self.balance_input.setMinimumHeight(35)  # Taller for bigger buttons
+        self.balance_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.balance_input.valueChanged.connect(self.on_settings_changed)
         account_layout.addWidget(self.balance_input, 0, 1)
 
         account_layout.addWidget(QLabel("Base Risk %:"), 1, 0)
         self.risk_input = QDoubleSpinBox()
-        self.risk_input.setRange(0.1, 2.0)
+        self.risk_input.setRange(0.1, 5.0)  # Increased max to 5%
         self.risk_input.setValue(0.5)
         self.risk_input.setSingleStep(0.1)
         self.risk_input.setDecimals(1)
         self.risk_input.setSuffix(" %")
+        self.risk_input.setMinimumHeight(35)  # Taller for bigger buttons
+        self.risk_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.risk_input.valueChanged.connect(self.on_settings_changed)
         account_layout.addWidget(self.risk_input, 1, 1)
 
@@ -127,6 +148,9 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.entry_input.setRange(0.0001, 100000)
         self.entry_input.setDecimals(5)
         self.entry_input.setValue(1.10000)
+        self.entry_input.setSingleStep(0.0001)  # Step by 1 pip
+        self.entry_input.setMinimumHeight(35)  # Taller for bigger buttons
+        self.entry_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.entry_input.valueChanged.connect(self.on_trade_params_changed)
         trade_layout.addWidget(self.entry_input, 0, 1)
 
@@ -135,6 +159,9 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.sl_input.setRange(0.0001, 100000)
         self.sl_input.setDecimals(5)
         self.sl_input.setValue(1.09500)
+        self.sl_input.setSingleStep(0.0001)  # Step by 1 pip
+        self.sl_input.setMinimumHeight(35)  # Taller for bigger buttons
+        self.sl_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.sl_input.valueChanged.connect(self.on_trade_params_changed)
         trade_layout.addWidget(self.sl_input, 1, 1)
 
@@ -155,6 +182,15 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         # Calculate button
         self.calculate_btn = QPushButton("📊 Calculate Position Size")
         self.calculate_btn.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        self.calculate_btn.setToolTip(
+            "Calculate lot size based on:\n"
+            "• Entry price and Stop Loss distance\n"
+            "• Current volatility regime (adjusts risk)\n"
+            "• Trend strength (adjusts risk)\n"
+            "• Account balance and base risk %\n\n"
+            "Updates the 'Position Size Results' section below.\n"
+            "Does NOT place any trades - calculation only!"
+        )
         self.calculate_btn.clicked.connect(self.calculate_position)
         trade_layout.addWidget(self.calculate_btn, 3, 0, 1, 2)
 
@@ -264,6 +300,55 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
                 border-radius: 3px;
                 padding: 5px;
                 color: #ffffff;
+                min-height: 30px;
+            }
+            QDoubleSpinBox::up-button, QSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 30px;
+                height: 18px;
+                border-left: 2px solid #555;
+                border-bottom: 2px solid #555;
+                background-color: #3a3a3a;
+                border-top-right-radius: 3px;
+            }
+            QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover {
+                background-color: #00aa00;
+            }
+            QDoubleSpinBox::up-button:pressed, QSpinBox::up-button:pressed {
+                background-color: #008800;
+            }
+            QDoubleSpinBox::up-arrow, QSpinBox::up-arrow {
+                image: none;
+                width: 0;
+                height: 0;
+                border-style: solid;
+                border-width: 0 10px 12px 10px;
+                border-color: transparent transparent #ffffff transparent;
+            }
+            QDoubleSpinBox::down-button, QSpinBox::down-button {
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: 30px;
+                height: 18px;
+                border-left: 2px solid #555;
+                border-top: 2px solid #555;
+                background-color: #3a3a3a;
+                border-bottom-right-radius: 3px;
+            }
+            QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {
+                background-color: #cc0000;
+            }
+            QDoubleSpinBox::down-button:pressed, QSpinBox::down-button:pressed {
+                background-color: #aa0000;
+            }
+            QDoubleSpinBox::down-arrow, QSpinBox::down-arrow {
+                image: none;
+                width: 0;
+                height: 0;
+                border-style: solid;
+                border-width: 12px 10px 0 10px;
+                border-color: #ffffff transparent transparent transparent;
             }
             QPushButton {
                 background-color: #0d7377;
@@ -285,6 +370,101 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             }
         """)
 
+    def populate_symbol_selector(self):
+        """Populate symbol selector with available symbols from SymbolManager"""
+        # Get all symbols from symbol specs manager
+        symbols = symbol_specs_manager.get_all_symbols()
+
+        if not symbols:
+            # Fallback if no symbols loaded
+            symbols = ['EURUSD']
+            vprint("[VolatilityPosition] ⚠️ No symbols loaded from SymbolManager, using EURUSD fallback")
+
+        # Group symbols by asset class for better organization
+        asset_classes = symbol_specs_manager.get_asset_class_summary()
+
+        # Add symbols grouped by asset class
+        for asset_class in ['forex', 'stock', 'index', 'commodity', 'crypto']:
+            class_symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
+            if class_symbols:
+                # Add separator with asset class name
+                self.symbol_selector.addItem(f"--- {asset_class.upper()} ---")
+                # Make separator non-selectable
+                model = self.symbol_selector.model()
+                item = model.item(self.symbol_selector.count() - 1)
+                item.setEnabled(False)
+
+                # Add symbols
+                for symbol in sorted(class_symbols):
+                    specs = symbol_specs_manager.get_symbol_specs(symbol)
+                    if specs:
+                        # Show symbol with description
+                        display_text = f"{symbol} ({specs.asset_class})"
+                        self.symbol_selector.addItem(display_text, symbol)  # symbol as user data
+
+        # Set current symbol if we have one
+        if self.current_symbol:
+            index = self.symbol_selector.findData(self.current_symbol)
+            if index >= 0:
+                self.symbol_selector.setCurrentIndex(index)
+
+        vprint(f"[VolatilityPosition] ✓ Symbol selector populated with {len(symbols)} symbols")
+
+    def on_symbol_changed(self, text: str):
+        """Handle symbol selection change"""
+        # Get the actual symbol from combo box user data
+        symbol = self.symbol_selector.currentData()
+
+        if not symbol or symbol == self.current_symbol:
+            return
+
+        vprint(f"[VolatilityPosition] Symbol changed to: {symbol}")
+
+        # Update current symbol
+        self.current_symbol = symbol
+
+        # Get symbol specs and show info
+        specs = symbol_specs_manager.get_symbol_specs(symbol)
+        if specs:
+            vprint(f"[VolatilityPosition]   → Asset class: {specs.asset_class}")
+            vprint(f"[VolatilityPosition]   → Default SL: {specs.default_sl_distance}")
+
+        # Notify multi_symbol_manager about the active symbol change
+        from core.multi_symbol_manager import symbol_manager
+        symbol_manager.active_symbol = symbol
+
+        # Clear current data
+        self.current_data = None
+        self.clear_display()
+
+        # Force immediate data update for new symbol
+        self.update_from_live_data()
+
+        vprint(f"[VolatilityPosition] Symbol changed - updating data for: {symbol}")
+
+    def load_account_balance(self):
+        """Load real account balance from data_manager or MT5"""
+        from core.data_manager import data_manager
+
+        account = data_manager.get_account_summary()
+        if account and account.get('balance', 0) > 0:
+            balance = account['balance']
+            self.balance_input.setValue(balance)
+            vprint(f"[VolatilityPosition] ✓ Loaded account balance: ${balance:,.2f}")
+        else:
+            # Try MT5 directly
+            try:
+                import MetaTrader5 as mt5
+                if mt5.initialize():
+                    account_info = mt5.account_info()
+                    if account_info:
+                        balance = account_info.balance
+                        self.balance_input.setValue(balance)
+                        vprint(f"[VolatilityPosition] ✓ Loaded MT5 account balance: ${balance:,.2f}")
+                    mt5.shutdown()
+            except:
+                vprint(f"[VolatilityPosition] ⚠️ Could not load account balance, using default $10,000")
+
     def set_market_data(self, symbol: str, df: pd.DataFrame):
         """
         Set market data for position sizing calculations
@@ -304,11 +484,13 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             current_price = df['close'].iloc[-1]
             self.entry_input.setValue(current_price)
 
-            # Auto-set stop loss at a reasonable distance (50 pips for forex)
-            if symbol.endswith('JPY'):
-                sl_distance = 0.50  # 50 pips for JPY pairs
+            # Auto-set stop loss at appropriate distance for asset class
+            symbol_specs = symbol_specs_manager.get_symbol_specs(symbol)
+            if symbol_specs:
+                sl_distance = symbol_specs.default_sl_distance
             else:
-                sl_distance = 0.0050  # 50 pips for other pairs
+                # Fallback
+                sl_distance = 0.0050
 
             # Set SL based on current direction
             if self.buy_btn.isChecked():
@@ -316,7 +498,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             else:
                 self.sl_input.setValue(current_price + sl_distance)
 
-            print(f"[VolatilityPosition]   → Auto-set Entry: {current_price:.5f}, SL: {self.sl_input.value():.5f}")
+            vprint(f"[VolatilityPosition]   → Auto-set Entry: {current_price:.5f}, SL: {self.sl_input.value():.5f}")
 
             # Auto-calculate position with updated prices
             self.auto_calculate_position()
@@ -329,41 +511,56 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             self.update_from_live_data()
 
     def update_from_live_data(self):
-        """Get live data from data_manager and update position sizing"""
-        from core.data_manager import data_manager
+        """Get live data from MT5 for current symbol and update position sizing"""
+        vprint(f"\n[VolatilityPosition] update_from_live_data() called for {self.current_symbol}")
 
-        print(f"\n[VolatilityPosition] update_from_live_data() called for {self.current_symbol}")
+        # Try to get data from MT5 directly for the selected symbol
+        try:
+            import MetaTrader5 as mt5
 
-        # Get candles from data_manager (uses currently loaded symbol)
-        candles = data_manager.get_candles(count=100)
+            if not mt5.initialize():
+                vprint(f"[VolatilityPosition] ❌ MT5 initialization failed")
+                self.clear_display()
+                return
 
-        if not candles:
-            print(f"[VolatilityPosition] ❌ No data available from data_manager")
+            # Get H1 timeframe data for selected symbol
+            rates = mt5.copy_rates_from_pos(self.current_symbol, mt5.TIMEFRAME_H1, 0, 100)
+
+            if rates is None or len(rates) == 0:
+                vprint(f"[VolatilityPosition] ❌ No data for {self.current_symbol}")
+                mt5.shutdown()
+                self.clear_display()
+                return
+
+            # Convert to DataFrame
+            df = pd.DataFrame(rates)
+            df['time'] = pd.to_datetime(df['time'], unit='s')
+
+            vprint(f"[VolatilityPosition] ✓ Got {len(df)} H1 candles for {self.current_symbol}")
+
+            # Show last close price for verification
+            if 'close' in df.columns and len(df) > 0:
+                last_close = df['close'].iloc[-1]
+                vprint(f"[VolatilityPosition]   → Last close: {last_close:.5f}")
+
+            mt5.shutdown()
+
+            # Set the market data (this will trigger calculations)
+            self.set_market_data(self.current_symbol, df)
+
+            vprint(f"[VolatilityPosition] ✓ Market data updated successfully for {self.current_symbol}")
+
+        except Exception as e:
+            vprint(f"[VolatilityPosition] ❌ Error loading data for {self.current_symbol}: {e}")
             self.clear_display()
-            return
-
-        # Convert to DataFrame
-        df = pd.DataFrame(candles)
-
-        print(f"[VolatilityPosition] ✓ Got {len(df)} candles for {self.current_symbol}")
-
-        # Show last close price for verification
-        if 'close' in df.columns:
-            last_close = df['close'].iloc[-1]
-            print(f"[VolatilityPosition]   → Last close: {last_close:.5f}")
-
-        # Set the market data (this will trigger calculations)
-        self.set_market_data(self.current_symbol, df)
-
-        print(f"[VolatilityPosition] ✓ Market data updated successfully")
 
     def update_market_conditions(self):
         """Update volatility and trend displays"""
         if self.current_symbol is None or self.current_data is None:
-            print(f"[VolatilityPosition] ❌ Cannot update - missing symbol or data")
+            vprint(f"[VolatilityPosition] ❌ Cannot update - missing symbol or data")
             return
 
-        print(f"[VolatilityPosition] Calculating market conditions...")
+        vprint(f"[VolatilityPosition] Calculating market conditions...")
 
         try:
             # Get risk summary
@@ -375,7 +572,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             vol_regime = summary['volatility_regime']
             vol_mult = summary['volatility_multiplier']
 
-            print(f"[VolatilityPosition]   → Volatility: {vol_regime} (×{vol_mult:.2f})")
+            vprint(f"[VolatilityPosition]   → Volatility: {vol_regime} (×{vol_mult:.2f})")
 
             vol_color = self._get_volatility_color(vol_regime)
             self.volatility_label.setText(vol_regime.replace('_', ' '))
@@ -386,7 +583,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             trend_strength = summary['trend_strength']
             trend_mult = summary['trend_multiplier']
 
-            print(f"[VolatilityPosition]   → Trend: {trend_strength} (×{trend_mult:.2f})")
+            vprint(f"[VolatilityPosition]   → Trend: {trend_strength} (×{trend_mult:.2f})")
 
             trend_color = self._get_trend_color(trend_strength)
             self.trend_label.setText(trend_strength.replace('_', ' '))
@@ -397,11 +594,11 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             recommendation = summary['recommendation']
             self.recommendation_label.setText(recommendation)
 
-            print(f"[VolatilityPosition]   → Recommendation: {recommendation[:60]}...")
-            print(f"[VolatilityPosition] ✓ Market conditions updated successfully")
+            vprint(f"[VolatilityPosition]   → Recommendation: {recommendation[:60]}...")
+            vprint(f"[VolatilityPosition] ✓ Market conditions updated successfully")
 
         except Exception as e:
-            print(f"[VolatilityPosition] ❌ Error updating market conditions: {e}")
+            vprint(f"[VolatilityPosition] ❌ Error updating market conditions: {e}")
             import traceback
             traceback.print_exc()
 
@@ -449,13 +646,13 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
                 self.recommendation_label.setText(' '.join(rec_parts))
 
-                print(f"[VolatilityPosition]   → Position: {result['position_size_lots']:.2f} lots at {result['adjusted_risk_pct']:.2f}% risk")
+                vprint(f"[VolatilityPosition]   → Position: {result['position_size_lots']:.2f} lots at {result['adjusted_risk_pct']:.2f}% risk")
 
                 # Emit signal
                 self.position_calculated.emit(result)
 
         except Exception as e:
-            print(f"[VolatilityPosition] ⚠️ Auto-calculate error: {e}")
+            vprint(f"[VolatilityPosition] ⚠️ Auto-calculate error: {e}")
 
     def calculate_position(self):
         """Calculate and display position size (manual button click)"""
@@ -511,7 +708,7 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
     def on_settings_changed(self):
         """Handle account settings change"""
         # Recalculate if we have data
-        if self.current_symbol and self.current_data:
+        if self.current_symbol and self.current_data is not None and not self.current_data.empty:
             self.update_market_conditions()
 
     def on_trade_params_changed(self):
@@ -520,13 +717,202 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         pass
 
     def set_direction(self, direction: str):
-        """Set trade direction"""
+        """Set trade direction and show mini chart"""
         if direction == 'BUY':
             self.buy_btn.setChecked(True)
             self.sell_btn.setChecked(False)
         else:
             self.buy_btn.setChecked(False)
             self.sell_btn.setChecked(True)
+
+        # Update entry and SL for the new direction with current market price from MT5
+        current_price = None
+        try:
+            import MetaTrader5 as mt5
+            if mt5.initialize():
+                rates = mt5.copy_rates_from_pos(self.current_symbol, mt5.TIMEFRAME_H1, 0, 1)
+                mt5.shutdown()
+
+                if rates is not None and len(rates) > 0:
+                    current_price = rates[-1]['close']
+        except Exception as e:
+            vprint(f"[VolatilityPosition] ⚠️ Error getting current price: {e}")
+
+        if current_price is not None:
+
+            # Update entry to current price
+            self.entry_input.setValue(current_price)
+
+            # Get SL distance from symbol specs (dynamic for all asset classes)
+            symbol_specs = symbol_specs_manager.get_symbol_specs(self.current_symbol)
+            if symbol_specs:
+                sl_distance = symbol_specs.default_sl_distance
+                asset_class = symbol_specs.asset_class
+                vprint(f"[VolatilityPosition] Using {asset_class} SL distance: {sl_distance}")
+            else:
+                # Fallback for unknown symbols
+                sl_distance = 0.0050
+                vprint(f"[VolatilityPosition] ⚠️ Unknown symbol {self.current_symbol}, using default SL")
+
+            # Set SL based on direction
+            if direction == 'BUY':
+                self.sl_input.setValue(current_price - sl_distance)
+            else:  # SELL
+                self.sl_input.setValue(current_price + sl_distance)
+
+            vprint(f"[VolatilityPosition] Updated {direction} setup - Entry: {current_price:.5f}, SL: {self.sl_input.value():.5f}")
+
+        # Show mini chart popup with entry/SL visualization
+        self.show_trade_visualization(direction)
+
+    def show_trade_visualization(self, direction: str):
+        """
+        Show mini chart popup with entry and stop loss levels visualized
+        Similar to opportunity card mini charts
+        """
+        # Get entry and stop loss values
+        entry = self.entry_input.value()
+        sl = self.sl_input.value()
+
+        # Validate
+        if entry == 0 or sl == 0:
+            vprint("[VolatilityPosition] Entry or SL is zero, skipping visualization")
+            return
+
+        # Create popup dialog
+        popup = QDialog(self)
+        popup.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        popup.setFixedSize(800, 550)
+
+        # Position popup to the LEFT of the button
+        button = self.buy_btn if direction == 'BUY' else self.sell_btn
+        button_pos = button.mapToGlobal(button.rect().topLeft())
+        popup.move(button_pos.x() - 810, button_pos.y() - 250)
+
+        # Create layout
+        layout = QVBoxLayout(popup)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Title
+        title_label = QLabel(f"📊 {direction} Trade Setup - {self.current_symbol}")
+        title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        title_label.setStyleSheet("color: #00aaff; background-color: #1e1e1e; padding: 5px;")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_label)
+
+        # Create matplotlib figure
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+        from matplotlib.figure import Figure
+        from matplotlib.patches import Rectangle
+        from core.data_manager import data_manager
+
+        fig = Figure(figsize=(7.5, 4.5), dpi=100, facecolor='#1E293B')
+        canvas = FigureCanvasQTAgg(fig)
+        canvas.setStyleSheet("background-color: #1E293B;")
+
+        ax = fig.add_subplot(111)
+        ax.set_facecolor('#0F172A')
+
+        # Get candle data for CURRENT SYMBOL from MT5 directly
+        candles = []
+        try:
+            import MetaTrader5 as mt5
+            if mt5.initialize():
+                rates = mt5.copy_rates_from_pos(self.current_symbol, mt5.TIMEFRAME_H1, 0, 50)
+                mt5.shutdown()
+
+                if rates is not None and len(rates) > 0:
+                    # Convert to candle format
+                    candles = [{'open': r['open'], 'high': r['high'],
+                               'low': r['low'], 'close': r['close']}
+                              for r in rates]
+                    vprint(f"[VolatilityPosition] Loaded {len(candles)} candles for {self.current_symbol} mini chart")
+        except Exception as e:
+            vprint(f"[VolatilityPosition] ⚠️ Error loading chart data: {e}")
+
+        if candles and len(candles) > 0:
+            # Plot last 30 candlesticks using simple index positions
+            last_30_candles = candles[-30:]
+            for i, candle in enumerate(last_30_candles):
+                o, h, l, c = candle['open'], candle['high'], candle['low'], candle['close']
+                color = '#10B981' if c >= o else '#EF4444'
+
+                # Draw wick
+                ax.plot([i, i], [l, h], color=color, linewidth=0.8)
+
+                # Draw body
+                body_height = abs(c - o)
+                body_bottom = min(o, c)
+                rect = Rectangle((i - 0.3, body_bottom), 0.6, body_height,
+                               facecolor=color, edgecolor=color, linewidth=0)
+                ax.add_patch(rect)
+
+            # Draw entry line (BLUE)
+            ax.axhline(y=entry, color='#3B82F6', linestyle='--', linewidth=2, zorder=10)
+
+            # Draw stop loss line (RED)
+            ax.axhline(y=sl, color='#EF4444', linestyle='--', linewidth=2, zorder=10)
+
+            # Calculate pip/point distance (dynamic for all asset classes)
+            pip_distance = abs(entry - sl)
+            symbol_specs = symbol_specs_manager.get_symbol_specs(self.current_symbol)
+            if symbol_specs:
+                # Use symbol manager to calculate proper value
+                pips = symbol_specs_manager.calculate_pip_value(self.current_symbol, pip_distance)
+                unit = symbol_specs_manager.get_display_unit(self.current_symbol)
+            else:
+                # Fallback for unknown symbols
+                pips = pip_distance * 10000
+                unit = 'pips'
+
+            # Label the entry line directly
+            ax.text(29, entry, f'  Entry: {entry:.5f}',
+                   verticalalignment='center', horizontalalignment='left',
+                   color='#3B82F6', fontsize=9, weight='bold',
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='#0F172A', edgecolor='#3B82F6', linewidth=1.5))
+
+            # Label the stop loss line directly
+            ax.text(29, sl, f'  SL: {sl:.5f}',
+                   verticalalignment='center', horizontalalignment='left',
+                   color='#EF4444', fontsize=9, weight='bold',
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='#0F172A', edgecolor='#EF4444', linewidth=1.5))
+
+            # Add direction indicator
+            direction_color = '#10B981' if direction == 'BUY' else '#EF4444'
+            direction_text = f"{direction}\n({pips:.1f} {unit})"
+            ax.text(0.02, 0.98, direction_text, transform=ax.transAxes,
+                   fontsize=10, verticalalignment='top',
+                   bbox=dict(boxstyle='round', facecolor=direction_color, alpha=0.3),
+                   color='white', weight='bold')
+        else:
+            # No data available
+            ax.text(0.5, 0.5, 'No chart data available', ha='center', va='center',
+                   transform=ax.transAxes, color='#94A3B8', fontsize=12)
+
+        # Styling
+        ax.set_xlabel('Candles', color='#94A3B8', fontsize=9)
+        ax.set_ylabel('Price', color='#94A3B8', fontsize=9)
+        ax.tick_params(colors='#94A3B8', labelsize=8)
+        ax.grid(True, alpha=0.2, color='#334155')
+        ax.spines['bottom'].set_color('#94A3B8')
+        ax.spines['top'].set_color('#94A3B8')
+        ax.spines['left'].set_color('#94A3B8')
+        ax.spines['right'].set_color('#94A3B8')
+
+        fig.tight_layout()
+
+        layout.addWidget(canvas)
+
+        # Info label
+        info_label = QLabel(f"Click anywhere to close")
+        info_label.setStyleSheet("color: #888888; font-size: 9pt; background-color: #1e1e1e; padding: 3px;")
+        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(info_label)
+
+        # Show popup
+        popup.show()
+        vprint(f"[VolatilityPosition] Mini chart popup shown for {direction} trade")
 
     def _get_volatility_color(self, regime: str) -> str:
         """Get color for volatility regime"""
@@ -569,26 +955,29 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""
-        print(f"\n[VolatilityPosition] ====== Timer fired: update_data() ======")
+        vprint(f"\n[VolatilityPosition] ====== Timer fired: update_data() ======")
+
+        # Refresh account balance periodically
+        self.load_account_balance()
 
         if is_demo_mode():
-            print(f"[VolatilityPosition] Mode: DEMO - loading sample conditions")
+            vprint(f"[VolatilityPosition] Mode: DEMO - loading sample conditions")
             # Load demo volatility data
             self.load_sample_conditions()
         else:
-            print(f"[VolatilityPosition] Mode: LIVE - fetching real data")
+            vprint(f"[VolatilityPosition] Mode: LIVE - fetching real data")
             # Get live data
             self.update_from_live_data()
 
         # Update AI if enabled
-        if self.ai_enabled and self.current_data is not None:
-            print(f"[VolatilityPosition] AI enabled - updating suggestions")
+        if self.ai_enabled and self.current_data is not None and not self.current_data.empty:
+            vprint(f"[VolatilityPosition] AI enabled - updating suggestions")
             self.update_ai_suggestions()
 
     def on_mode_changed(self, is_demo: bool):
         """Handle demo/live mode changes"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"Volatility Position Sizer switching to {mode_text} mode")
+        vprint(f"Volatility Position Sizer switching to {mode_text} mode")
         self.update_data()
 
     def analyze_with_ai(self, prediction, widget_data):
@@ -604,19 +993,19 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         """
         from core.ml_integration import create_ai_suggestion
 
-        if not self.current_data:
+        if not widget_data:
             return create_ai_suggestion(
                 widget_type="volatility_position",
                 text="Calculate position size to get AI analysis",
                 confidence=0.0
             )
 
-        volatility_regime = self.current_data.get('volatility_regime', 'UNKNOWN')
-        trend_strength = self.current_data.get('trend_strength', 'UNKNOWN')
-        adjusted_risk = self.current_data.get('adjusted_risk_percent', 0)
-        position_size = self.current_data.get('position_size', 0)
-        volatility_mult = self.current_data.get('volatility_multiplier', 1.0)
-        trend_mult = self.current_data.get('trend_multiplier', 1.0)
+        volatility_regime = widget_data.get('volatility_regime', 'UNKNOWN')
+        trend_strength = widget_data.get('trend_strength', 'UNKNOWN')
+        adjusted_risk = widget_data.get('adjusted_risk_percent', 0)
+        position_size = widget_data.get('position_size', 0)
+        volatility_mult = widget_data.get('volatility_multiplier', 1.0)
+        trend_mult = widget_data.get('trend_multiplier', 1.0)
 
         # EXTREME VOLATILITY WARNING
         if volatility_regime == 'EXTREME':

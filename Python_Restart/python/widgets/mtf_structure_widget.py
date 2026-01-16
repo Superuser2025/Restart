@@ -12,8 +12,11 @@ from datetime import datetime
 
 from widgets.mtf_structure_map import mtf_structure_map
 from core.ai_assist_base import AIAssistMixin
+from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.verbose_mode_manager import vprint
 from core.multi_symbol_manager import get_all_symbols
+from core.verbose_mode_manager import vprint
 from analysis.order_block_detector import order_block_detector
 from analysis.liquidity_sweep_detector import liquidity_sweep_detector
 from analysis.fair_value_gap_detector import fair_value_gap_detector
@@ -59,22 +62,22 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
 
-        print(f"\n[MTF Structure] update_from_live_data() called for {self.current_symbol}")
+        vprint(f"\n[MTF Structure] update_from_live_data() called for {self.current_symbol}")
 
         try:
             # Get candle data
             candles = data_manager.get_candles()
 
             if not candles or len(candles) < 50:
-                print(f"[MTF Structure] ⚠️ Not enough data ({len(candles) if candles else 0} candles, need 50+)")
+                vprint(f"[MTF Structure] ⚠️ Not enough data ({len(candles) if candles else 0} candles, need 50+)")
                 self.status_label.setText(f"Live: {self.current_symbol} (waiting for data...)")
                 return
 
-            print(f"[MTF Structure] ✓ Got {len(candles)} candles for {self.current_symbol}")
+            vprint(f"[MTF Structure] ✓ Got {len(candles)} candles for {self.current_symbol}")
 
             # Get current price
             current_price = candles[-1]['close']
-            print(f"[MTF Structure]   → Current price: {current_price:.5f}")
+            vprint(f"[MTF Structure]   → Current price: {current_price:.5f}")
 
             # Build data by timeframe dictionary
             # Note: data_manager tracks one timeframe, so we'll use what we have
@@ -191,25 +194,25 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
             }
 
             # Log trend analysis results
-            print(f"[MTF Structure]   → Trends: M15={trends.get('M15', 'N/A')}, H1={trends.get('H1', 'N/A')}, H4={trends.get('H4', 'N/A')}, D1={trends.get('D1', 'N/A')}")
+            vprint(f"[MTF Structure]   → Trends: M15={trends.get('M15', 'N/A')}, H1={trends.get('H1', 'N/A')}, H4={trends.get('H4', 'N/A')}, D1={trends.get('D1', 'N/A')}")
             if nearest_resistance:
-                print(f"[MTF Structure]   → Nearest Resistance: {nearest_resistance['price']:.5f}")
+                vprint(f"[MTF Structure]   → Nearest Resistance: {nearest_resistance['price']:.5f}")
             if nearest_support:
-                print(f"[MTF Structure]   → Nearest Support: {nearest_support['price']:.5f}")
+                vprint(f"[MTF Structure]   → Nearest Support: {nearest_support['price']:.5f}")
 
             # Log smart money levels
             if smart_money_levels:
-                print(f"[MTF Structure]   → Smart Money Levels detected: {len(smart_money_levels)}")
+                vprint(f"[MTF Structure]   → Smart Money Levels detected: {len(smart_money_levels)}")
                 for i, level in enumerate(smart_money_levels[:3], 1):
-                    print(f"[MTF Structure]     {i}. {level['type']} @ {level['price']:.5f} ({level['distance_pips']:.1f} pips, strength {level['strength']:.0f})")
+                    vprint(f"[MTF Structure]     {i}. {level['type']} @ {level['price']:.5f} ({level['distance_pips']:.1f} pips, strength {level['strength']:.0f})")
 
             self.update_structure_data(structure_data)
             self.status_label.setText(f"Live: {self.current_symbol}")
 
-            print(f"[MTF Structure] ✓ Structure analysis completed successfully")
+            vprint(f"[MTF Structure] ✓ Structure analysis completed successfully")
 
         except Exception as e:
-            print(f"[MTF Structure] Error fetching live data: {e}")
+            vprint(f"[MTF Structure] Error fetching live data: {e}")
             self.status_label.setText(f"Live: Error - {str(e)[:30]}")
 
     def _analyze_trend(self, candles) -> str:
@@ -541,7 +544,7 @@ class MTFStructureWidget(QWidget, AIAssistMixin):
     def on_mode_changed(self, is_demo: bool):
         """Handle demo/live mode changes"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"MTF Structure widget switching to {mode_text} mode")
+        vprint(f"MTF Structure widget switching to {mode_text} mode")
         self.update_data()
 
     def analyze_with_ai(self, prediction, widget_data):

@@ -130,14 +130,15 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
 
         self.commentary_feed = QTextEdit()
         self.commentary_feed.setReadOnly(True)
-        self.commentary_feed.setFont(QFont("Courier New", 9))
+        self.commentary_feed.setFont(QFont("Courier New", 11))
         self.commentary_feed.setStyleSheet("""
             QTextEdit {
                 background-color: #0A0E27;
                 border: 1px solid #334155;
                 border-radius: 5px;
-                color: #94A3B8;
+                color: #E2E8F0;
                 padding: 8px;
+                line-height: 1.6;
             }
         """)
         feed_layout.addWidget(self.commentary_feed)
@@ -591,11 +592,6 @@ class PriceActionCommentaryWidget(AIAssistMixin, QWidget):
         """Blink the LIVE indicator"""
         self.live_label.setStyleSheet("color: #FFFFFF;")
         QTimer.singleShot(200, lambda: self.live_label.setStyleSheet("color: #10B981;"))
-
-    def set_symbol(self, symbol: str):
-        """Update the symbol being analyzed"""
-        self.current_symbol = symbol
-        self.update_commentary()
 
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""

@@ -13,7 +13,9 @@ import pandas as pd
 
 from widgets.order_flow_detector import order_flow_detector, InstitutionalOrder
 from core.ai_assist_base import AIAssistMixin
+from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.verbose_mode_manager import vprint
 
 
 class OrderFlowListItem(QWidget):
@@ -225,13 +227,13 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
         """Update with live data from data_manager"""
         from core.data_manager import data_manager
 
-        print("🔴 [Order Flow] LIVE MODE - Attempting to fetch real order flow data")
+        vprint("🔴 [Order Flow] LIVE MODE - Attempting to fetch real order flow data")
 
         # Get real candle data to analyze for institutional activity
         candles = data_manager.get_candles()
 
         if not candles or len(candles) < 20:
-            print("    ⚠️ Not enough candle data for order flow analysis")
+            vprint("    ⚠️ Not enough candle data for order flow analysis")
             if hasattr(self, 'status_label'):
                 self.status_label.setText(f"Live: Waiting for data...")
             return
@@ -245,7 +247,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
 
     def analyze_real_order_flow(self, candles):
         """Analyze real candle data for institutional order flow"""
-        print(f"    → Analyzing {len(candles)} REAL candles for order flow patterns")
+        vprint(f"    → Analyzing {len(candles)} REAL candles for order flow patterns")
 
         # Clear old orders
         self.current_orders = []
@@ -271,7 +273,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
                 }
                 self.current_orders.append(order)
 
-        print(f"    ✓ Found {len(self.current_orders)} potential institutional orders from REAL data")
+        vprint(f"    ✓ Found {len(self.current_orders)} potential institutional orders from REAL data")
 
         # Update display
         self.refresh_display()
@@ -435,14 +437,14 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
             self.using_real_data = True
             # Clear demo data from detector
             order_flow_detector.order_history.clear()
-            print("[Order Flow] Switched from demo data to REAL MT5 data")
+            vprint("[Order Flow] Switched from demo data to REAL MT5 data")
 
         # Run scan on real data
         detected_orders = order_flow_detector.scan_for_orders(
             symbol, df, lookback
         )
 
-        print(f"[Order Flow] Detected {len(detected_orders)} institutional orders in real data")
+        vprint(f"[Order Flow] Detected {len(detected_orders)} institutional orders in real data")
 
         # Emit signals for new orders
         for order in detected_orders:
@@ -569,7 +571,7 @@ class InstitutionalOrderFlowWidget(AIAssistMixin, QWidget):
     def on_mode_changed(self, is_demo: bool):
         """Handle demo/live mode changes"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"Order Flow widget switching to {mode_text} mode")
+        vprint(f"Order Flow widget switching to {mode_text} mode")
         self.update_data()
 
     def analyze_with_ai(self, prediction, widget_data):

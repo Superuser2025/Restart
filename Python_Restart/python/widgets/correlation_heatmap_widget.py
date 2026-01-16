@@ -13,8 +13,11 @@ import pandas as pd
 
 from widgets.correlation_analyzer import correlation_analyzer
 from core.ai_assist_base import AIAssistMixin
+from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.verbose_mode_manager import vprint
 from core.multi_symbol_manager import get_all_symbols
+from core.verbose_mode_manager import vprint
 
 
 class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
@@ -58,7 +61,7 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
         """Update with live data - MULTI-SYMBOL support via MT5"""
         from core.data_manager import data_manager
 
-        print("    → [Correlation] Fetching multi-symbol data for correlation analysis")
+        vprint("    → [Correlation] Fetching multi-symbol data for correlation analysis")
 
         try:
             # STRATEGY 1: Fetch multi-symbol data directly from MT5
@@ -66,7 +69,7 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
 
             if multi_symbol_data and len(multi_symbol_data) >= 2:
                 # SUCCESS: We have real multi-symbol data!
-                print(f"    ✓ Got REAL data for {len(multi_symbol_data)} symbols from MT5")
+                vprint(f"    ✓ Got REAL data for {len(multi_symbol_data)} symbols from MT5")
 
                 # Calculate correlations
                 correlation_report = correlation_analyzer.calculate_correlations(
@@ -78,7 +81,7 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
                 # Update display
                 self.update_correlation_data(correlation_report)
                 self.status_label.setText(f"Live: {len(multi_symbol_data)} symbols analyzed")
-                print(f"    ✓ LIVE CORRELATION: {correlation_report['pairs_calculated']} pairs calculated")
+                vprint(f"    ✓ LIVE CORRELATION: {correlation_report['pairs_calculated']} pairs calculated")
                 return
 
             # STRATEGY 2: Try mt5_connector (JSON file approach)
@@ -86,7 +89,7 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
             all_symbols_data = mt5_connector.get_all_symbols_data()
 
             if all_symbols_data and len(all_symbols_data) >= 2:
-                print(f"    ✓ Got data for {len(all_symbols_data)} symbols from MT5 JSON")
+                vprint(f"    ✓ Got data for {len(all_symbols_data)} symbols from MT5 JSON")
                 correlation_report = correlation_analyzer.calculate_correlations(
                     all_symbols_data, short_period=20, long_period=100
                 )
@@ -99,7 +102,7 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
             self.status_label.setText("Live: Need at least 2 symbols")
 
         except Exception as e:
-            print(f"[Correlation] Error fetching live data: {e}")
+            vprint(f"[Correlation] Error fetching live data: {e}")
             import traceback
             traceback.print_exc()
             self.status_label.setText("Live: Error fetching data")
@@ -119,7 +122,7 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
             # Get all symbols for correlation
             symbols = get_all_symbols()
 
-            print(f"    → Fetching data from MT5 for {len(symbols)} symbols (correlation analysis)...")
+            vprint(f"    → Fetching data from MT5 for {len(symbols)} symbols (correlation analysis)...")
 
             for symbol in symbols:
                 try:
@@ -135,10 +138,10 @@ class CorrelationHeatmapWidget(QWidget, AIAssistMixin):
                             df['time'] = pd.to_datetime(df['time'], unit='s')
 
                         symbols_data[symbol] = df
-                        print(f"    ✓ {symbol}: Got {len(df)} candles")
+                        vprint(f"    ✓ {symbol}: Got {len(df)} candles")
 
                 except Exception as e:
-                    print(f"    ✗ {symbol}: Failed ({str(e)[:50]})")
+                    vprint(f"    ✗ {symbol}: Failed ({str(e)[:50]})")
                     continue
 
             return symbols_data
