@@ -675,6 +675,9 @@ class MainWindow(QMainWindow):
         # Update all widgets that use symbols
         if hasattr(self, 'scanner_widget'):
             self.scanner_widget.pairs_to_scan = symbols
+            # Update the symbol count label
+            if hasattr(self.scanner_widget, 'symbol_count_label'):
+                self.scanner_widget.symbol_count_label.setText(f"Scanning {len(symbols)} symbols")
             self.scanner_widget.scan_market()
         # Future: Update other widgets as needed
 

@@ -644,43 +644,44 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         vprint(f"[OpportunityScanner] ✓ Initial scan scheduled (100ms delay)")
 
     def load_scanner_config(self) -> List[str]:
-        """Load selected symbols from config file"""
-        config_path = os.path.join(os.path.dirname(__file__), '../config/scanner_config.json')
+        """Load selected symbols from Symbol Manager config (symbols.json)"""
+        # Use the SAME config file as Symbol Manager for consistency
+        config_path = os.path.join(os.path.dirname(__file__), '../config/symbols.json')
 
-        # Try to load from config
+        # Try to load from Symbol Manager config
         if os.path.exists(config_path):
             try:
                 with open(config_path, 'r') as f:
                     config = json.load(f)
-                    symbols = config.get('selected_symbols', [])
+                    symbols = config.get('symbols', [])
                     if symbols:
-                        vprint(f"[OpportunityScanner] Loaded {len(symbols)} symbols from config")
+                        vprint(f"[OpportunityScanner] Loaded {len(symbols)} symbols from Symbol Manager")
                         return symbols
             except Exception as e:
                 vprint(f"[OpportunityScanner] Error loading config: {e}")
 
-        # Default symbols (major forex pairs + popular assets)
+        # Default symbols (same as Symbol Manager defaults)
         default_symbols = [
             'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-            'NZDUSD', 'USDCHF', 'EURGBP', 'EURJPY', 'GBPJPY',
-            'XAUUSD', 'BTCUSD', 'US30', 'NAS100', 'SPX500'
+            'NZDUSD', 'USDCHF', 'EURGBP', 'EURJPY', 'GBPJPY'
         ]
         vprint(f"[OpportunityScanner] Using default symbols")
         return default_symbols
 
     def save_scanner_config(self, symbols: List[str]):
-        """Save selected symbols to config file"""
-        config_path = os.path.join(os.path.dirname(__file__), '../config/scanner_config.json')
+        """Save selected symbols to Symbol Manager config (symbols.json)"""
+        # Use the SAME config file as Symbol Manager for consistency
+        config_path = os.path.join(os.path.dirname(__file__), '../config/symbols.json')
 
         # Ensure config directory exists
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
 
-        config = {'selected_symbols': symbols}
+        config = {'symbols': symbols}  # Use 'symbols' key like Symbol Manager
 
         try:
             with open(config_path, 'w') as f:
                 json.dump(config, f, indent=2)
-            vprint(f"[OpportunityScanner] Saved {len(symbols)} symbols to config")
+            vprint(f"[OpportunityScanner] Saved {len(symbols)} symbols to Symbol Manager config")
         except Exception as e:
             vprint(f"[OpportunityScanner] Error saving config: {e}")
 
