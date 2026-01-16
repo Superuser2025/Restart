@@ -696,29 +696,37 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
                 ax.add_patch(rect)
 
             # Draw entry line (BLUE)
-            ax.axhline(y=entry, color='#3B82F6', linestyle='--', linewidth=2,
-                      label=f'Entry: {entry:.5f}', zorder=10)
+            ax.axhline(y=entry, color='#3B82F6', linestyle='--', linewidth=2, zorder=10)
 
             # Draw stop loss line (RED)
-            ax.axhline(y=sl, color='#EF4444', linestyle='--', linewidth=2,
-                      label=f'Stop Loss: {sl:.5f}', zorder=10)
+            ax.axhline(y=sl, color='#EF4444', linestyle='--', linewidth=2, zorder=10)
 
-            # Calculate and show pip distance
+            # Calculate pip distance
             pip_distance = abs(entry - sl)
             if self.current_symbol.endswith('JPY'):
                 pips = pip_distance * 100
             else:
                 pips = pip_distance * 10000
 
+            # Label the entry line directly
+            ax.text(29, entry, f'  Entry: {entry:.5f}',
+                   verticalalignment='center', horizontalalignment='left',
+                   color='#3B82F6', fontsize=9, weight='bold',
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='#0F172A', edgecolor='#3B82F6', linewidth=1.5))
+
+            # Label the stop loss line directly
+            ax.text(29, sl, f'  SL: {sl:.5f}',
+                   verticalalignment='center', horizontalalignment='left',
+                   color='#EF4444', fontsize=9, weight='bold',
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='#0F172A', edgecolor='#EF4444', linewidth=1.5))
+
             # Add direction indicator
             direction_color = '#10B981' if direction == 'BUY' else '#EF4444'
-            direction_text = f"{direction} @ {entry:.5f}\nSL: {sl:.5f}\n({pips:.1f} pips)"
+            direction_text = f"{direction}\n({pips:.1f} pips)"
             ax.text(0.02, 0.98, direction_text, transform=ax.transAxes,
                    fontsize=10, verticalalignment='top',
                    bbox=dict(boxstyle='round', facecolor=direction_color, alpha=0.3),
                    color='white', weight='bold')
-
-            ax.legend(loc='upper right', fontsize=8, facecolor='#1E293B', edgecolor='#334155', labelcolor='#F8FAFC')
         else:
             # No data available
             ax.text(0.5, 0.5, 'No chart data available', ha='center', va='center',
