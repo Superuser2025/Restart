@@ -4,19 +4,24 @@ Scans all pairs for high-probability trading setups in real-time
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                            QFrame, QScrollArea, QGridLayout, QSizePolicy, QDialog, QCheckBox)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+                            QFrame, QScrollArea, QGridLayout, QSizePolicy, QDialog, QCheckBox, QGraphicsOpacityEffect,
+                            QPushButton, QGroupBox)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve, pyqtProperty
 from PyQt6.QtGui import QFont, QMouseEvent
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import random
 import pandas as pd
+import json
+import os
 
 from core.opportunity_generator import opportunity_generator
 from core.market_analyzer import market_analyzer
 from core.ai_assist_base import AIAssistMixin
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 from core.ml_integration import ml_integration, get_ml_prediction  # ML INTEGRATION ADDED
+from core.verbose_mode_manager import vprint
+from core.symbol_manager import symbol_specs_manager
 
 
 class OpportunityCard(QFrame):
@@ -25,20 +30,28 @@ class OpportunityCard(QFrame):
     # Signal emitted when card is clicked
     clicked = pyqtSignal(dict)
 
-    def __init__(self, opportunity: Dict, parent=None):
+    def __init__(self, opportunity: Dict, is_new: bool = False, parent=None):
         super().__init__(parent)
         self.opportunity = opportunity
+        self.is_new = is_new  # Track if this is a new/updated card
         self.column_index = 0  # Will be set when added to grid
         self.setObjectName("OpportunityCard")
         self.setMouseTracking(True)  # Enable mouse tracking for hover effects
         self.setCursor(Qt.CursorShape.PointingHandCursor)  # Show hand cursor on hover
+        self.blink_count = 0  # Track number of blinks
+        self.blink_timer = None  # Timer for blinking
+        self.original_border_color = None  # Store original border color
         self.init_ui()
+
+        # Start blinking if this is a new card
+        if self.is_new:
+            QTimer.singleShot(100, self.start_blinking)
 
     def init_ui(self):
         """Initialize the opportunity card UI"""
-        # CRITICAL: Card must expand to fill grid cell
-        self.setMinimumHeight(90)
-        self.setMaximumHeight(95)
+        # CRITICAL: Card must expand to fill grid cell - REDUCED HEIGHT to fit better
+        self.setMinimumHeight(88)  # Reduced from 90
+        self.setMaximumHeight(92)  # Reduced from 95
         self.setMinimumWidth(50)  # Allow cards to shrink if needed
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,  # Expand horizontally to fill cell
@@ -151,6 +164,87 @@ class OpportunityCard(QFrame):
             self.clicked.emit(self.opportunity)
         super().mousePressEvent(event)
 
+    def start_blinking(self):
+        """Start the blinking animation to grab attention"""
+        # Store original border color based on quality score
+        score = self.opportunity['quality_score']
+        if score >= 85:
+            self.original_border_color = '#10B981'  # Green
+        elif score >= 70:
+            self.original_border_color = '#3B82F6'  # Blue
+        elif score >= 60:
+            self.original_border_color = '#F59E0B'  # Orange
+        else:
+            self.original_border_color = '#6B7280'  # Gray
+
+        # Start blink timer (blink every 300ms)
+        self.blink_timer = QTimer(self)
+        self.blink_timer.timeout.connect(self.toggle_blink)
+        self.blink_timer.start(300)  # Blink every 300ms
+
+    def toggle_blink(self):
+        """Toggle between highlighted and normal state"""
+        if self.blink_count >= 200:  # Blink for 1 minute (200 toggles × 300ms = 60 seconds)
+            # Stop blinking and restore original color
+            if self.blink_timer:
+                self.blink_timer.stop()
+                self.blink_timer = None
+            self.restore_original_style()
+            return
+
+        # Alternate between bright highlight and original color
+        if self.blink_count % 2 == 0:
+            # Highlight state - bright yellow/gold border
+            highlight_color = '#FFD700'  # Gold
+            bg_color = self.get_bg_color()
+            self.setStyleSheet(f"""
+                OpportunityCard {{
+                    background-color: {bg_color};
+                    border: 3px solid {highlight_color};
+                    border-radius: 8px;
+                    padding: 6px;
+                }}
+                OpportunityCard QLabel {{
+                    background-color: transparent;
+                    border: none;
+                }}
+            """)
+        else:
+            # Normal state
+            self.restore_original_style()
+
+        self.blink_count += 1
+
+    def restore_original_style(self):
+        """Restore the original card styling"""
+        score = self.opportunity['quality_score']
+        bg_color = self.get_bg_color()
+
+        self.setStyleSheet(f"""
+            OpportunityCard {{
+                background-color: {bg_color};
+                border: 2px solid {self.original_border_color};
+                border-radius: 8px;
+                padding: 6px;
+            }}
+            OpportunityCard QLabel {{
+                background-color: transparent;
+                border: none;
+            }}
+        """)
+
+    def get_bg_color(self):
+        """Get background color based on quality score"""
+        score = self.opportunity['quality_score']
+        if score >= 85:
+            return '#064E3B'  # Green
+        elif score >= 70:
+            return '#1E3A8A'  # Blue
+        elif score >= 60:
+            return '#78350F'  # Orange
+        else:
+            return '#374151'  # Gray
+
 
 class TimeframeGroup(QWidget):
     """Group widget for a specific timeframe range - cards flow left to right"""
@@ -160,19 +254,21 @@ class TimeframeGroup(QWidget):
         self.timeframes = timeframes
         self.opportunities = []
         self.current_popup = None  # Store reference to current popup
+        self.previous_opportunity_keys = set()  # Track previous opportunities for new detection
         self.init_ui()
 
     def init_ui(self):
         """Initialize the group UI"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
+        layout.setSpacing(0)
 
-        # Scroll area
+        # Scroll area - REDUCED height to fit in parent container
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setMinimumHeight(330)  # Height for 3 rows of cards (12 cards / 4 per row = 3 rows)
+        scroll.setMinimumHeight(305)  # Reduced from 330 to 305 to fit better
+        scroll.setMaximumHeight(305)  # Lock height to prevent overflow
         scroll.setStyleSheet("""
             QScrollArea {
                 background-color: #0F1729;
@@ -185,8 +281,8 @@ class TimeframeGroup(QWidget):
 
         # Grid layout - 4 columns, cards flow left-to-right
         self.grid_layout = QGridLayout(scroll_content)
-        self.grid_layout.setSpacing(4)
-        self.grid_layout.setContentsMargins(4, 4, 4, 4)
+        self.grid_layout.setSpacing(3)  # Reduced from 4 to 3
+        self.grid_layout.setContentsMargins(3, 3, 3, 3)  # Reduced from 4 to 3
 
         # CRITICAL: Make all columns equal width so cards resize properly
         for col in range(4):
@@ -199,6 +295,18 @@ class TimeframeGroup(QWidget):
         """Update opportunities - LIMIT TO 12 CARDS MAX, 3 rows × 4 columns"""
         # CRITICAL: Hard limit to 12 cards per timeframe section
         self.opportunities = opportunities[:12]
+
+        # Track current opportunity keys to detect NEW cards
+        current_opportunity_keys = {
+            (opp['symbol'], opp['timeframe'], opp['direction'])
+            for opp in self.opportunities
+        }
+
+        # Detect NEW opportunities (not in previous set)
+        new_opportunity_keys = current_opportunity_keys - self.previous_opportunity_keys
+
+        # Update previous keys for next comparison
+        self.previous_opportunity_keys = current_opportunity_keys
 
         # Clear existing cards
         while self.grid_layout.count():
@@ -244,7 +352,12 @@ class TimeframeGroup(QWidget):
 
         # Add cards in 4-column grid (max 3 rows × 4 cols = 12 cards)
         for idx, opp in enumerate(self.opportunities):
-            card = OpportunityCard(opp)
+            # Check if this opportunity is NEW
+            opp_key = (opp['symbol'], opp['timeframe'], opp['direction'])
+            is_new_card = opp_key in new_opportunity_keys
+
+            # Create card with is_new flag
+            card = OpportunityCard(opp, is_new=is_new_card)
             card.setCursor(Qt.CursorShape.PointingHandCursor)
 
             row = idx // 4  # 4 cards per row
@@ -261,8 +374,8 @@ class TimeframeGroup(QWidget):
         # Fill remaining slots with spacers if < 12 cards (for even layout)
         for idx in range(len(self.opportunities), 12):
             spacer = QWidget()
-            spacer.setMinimumHeight(90)
-            spacer.setMaximumHeight(95)
+            spacer.setMinimumHeight(88)  # Match reduced card height
+            spacer.setMaximumHeight(92)  # Match reduced card height
             spacer.setMinimumWidth(50)
             spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             spacer.setStyleSheet("background-color: transparent;")
@@ -321,11 +434,173 @@ class TimeframeGroup(QWidget):
             self.current_popup.move(popup_x, popup_y)
             self.current_popup.show()
 
-            print(f"[MiniChart] Card at Y:{card_global_pos.y()}, Column:{column}, Popup {'RIGHT' if column in [0,2] else 'LEFT'} at X:{popup_x} Y:{popup_y}")
+            vprint(f"[MiniChart] Card at Y:{card_global_pos.y()}, Column:{column}, Popup {'RIGHT' if column in [0,2] else 'LEFT'} at X:{popup_x} Y:{popup_y}")
         else:
             # Fallback if sender not found
             self.current_popup = MiniChartPopup(opportunity, parent=None)
             self.current_popup.show()
+
+
+class SymbolSelectorDialog(QDialog):
+    """Dialog for selecting which symbols to scan for opportunities"""
+
+    def __init__(self, current_symbols: List[str], parent=None):
+        super().__init__(parent)
+        self.current_symbols = current_symbols
+        self.selected_symbols = current_symbols.copy()
+        self.checkboxes = {}
+        self.init_ui()
+
+    def init_ui(self):
+        """Initialize the symbol selector dialog UI"""
+        self.setWindowTitle("Select Symbols to Scan")
+        self.setMinimumSize(700, 600)
+
+        layout = QVBoxLayout(self)
+
+        # Title
+        title = QLabel("Select which symbols to scan for opportunities")
+        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #00aaff; padding: 10px;")
+        layout.addWidget(title)
+
+        # Scroll area for checkboxes
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+
+        # Get all symbols from symbol_specs_manager
+        all_symbols = symbol_specs_manager.get_all_symbols()
+
+        # Group by asset class
+        asset_classes = ['forex', 'stock', 'index', 'commodity', 'crypto']
+
+        for asset_class in asset_classes:
+            symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
+            if not symbols:
+                continue
+
+            # Create group box
+            group_box = QGroupBox(asset_class.upper())
+            group_box.setStyleSheet("""
+                QGroupBox {
+                    color: #00aaff;
+                    font-weight: bold;
+                    font-size: 12pt;
+                    border: 2px solid #00aaff;
+                    border-radius: 5px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 5px;
+                }
+            """)
+
+            group_layout = QVBoxLayout()
+
+            # Add "Select All" / "Deselect All" for this group
+            header_layout = QHBoxLayout()
+            select_all_btn = QPushButton(f"Select All {asset_class.capitalize()}")
+            select_all_btn.clicked.connect(lambda checked, ac=asset_class: self.select_all_in_class(ac, True))
+            deselect_all_btn = QPushButton(f"Deselect All {asset_class.capitalize()}")
+            deselect_all_btn.clicked.connect(lambda checked, ac=asset_class: self.select_all_in_class(ac, False))
+
+            header_layout.addWidget(select_all_btn)
+            header_layout.addWidget(deselect_all_btn)
+            header_layout.addStretch()
+            group_layout.addLayout(header_layout)
+
+            # Add checkboxes for symbols
+            for symbol in sorted(symbols):
+                specs = symbol_specs_manager.get_symbol_specs(symbol)
+                description = specs.description if specs else symbol
+
+                checkbox = QCheckBox(f"{symbol} - {description}")
+                checkbox.setChecked(symbol in self.current_symbols)
+                checkbox.setStyleSheet("color: #ffffff; padding: 5px;")
+                checkbox.stateChanged.connect(lambda state, s=symbol: self.on_symbol_toggled(s, state))
+
+                self.checkboxes[symbol] = checkbox
+                group_layout.addWidget(checkbox)
+
+            group_box.setLayout(group_layout)
+            scroll_layout.addWidget(group_box)
+
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+
+        save_btn = QPushButton("Save Selection")
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981;
+                color: white;
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+            }
+        """)
+        save_btn.clicked.connect(self.accept)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6B7280;
+                color: white;
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #4B5563;
+            }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+
+        button_layout.addStretch()
+        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(save_btn)
+
+        layout.addLayout(button_layout)
+
+        # Apply dark theme
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e1e;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+        """)
+
+    def on_symbol_toggled(self, symbol: str, state: int):
+        """Handle symbol checkbox toggle"""
+        if state == Qt.CheckState.Checked.value:
+            if symbol not in self.selected_symbols:
+                self.selected_symbols.append(symbol)
+        else:
+            if symbol in self.selected_symbols:
+                self.selected_symbols.remove(symbol)
+
+    def select_all_in_class(self, asset_class: str, select: bool):
+        """Select or deselect all symbols in an asset class"""
+        symbols = symbol_specs_manager.get_symbols_by_asset_class(asset_class)
+        for symbol in symbols:
+            if symbol in self.checkboxes:
+                self.checkboxes[symbol].setChecked(select)
+
+    def get_selected_symbols(self) -> List[str]:
+        """Return list of selected symbols"""
+        return self.selected_symbols
 
 
 class OpportunityScannerWidget(AIAssistMixin, QWidget):
@@ -344,13 +619,9 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         self.opportunities = []
 
-        # Expanded symbol list
-        self.pairs_to_scan = [
-            'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-            'NZDUSD', 'USDCHF', 'EURGBP', 'EURJPY', 'GBPJPY',
-            'AUDJPY', 'EURAUD', 'EURNZD', 'GBPAUD', 'GBPNZD',
-            'NZDJPY', 'CHFJPY', 'CADCHF', 'AUDCAD', 'AUDNZD'
-        ]
+        # Load selected symbols from config (or use defaults)
+        self.pairs_to_scan = self.load_scanner_config()
+        vprint(f"[OpportunityScanner] Loaded {len(self.pairs_to_scan)} symbols to scan: {self.pairs_to_scan}")
 
         self.mt5_connector = None
         self.using_real_data = False
@@ -362,27 +633,110 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.setup_ai_assist("opportunity_scanner")
 
         # Auto-scan timer
-        print(f"[OpportunityScanner] Initializing scanner widget...")
+        vprint(f"[OpportunityScanner] Initializing scanner widget...")
         self.scan_timer = QTimer()
         self.scan_timer.timeout.connect(self.scan_market)
         self.scan_timer.start(30000)
-        print(f"[OpportunityScanner] ✓ Scanner timer started (30s interval)")
+        vprint(f"[OpportunityScanner] ✓ Scanner timer started (30s interval)")
 
         # Initial scan
         QTimer.singleShot(100, self.scan_market)
-        print(f"[OpportunityScanner] ✓ Initial scan scheduled (100ms delay)")
+        vprint(f"[OpportunityScanner] ✓ Initial scan scheduled (100ms delay)")
+
+    def load_scanner_config(self) -> List[str]:
+        """Load selected symbols from Symbol Manager config (symbols.json)"""
+        # Use the SAME config file as Symbol Manager for consistency
+        config_path = os.path.join(os.path.dirname(__file__), '../config/symbols.json')
+
+        # Try to load from Symbol Manager config
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    symbols = config.get('symbols', [])
+                    if symbols:
+                        vprint(f"[OpportunityScanner] Loaded {len(symbols)} symbols from Symbol Manager")
+                        return symbols
+            except Exception as e:
+                vprint(f"[OpportunityScanner] Error loading config: {e}")
+
+        # Default symbols (same as Symbol Manager defaults)
+        default_symbols = [
+            'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+            'NZDUSD', 'USDCHF', 'EURGBP', 'EURJPY', 'GBPJPY'
+        ]
+        vprint(f"[OpportunityScanner] Using default symbols")
+        return default_symbols
+
+    def save_scanner_config(self, symbols: List[str]):
+        """Save selected symbols to Symbol Manager config (symbols.json)"""
+        # Use the SAME config file as Symbol Manager for consistency
+        config_path = os.path.join(os.path.dirname(__file__), '../config/symbols.json')
+
+        # Ensure config directory exists
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+        config = {'symbols': symbols}  # Use 'symbols' key like Symbol Manager
+
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            vprint(f"[OpportunityScanner] Saved {len(symbols)} symbols to Symbol Manager config")
+        except Exception as e:
+            vprint(f"[OpportunityScanner] Error saving config: {e}")
+
+    def open_symbol_selector(self):
+        """Open symbol selector dialog"""
+        dialog = SymbolSelectorDialog(self.pairs_to_scan, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected = dialog.get_selected_symbols()
+            if selected:
+                self.pairs_to_scan = selected
+                self.save_scanner_config(selected)
+                vprint(f"[OpportunityScanner] Updated symbols to scan: {self.pairs_to_scan}")
+
+                # Update symbol count label
+                self.symbol_count_label.setText(f"Scanning {len(self.pairs_to_scan)} symbols")
+
+                # Rescan market with new symbols
+                self.scan_market()
 
     def init_ui(self):
         """Initialize the user interface - NO HEADER"""
-        self.setMinimumHeight(320)  # Increased so cards don't get cut off
+        self.setMinimumHeight(310)  # Optimized to fit 3 rows without cutoff
+        self.setMaximumHeight(315)  # Lock height to prevent overflow
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)  # No margins - save space
         layout.setSpacing(0)  # No spacing - save space
 
-        # Minimal header for AI checkbox only
+        # Minimal header for settings button and AI checkbox
         header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(5, 2, 5, 2)
+        header_layout.setContentsMargins(3, 2, 3, 2)
+
+        # Settings button on the left
+        settings_btn = QPushButton("⚙️ Select Symbols")
+        settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3B82F6;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #2563EB;
+            }
+        """)
+        settings_btn.clicked.connect(self.open_symbol_selector)
+        header_layout.addWidget(settings_btn)
+
+        # Symbol count label
+        self.symbol_count_label = QLabel(f"Scanning {len(self.pairs_to_scan)} symbols")
+        self.symbol_count_label.setStyleSheet("color: #94A3B8; font-size: 9pt; padding: 0 10px;")
+        header_layout.addWidget(self.symbol_count_label)
+
         header_layout.addStretch()
         self.ai_checkbox_placeholder = header_layout
         layout.addLayout(header_layout)
@@ -436,12 +790,12 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.mt5_connector = mt5_connector
         if not self.using_real_data:
             self.using_real_data = True
-            print("[Opportunity Scanner] Switched to REAL MT5 data")
+            vprint("[Opportunity Scanner] Switched to REAL MT5 data")
             self.scan_market()
 
     def scan_market(self):
         """Scan all pairs for opportunities - LIVE MODE USES REAL DATA ONLY"""
-        print("🔴 [Opportunity Scanner] Scanning market...")
+        vprint("🔴 [Opportunity Scanner] Scanning market...")
         self.blink_status()
 
         current_time = datetime.now()
@@ -457,12 +811,12 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         new_opportunities = []
 
         if is_demo_mode():
-            print("    🟡 DEMO MODE - Generating fake opportunities")
+            vprint("    🟡 DEMO MODE - Generating fake opportunities")
             new_opportunities = self.generate_opportunities()
         else:
-            print("    🔴 LIVE MODE - Scanning REAL MT5 data from data_manager")
+            vprint("    🔴 LIVE MODE - Scanning REAL MT5 data from data_manager")
             new_opportunities = self.scan_real_market_data_from_data_manager()
-            print(f"    ✓ Found {len(new_opportunities)} REAL opportunities from live data")
+            vprint(f"    ✓ Found {len(new_opportunities)} REAL opportunities from live data")
 
             # CRITICAL: DO NOT fallback to fake data in live mode
             # If no opportunities, that's reality - show "No Opportunities"
@@ -499,7 +853,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         4. Detects real patterns from price data
         5. Scores by confluence (0-100)
         """
-        print("[Scanner] Generating PROFESSIONAL opportunities with real analysis...")
+        vprint("[Scanner] Generating PROFESSIONAL opportunities with real analysis...")
 
         # Use professional opportunity generator
         all_opportunities = opportunity_generator.generate_opportunities(
@@ -508,11 +862,11 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             max_per_group=20  # Generate enough to filter down
         )
 
-        print(f"[Scanner] Generated {len(all_opportunities)} opportunities from market analysis")
+        vprint(f"[Scanner] Generated {len(all_opportunities)} opportunities from market analysis")
 
         # FALLBACK: If MT5 unavailable or no opportunities, generate synthetic ones
         if len(all_opportunities) < 5:
-            print("[Scanner] Low opportunity count - supplementing with synthetic data...")
+            vprint("[Scanner] Low opportunity count - supplementing with synthetic data...")
             opportunities = self.generate_synthetic_opportunities()
             return opportunities
 
@@ -622,7 +976,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         if multi_symbol_data and len(multi_symbol_data) > 0:
             # SUCCESS: We have multi-symbol + multi-timeframe data from MT5!
-            print(f"    ✓ Fetched REAL data for {len(multi_symbol_data)} symbol-timeframe pairs from MT5")
+            vprint(f"    ✓ Fetched REAL data for {len(multi_symbol_data)} symbol-timeframe pairs from MT5")
 
             # Scan each symbol-timeframe combination for opportunities
             for key, df in multi_symbol_data.items():
@@ -640,16 +994,16 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 opp = self.analyze_opportunity(symbol, timeframe, df)
                 if opp:
                     opportunities.append(opp)
-                    print(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
+                    vprint(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
 
-            print(f"    ✓ Found {len(opportunities)} REAL opportunities across {len(multi_symbol_data)} symbol-timeframe pairs")
+            vprint(f"    ✓ Found {len(opportunities)} REAL opportunities across {len(multi_symbol_data)} symbol-timeframe pairs")
             return opportunities
 
         # STRATEGY 2: Try mt5_connector (JSON file approach)
         all_symbols_data = mt5_connector.get_all_symbols_data()
 
         if all_symbols_data and len(all_symbols_data) > 0:
-            print(f"    ✓ Got REAL data for {len(all_symbols_data)} symbols from MT5 JSON")
+            vprint(f"    ✓ Got REAL data for {len(all_symbols_data)} symbols from MT5 JSON")
 
             for symbol, df in all_symbols_data.items():
                 if df is None or len(df) < 20:
@@ -659,17 +1013,17 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                     opp = self.analyze_opportunity(symbol, timeframe, df)
                     if opp:
                         opportunities.append(opp)
-                        print(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
+                        vprint(f"    ✓ {symbol} {timeframe}: {opp['direction']} setup (quality: {opp['quality_score']})")
 
-            print(f"    ✓ Found {len(opportunities)} REAL opportunities from JSON")
+            vprint(f"    ✓ Found {len(opportunities)} REAL opportunities from JSON")
             return opportunities
 
         # FALLBACK: Use data_manager for single symbol (current chart symbol)
-        print("    ⚠️ MT5 multi-symbol data not available, using data_manager for current symbol only")
+        vprint("    ⚠️ MT5 multi-symbol data not available, using data_manager for current symbol only")
         candles = data_manager.get_candles()
 
         if not candles or len(candles) < 50:
-            print("    ⚠️ Not enough real candle data yet")
+            vprint("    ⚠️ Not enough real candle data yet")
             return []
 
         # Convert to DataFrame for analysis
@@ -677,14 +1031,14 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         current_symbol = data_manager.current_price.get('symbol', 'EURUSD')
         current_timeframe = data_manager.candle_buffer.timeframe or 'M15'
 
-        print(f"    → Analyzing {len(candles)} REAL candles for {current_symbol} {current_timeframe}")
+        vprint(f"    → Analyzing {len(candles)} REAL candles for {current_symbol} {current_timeframe}")
 
         # Analyze current symbol for opportunities
         opp = self.analyze_opportunity(current_symbol, current_timeframe, df)
         if opp:
             opportunities.append(opp)
             setup_desc = ', '.join(opp.get('confluence_reasons', ['Technical Setup']))
-            print(f"    ✓ REAL opportunity found: {opp['direction']} {setup_desc} (quality: {opp['quality_score']})")
+            vprint(f"    ✓ REAL opportunity found: {opp['direction']} {setup_desc} (quality: {opp['quality_score']})")
 
         return opportunities
 
@@ -696,7 +1050,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
             # Check if MT5 is initialized
             if not mt5.initialize():
-                print("    ⚠️ MT5 not initialized")
+                vprint("    ⚠️ MT5 not initialized")
                 return {}
 
             symbols_data = {}
@@ -717,7 +1071,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 'H4': mt5.TIMEFRAME_H4
             }
 
-            print(f"    → Fetching {len(priority_pairs)} symbols × {len(timeframes_to_fetch)} timeframes from MT5...")
+            vprint(f"    → Fetching {len(priority_pairs)} symbols × {len(timeframes_to_fetch)} timeframes from MT5...")
 
             for symbol in priority_pairs:
                 for tf_name, tf_constant in timeframes_to_fetch.items():
@@ -741,20 +1095,20 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                             symbols_data[key] = df
 
                             if tf_name == 'M5':  # Print once per symbol
-                                print(f"    ✓ {symbol}: Fetched {len(timeframes_to_fetch)} timeframes (100 candles each)")
+                                vprint(f"    ✓ {symbol}: Fetched {len(timeframes_to_fetch)} timeframes (100 candles each)")
 
                     except Exception as e:
-                        print(f"    ✗ {symbol} {tf_name}: Failed ({str(e)[:30]})")
+                        vprint(f"    ✗ {symbol} {tf_name}: Failed ({str(e)[:30]})")
                         continue
 
-            print(f"    → Total symbol-timeframe combinations: {len(symbols_data)}")
+            vprint(f"    → Total symbol-timeframe combinations: {len(symbols_data)}")
             return symbols_data
 
         except ImportError:
-            print("    ⚠️ MetaTrader5 module not available")
+            vprint("    ⚠️ MetaTrader5 module not available")
             return {}
         except Exception as e:
-            print(f"    ⚠️ MT5 fetch error: {e}")
+            vprint(f"    ⚠️ MT5 fetch error: {e}")
             return {}
 
     def scan_real_market_data(self) -> List[Dict]:
@@ -803,13 +1157,13 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
             # TEMPORARILY LOWERED from 65 to 50 to see more opportunities
             if quality_score < 50:
-                print(f"    ✗ {symbol} {timeframe}: Quality too low ({quality_score})")
+                vprint(f"    ✗ {symbol} {timeframe}: Quality too low ({quality_score})")
                 return None
 
             if not reasons:
                 reasons = ['Price Action', 'Technical Setup']
 
-            print(f"    ✓ {symbol} {timeframe}: OPPORTUNITY FOUND! Quality={quality_score}, Reasons={reasons}")
+            vprint(f"    ✓ {symbol} {timeframe}: OPPORTUNITY FOUND! Quality={quality_score}, Reasons={reasons}")
 
             # Determine setup type from reasons
             if 'Trend Alignment' in reasons and 'High R:R' in reasons:
@@ -844,7 +1198,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 if (trend == 'BUY' and ml_signal == 'BUY') or (trend == 'SELL' and ml_signal == 'SELL'):
                     ml_boost = 10  # Boost quality if ML agrees
                     reasons.append('ML Confirmation')
-                    print(f"    ✓ ML agrees with {trend} signal (confidence: {ml_confidence}%)")
+                    vprint(f"    ✓ ML agrees with {trend} signal (confidence: {ml_confidence}%)")
 
                 # Regime matching
                 ml_regime_match = ml_pred.get('regime_favorable', True)
@@ -885,7 +1239,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             }
 
         except Exception as e:
-            print(f"    ✗ {symbol} {timeframe}: Analysis error - {str(e)}")
+            vprint(f"    ✗ {symbol} {timeframe}: Analysis error - {str(e)}")
             import traceback
             traceback.print_exc()
             return None
@@ -894,7 +1248,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         """Update all three groups with filtered opportunities - APPLIES INSTITUTIONAL FILTERS"""
         from core.filter_manager import filter_manager
 
-        print(f"\n[Scanner] update_display() called with {len(self.opportunities)} opportunities")
+        vprint(f"\n[Scanner] update_display() called with {len(self.opportunities)} opportunities")
 
         # Apply institutional filters to all opportunities
         filtered_opportunities = [
@@ -902,25 +1256,25 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             if filter_manager.filter_opportunity(opp)
         ]
 
-        print(f"[Scanner] After filter_manager: {len(filtered_opportunities)} opportunities passed")
+        vprint(f"[Scanner] After filter_manager: {len(filtered_opportunities)} opportunities passed")
 
         # Separate by timeframe
         short_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['M1', 'M5', 'M15']]
         medium_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['M30', 'H1', 'H2']]
         long_term = [opp for opp in filtered_opportunities if opp['timeframe'] in ['H4', 'H8', 'D1']]
 
-        print(f"[Scanner] Timeframe split: Short={len(short_term)}, Medium={len(medium_term)}, Long={len(long_term)}")
+        vprint(f"[Scanner] Timeframe split: Short={len(short_term)}, Medium={len(medium_term)}, Long={len(long_term)}")
 
         # Update each group (max 12 per group = 3 rows x 4 columns)
         self.short_group.update_opportunities(short_term[:12])
         self.mid_group.update_opportunities(medium_term[:12])
         self.long_group.update_opportunities(long_term[:12])
 
-        print(f"[Scanner] Total opportunities: {len(self.opportunities)}, After filters: {len(filtered_opportunities)}")
+        vprint(f"[Scanner] Total opportunities: {len(self.opportunities)}, After filters: {len(filtered_opportunities)}")
 
     def refresh_with_filters(self):
         """Force refresh of display with current filter settings"""
-        print("[Scanner] Refreshing with new filter settings...")
+        vprint("[Scanner] Refreshing with new filter settings...")
         self.update_display()
 
     def blink_status(self):
@@ -949,7 +1303,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
     def on_mode_changed(self, is_demo: bool):
         """Handle demo/live mode changes"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"Opportunity Scanner switching to {mode_text} mode")
+        vprint(f"Opportunity Scanner switching to {mode_text} mode")
         self.update_data()
 
     def analyze_with_ai(self, prediction, widget_data):

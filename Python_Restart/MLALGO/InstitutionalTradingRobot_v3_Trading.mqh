@@ -663,35 +663,37 @@ void ExecuteTrade(double risk_percent, double slippage)
     }
 
     //═══════════════════════════════════════════════════════════════
-    // MACHINE LEARNING FILTER (if enabled)
+    // MACHINE LEARNING FILTER (Multi-Symbol File-Based System)
     //═══════════════════════════════════════════════════════════════
-    if(ml_system != NULL && g_MLEnabled)
+    if(g_MLEnabled)
     {
-        // Extract current market features
-        ml_features_extracted = ml_system.ExtractCurrentFeatures(ml_features);
-
-        if(ml_features_extracted)
+        // Read prediction for current symbol from multi-symbol prediction.json
+        if(ml_reader.ReadPrediction(Symbol()))
         {
-            // Get ML prediction
-            double adjusted_lot_size = 0.01;  // Will be calculated later
-            bool ml_approved = ml_system.ShouldEnterTrade(ml_features, adjusted_lot_size);
+            // Check if ML approves this trade
+            bool ml_approved = ml_reader.ShouldEnterTrade();
+
+            string ml_summary = ml_reader.GetSummary();
 
             if(!ml_approved)
             {
-                AddComment("🤖 ML FILTER: Trade rejected (low probability/confidence)", clrRed, PRIORITY_CRITICAL);
-                AddPriceActionComment("❌ Trade filtered by ML system", clrRed, PRIORITY_CRITICAL, TimeCurrent());
+                AddComment("🤖 ML FILTER: " + ml_summary, clrRed, PRIORITY_CRITICAL);
+                AddPriceActionComment("❌ " + ml_summary, clrRed, PRIORITY_CRITICAL, TimeCurrent());
+                Print("ML DECISION: Trade rejected for ", Symbol(), " - ", ml_summary);
                 has_active_pattern = false;
                 return;
             }
             else
             {
-                AddComment("🤖 ML APPROVED: Trade passed ML filter", clrLime, PRIORITY_IMPORTANT);
-                AddPriceActionComment("✅ ML approved this trade setup", clrLime, PRIORITY_IMPORTANT, TimeCurrent());
+                AddComment("🤖 ML APPROVED: " + ml_summary, clrLime, PRIORITY_IMPORTANT);
+                AddPriceActionComment("✅ " + ml_summary, clrLime, PRIORITY_IMPORTANT, TimeCurrent());
+                Print("ML DECISION: Trade approved for ", Symbol(), " - ", ml_summary);
             }
         }
         else
         {
-            AddComment("⚠ ML feature extraction failed - proceeding without ML", clrOrange, PRIORITY_INFO);
+            AddComment("⚠ ML prediction file not found - proceeding without ML", clrOrange, PRIORITY_INFO);
+            Print("WARNING: Could not read ML prediction for ", Symbol(), " - allowing trade (fail-safe mode)");
         }
     }
 

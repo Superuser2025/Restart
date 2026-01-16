@@ -28,10 +28,13 @@ from widgets.risk_reward_widget import RiskRewardWidget
 from widgets.equity_curve_widget import EquityCurveWidget
 from widgets.trade_journal_widget import TradeJournalWidget
 from widgets.dashboard_cards_widget import DashboardCardsWidget
+from widgets.trade_validator_widget import TradeValidatorWidget
+from widgets.wyckoff_chart_widget import WyckoffChartWidget
 
 from core.mt5_connector import MT5Connector
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode
 from core.multi_symbol_manager import symbol_manager, get_all_symbols
+from core.verbose_mode_manager import verbose_mode_manager, is_verbose, vprint
 
 
 class EnhancedMainWindow(QMainWindow):
@@ -81,8 +84,8 @@ class EnhancedMainWindow(QMainWindow):
 
         # === OPPORTUNITY SCANNER ===
         self.scanner_widget = OpportunityScannerWidget()
-        self.scanner_widget.setMinimumHeight(300)  # Increased from 260 to 300
-        self.scanner_widget.setMaximumHeight(330)  # Increased from 280 to 330
+        self.scanner_widget.setMinimumHeight(310)  # Optimized to show all 3 rows
+        self.scanner_widget.setMaximumHeight(315)  # Match widget's own max height
         self.scanner_widget.set_mt5_connector(self.mt5_connector)
         main_layout.addWidget(self.scanner_widget)
 
@@ -141,11 +144,18 @@ class EnhancedMainWindow(QMainWindow):
         self.chart_panel.timeframe_changed.connect(self.on_timeframe_changed)
         self.chart_panel.symbol_changed.connect(self.on_symbol_changed)  # CRITICAL: Connect symbol changes!
         self.chart_panel.display_mode_changed.connect(self.on_display_mode_changed)  # CRITICAL: Connect MAX MODE!
-        layout.addWidget(self.chart_panel, 4)  # 80% height - give chart MORE space!
+        layout.addWidget(self.chart_panel, 5)  # Main chart gets proportional space
 
         # === ANALYSIS TABS ===
         self.analysis_tabs = QTabWidget()
         self.analysis_tabs.setTabPosition(QTabWidget.TabPosition.North)
+
+        # Tab 0: TRADE VALIDATOR
+        validator_tab = QWidget()
+        validator_layout = QVBoxLayout(validator_tab)
+        self.validator_widget = TradeValidatorWidget()
+        validator_layout.addWidget(self.validator_widget)
+        self.analysis_tabs.addTab(validator_tab, "🎯 Trade Check")
 
         # Tab 1: PRICE ACTION COMMENTARY
         commentary_tab = QWidget()
@@ -189,7 +199,18 @@ class EnhancedMainWindow(QMainWindow):
         news_layout.addWidget(self.news_widget)
         self.analysis_tabs.addTab(news_tab, "📰 News")
 
-        layout.addWidget(self.analysis_tabs, 1)  # 20% height
+        # Tab 7: WYCKOFF CHART
+        wyckoff_chart_tab = QWidget()
+        wyckoff_chart_layout = QVBoxLayout(wyckoff_chart_tab)
+        wyckoff_chart_layout.setContentsMargins(0, 0, 0, 0)
+        self.wyckoff_chart_widget = WyckoffChartWidget()
+        wyckoff_chart_layout.addWidget(self.wyckoff_chart_widget)
+        self.analysis_tabs.addTab(wyckoff_chart_tab, "📊 Wyckoff Chart")
+
+        # Connect validator to chart widget
+        self.validator_widget.wyckoff_analysis_ready.connect(self.on_wyckoff_analysis_ready)
+
+        layout.addWidget(self.analysis_tabs, 6)  # Extra space to compensate for tab headers
 
         return widget
 
@@ -257,6 +278,9 @@ class EnhancedMainWindow(QMainWindow):
             self.dashboard_cards.set_symbol(symbol)
 
         # Update ALL analysis tab widgets with new symbol
+        if hasattr(self, 'validator_widget'):
+            self.validator_widget.set_symbol(symbol)
+
         if hasattr(self, 'commentary_widget'):
             self.commentary_widget.set_symbol(symbol)
 
@@ -291,35 +315,58 @@ class EnhancedMainWindow(QMainWindow):
         if hasattr(self, 'journal_widget'):
             self.journal_widget.set_symbol(symbol)
 
+        # Note: Wyckoff chart widget doesn't need set_symbol() - it updates via signal
+
         self.update_all_data()
 
     def on_timeframe_changed(self, timeframe: str):
         """Handle timeframe change"""
         self.current_timeframe = timeframe
         self.status_label.setText(f"Timeframe changed to: {timeframe}")
+
+        # Sync Wyckoff chart if it has data
+        if hasattr(self, 'wyckoff_chart_widget') and self.wyckoff_chart_widget.wyckoff_data:
+            vprint(f"[Main Window] Main chart timeframe changed to {timeframe}, syncing Wyckoff chart")
+            self.wyckoff_chart_widget.update_chart(
+                self.wyckoff_chart_widget.current_symbol,
+                self.wyckoff_chart_widget.wyckoff_data,
+                timeframe
+            )
+
         self.update_all_data()
+
+    def on_wyckoff_analysis_ready(self, symbol: str, wyckoff_data: dict):
+        """Handle Wyckoff analysis completion - update chart widget"""
+        vprint(f"[Main Window] Wyckoff analysis ready for {symbol}")
+        if hasattr(self, 'wyckoff_chart_widget'):
+            # Pass the main chart's current timeframe for alignment
+            main_timeframe = self.current_timeframe if hasattr(self, 'current_timeframe') else 'H4'
+            self.wyckoff_chart_widget.update_chart(symbol, wyckoff_data, main_timeframe)
+            vprint(f"[Main Window] Wyckoff chart updated for {symbol} ({main_timeframe})")
+            # Automatically switch to Wyckoff Chart tab to show the results
+            self.analysis_tabs.setCurrentWidget(self.analysis_tabs.widget(7))  # Tab 8 is index 7
 
     def on_display_mode_changed(self, is_max_mode: bool):
         """Handle MAX MODE toggle - hide/show ONLY analysis tabs to maximize chart in center area"""
-        print(f"[DEBUG] MAX MODE toggled: is_max_mode={is_max_mode}")
+        vprint(f"[DEBUG] MAX MODE toggled: is_max_mode={is_max_mode}")
 
         if is_max_mode:
             # MAX MODE: Hide ONLY the analysis tabs below chart
             # Keep left panel, right panel, and scanner visible!
-            print("[DEBUG] Entering MAX MODE - hiding analysis tabs only")
+            vprint("[DEBUG] Entering MAX MODE - hiding analysis tabs only")
 
             # Hide ONLY analysis tabs below chart - chart expands to fill blue rectangle
             self.analysis_tabs.setVisible(False)
 
-            print("[DEBUG] MAX MODE active - chart fills blue rectangle, all panels still visible")
+            vprint("[DEBUG] MAX MODE active - chart fills blue rectangle, all panels still visible")
         else:
             # SMALL MODE: Show analysis tabs again
-            print("[DEBUG] Exiting MAX MODE - showing analysis tabs")
+            vprint("[DEBUG] Exiting MAX MODE - showing analysis tabs")
 
             # Show analysis tabs
             self.analysis_tabs.setVisible(True)
 
-            print("[DEBUG] SMALL MODE active - normal layout restored")
+            vprint("[DEBUG] SMALL MODE active - normal layout restored")
 
     def on_filter_toggled(self, filter_name: str, enabled: bool):
         """Handle filter toggle from institutional panel - ACTUALLY APPLIES FILTERS"""
@@ -330,21 +377,21 @@ class EnhancedMainWindow(QMainWindow):
 
         # Update status
         self.status_label.setText(f"Filter {filter_name}: {'Enabled' if enabled else 'Disabled'}")
-        print(f"[Main Window] Filter {filter_name} {'enabled' if enabled else 'disabled'}")
+        vprint(f"[Main Window] Filter {filter_name} {'enabled' if enabled else 'disabled'}")
 
         # Trigger opportunity scanner refresh with new filters
         if hasattr(self, 'opportunity_scanner'):
             self.opportunity_scanner.refresh_with_filters()
-            print(f"[Main Window] Scanner refreshed with active filters: {filter_manager.get_active_filters()}")
+            vprint(f"[Main Window] Scanner refreshed with active filters: {filter_manager.get_active_filters()}")
 
     def on_mode_changed(self, mode: str):
         """Handle mode change (AUTO/MANUAL)"""
         self.status_label.setText(f"Trading mode: {mode}")
-        print(f"[Main Window] Trading mode changed to {mode}")
+        vprint(f"[Main Window] Trading mode changed to {mode}")
 
     def on_order_requested(self, order_type: str):
         """Handle quick order button click from controls panel"""
-        print(f"[Main Window] {order_type} order requested")
+        vprint(f"[Main Window] {order_type} order requested")
         self.status_label.setText(f"{order_type} order requested - sending to MT5...")
 
         # Send order command to MT5 via command manager
@@ -356,14 +403,14 @@ class EnhancedMainWindow(QMainWindow):
                 lot_size=0.01  # Default volume
             )
             self.status_label.setText(f"✓ {order_type} order sent to MT5 EA")
-            print(f"[Main Window] {order_type} order command sent successfully")
+            vprint(f"[Main Window] {order_type} order command sent successfully")
         except Exception as e:
             self.status_label.setText(f"✗ Failed to send {order_type} order: {e}")
             print(f"[Main Window] Error sending order: {e}")
 
     def on_setting_changed(self, setting_name: str, value):
         """Handle setting change from controls panel - ACTUALLY CONTROLS CHART VISUALS"""
-        print(f"[Main Window] Setting changed: {setting_name} = {value}")
+        vprint(f"[Main Window] Setting changed: {setting_name} = {value}")
         self.status_label.setText(f"Setting updated: {setting_name}")
 
         # Handle Chart Visual toggles
@@ -375,7 +422,7 @@ class EnhancedMainWindow(QMainWindow):
             # Trigger chart redraw
             if hasattr(self, 'chart_panel'):
                 self.chart_panel.plot_candlesticks()
-                print(f"[Main Window] Chart redrawn with {visual_name} {'ON' if value else 'OFF'}")
+                vprint(f"[Main Window] Chart redrawn with {visual_name} {'ON' if value else 'OFF'}")
 
         # Handle update speed changes
         if setting_name == 'update_speed':
@@ -394,7 +441,7 @@ class EnhancedMainWindow(QMainWindow):
                 self.chart_panel.update_timer.stop()
                 self.chart_panel.update_timer.setInterval(interval)
                 self.chart_panel.update_timer.start()
-                print(f"[Main Window] Chart refresh rate changed to {interval}ms ({value})")
+                vprint(f"[Main Window] Chart refresh rate changed to {interval}ms ({value})")
                 self.status_label.setText(f"Chart refresh: {interval/1000}s")
 
                 # Force immediate chart reload
@@ -402,14 +449,14 @@ class EnhancedMainWindow(QMainWindow):
                     success = self.chart_panel.load_historical_data()
                     if success and hasattr(self.chart_panel, 'plot_candlesticks'):
                         self.chart_panel.plot_candlesticks()
-                    print(f"[Main Window] Chart reloaded immediately")
+                    vprint(f"[Main Window] Chart reloaded immediately")
 
             # Update main window timer
             if hasattr(self, 'data_timer'):
                 self.data_timer.stop()
                 self.data_timer.setInterval(interval)
                 self.data_timer.start()
-                print(f"[Main Window] Data update rate changed to {interval}ms ({value})")
+                vprint(f"[Main Window] Data update rate changed to {interval}ms ({value})")
 
         # Handle filter changes
         elif setting_name in ['use_fvg_filter', 'use_ob_filter', 'use_liquidity_filter']:
@@ -449,7 +496,7 @@ class EnhancedMainWindow(QMainWindow):
         mt5_symbol = data.get('symbol', 'UNKNOWN')
         mt5_timeframe = data.get('timeframe', 'UNKNOWN')
 
-        print(f"[MT5 Data] Received data for {mt5_symbol} {mt5_timeframe} - User chart shows: {self.current_symbol}")
+        vprint(f"[MT5 Data] Received data for {mt5_symbol} {mt5_timeframe} - User chart shows: {self.current_symbol}")
 
         # CRITICAL: Update data_manager with MT5 data (this was missing!)
         from core.data_manager import data_manager
@@ -457,17 +504,17 @@ class EnhancedMainWindow(QMainWindow):
 
         # DEBUG: Print account data when received
         if 'account_balance' in data:
-            print(f"[DEBUG] Account Balance: ${data['account_balance']:,.2f}")
-            print(f"[DEBUG] ✓ Data manager updated - dashboard should show balance now")
+            vprint(f"[DEBUG] Account Balance: ${data['account_balance']:,.2f}")
+            vprint(f"[DEBUG] ✓ Data manager updated - dashboard should show balance now")
         if 'account_equity' in data:
-            print(f"[DEBUG] Account Equity: ${data['account_equity']:,.2f}")
+            vprint(f"[DEBUG] Account Equity: ${data['account_equity']:,.2f}")
         if 'total_pnl' in data:
-            print(f"[DEBUG] Total P&L: ${data['total_pnl']:,.2f}")
+            vprint(f"[DEBUG] Total P&L: ${data['total_pnl']:,.2f}")
 
         # Show what keys are in the data
         account_keys = [k for k in data.keys() if 'account' in k.lower() or 'balance' in k.lower() or 'equity' in k.lower() or 'pnl' in k.lower()]
         if account_keys:
-            print(f"[DEBUG] Account-related keys in data: {account_keys}")
+            vprint(f"[DEBUG] Account-related keys in data: {account_keys}")
 
         if hasattr(self, 'status_label'):
             self.status_label.setText(f"MT5 data received: {self.current_symbol} {self.current_timeframe}")
@@ -481,7 +528,7 @@ class EnhancedMainWindow(QMainWindow):
     def on_demo_mode_changed(self, is_demo: bool):
         """Handle demo/live mode change - refresh all widgets"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"[Main Window] Mode changed to {mode_text} - Refreshing all widgets")
+        vprint(f"[Main Window] Mode changed to {mode_text} - Refreshing all widgets")
 
         # Update status bar color and text
         if hasattr(self, 'status_label'):
@@ -493,7 +540,7 @@ class EnhancedMainWindow(QMainWindow):
         # Force refresh all widgets with new data source
         self.update_all_data()
 
-        print(f"[Main Window] All widgets refreshed with {mode_text} data")
+        vprint(f"[Main Window] All widgets refreshed with {mode_text} data")
 
     def create_menu_bar(self):
         """Create menu bar with File, View, Help menus"""
@@ -534,6 +581,13 @@ class EnhancedMainWindow(QMainWindow):
         self.mode_action.setChecked(not is_demo_mode())  # Checked = Live Mode
         self.mode_action.triggered.connect(self.on_toggle_mode)
         settings_menu.addAction(self.mode_action)
+
+        # Verbose Console Output Toggle
+        self.verbose_action = QAction("Verbose Console Output", self)
+        self.verbose_action.setCheckable(True)
+        self.verbose_action.setChecked(is_verbose())  # Checked = Verbose ON
+        self.verbose_action.triggered.connect(self.on_toggle_verbose)
+        settings_menu.addAction(self.verbose_action)
 
         settings_menu.addSeparator()
 
@@ -582,7 +636,7 @@ class EnhancedMainWindow(QMainWindow):
     def on_symbols_updated(self, symbols: list):
         """Handle symbol list update from symbol manager"""
         self.status_label.setText(f"Symbol list updated: {len(symbols)} symbols")
-        print(f"[Main Window] Symbol list updated: {symbols}")
+        vprint(f"[Main Window] Symbol list updated: {symbols}")
         # Update all widgets that use symbols
         if hasattr(self, 'scanner_widget'):
             self.scanner_widget.pairs_to_scan = symbols
@@ -599,7 +653,22 @@ class EnhancedMainWindow(QMainWindow):
         self.mode_action.setText("Disable Live Mode" if checked else "Enable Live Mode")
 
         # Note: Status bar and widget refresh handled by on_demo_mode_changed signal
-        print(f"[Main Window] User toggled to {mode_text} mode via menu")
+        vprint(f"[Main Window] User toggled to {mode_text} mode via menu")
+
+    def on_toggle_verbose(self, checked: bool):
+        """Toggle verbose console output"""
+        verbose_mode_manager.verbose = checked
+        status = "ENABLED" if checked else "DISABLED"
+
+        # Update status bar
+        self.status_label.setText(f"Console output: {status}")
+
+        # This print will always show (to confirm the toggle worked)
+        print(f"[Settings] Verbose console output {status}")
+        if checked:
+            print("[Settings] Debug messages will now appear in console")
+        else:
+            print("[Settings] Debug messages are now suppressed (only important messages will show)")
 
     def on_verify_mt5_connection(self):
         """Verify MT5 connection status"""

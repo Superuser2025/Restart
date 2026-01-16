@@ -15,7 +15,9 @@ from widgets.news_impact_predictor import (news_impact_predictor, NewsEvent,
                                           ImpactLevel)
 from widgets.calendar_fetcher import calendar_fetcher
 from core.ai_assist_base import AIAssistMixin
+from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
+from core.verbose_mode_manager import vprint
 
 
 class NewsEventListItem(QWidget):
@@ -435,9 +437,9 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
 
         # Fetch real calendar events
         try:
-            print("📰 Fetching calendar events...")
+            vprint("📰 Fetching calendar events...")
             real_events = calendar_fetcher.fetch_events(days_ahead=7)
-            print(f"📰 Calendar fetcher returned {len(real_events) if real_events else 0} events")
+            vprint(f"📰 Calendar fetcher returned {len(real_events) if real_events else 0} events")
 
             if real_events:
                 # Clear old events
@@ -447,7 +449,7 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
                 for event in real_events:
                     news_impact_predictor.add_event(event)
 
-                print(f"✓ Loaded {len(real_events)} real events from calendar")
+                vprint(f"✓ Loaded {len(real_events)} real events from calendar")
                 if hasattr(self, 'status_label'):
                     self.status_label.setText(f"Loaded {len(real_events)} real events from calendar")
             else:
@@ -639,12 +641,12 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         # Add all events to the predictor
         news_impact_predictor.events = sample_events
 
-        print(f"📊 Generated {len(sample_events)} intelligent sample events")
-        print("   Based on real economic calendar patterns:")
-        print("   - 4 EXTREME impact events (120-175 pips)")
-        print("   - 3 HIGH impact events (75-95 pips)")
-        print("   - 3 MEDIUM impact events (40-55 pips)")
-        print("   - 2 LOW impact events (18-25 pips)")
+        vprint(f"📊 Generated {len(sample_events)} intelligent sample events")
+        vprint("   Based on real economic calendar patterns:")
+        vprint("   - 4 EXTREME impact events (120-175 pips)")
+        vprint("   - 3 HIGH impact events (75-95 pips)")
+        vprint("   - 3 MEDIUM impact events (40-55 pips)")
+        vprint("   - 2 LOW impact events (18-25 pips)")
 
     def on_paste_from_clipboard(self):
         """Paste calendar data directly from clipboard (HTML version if available)"""
@@ -653,20 +655,20 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
         clipboard = QApplication.clipboard()
         mime_data = clipboard.mimeData()
 
-        print("\n" + "="*60)
-        print("📋 CLIPBOARD ANALYSIS:")
-        print("="*60)
-        print(f"Has HTML: {mime_data.hasHtml()}")
-        print(f"Has Text: {mime_data.hasText()}")
-        print(f"Formats: {mime_data.formats()}")
-        print("="*60 + "\n")
+        vprint("\n" + "="*60)
+        vprint("📋 CLIPBOARD ANALYSIS:")
+        vprint("="*60)
+        vprint(f"Has HTML: {mime_data.hasHtml()}")
+        vprint(f"Has Text: {mime_data.hasText()}")
+        vprint(f"Formats: {mime_data.formats()}")
+        vprint("="*60 + "\n")
 
         # Try HTML first (preserves table structure)
         if mime_data.hasHtml():
             html_content = mime_data.html()
             print(f"📄 HTML Length: {len(html_content)} chars")
             print("First 500 chars of HTML:")
-            print(html_content[:500])
+            vprint(html_content[:500])
             print("\n")
 
             self.calendar_paste_area.setPlainText(html_content)
@@ -910,7 +912,7 @@ class NewsImpactWidget(AIAssistMixin, QWidget):
     def on_mode_changed(self, is_demo: bool):
         """Handle demo/live mode changes"""
         mode_text = "DEMO" if is_demo else "LIVE"
-        print(f"News Impact widget switching to {mode_text} mode")
+        vprint(f"News Impact widget switching to {mode_text} mode")
         self.update_data()
 
     def analyze_with_ai(self, prediction, widget_data):

@@ -9,6 +9,7 @@ ENHANCED with professional-grade logic:
 """
 
 from core.market_analyzer import market_analyzer
+from core.verbose_mode_manager import vprint
 
 
 class FilterManager:
@@ -54,10 +55,10 @@ class FilterManager:
 
         if hasattr(self, attr_name):
             setattr(self, attr_name, enabled)
-            print(f"[FilterManager] {filter_name} = {enabled}")
+            vprint(f"[FilterManager] {filter_name} = {enabled}")
             return True
         else:
-            print(f"[FilterManager] WARNING: Unknown filter '{filter_name}'")
+            vprint(f"[FilterManager] WARNING: Unknown filter '{filter_name}'")
             return False
 
     def get_filter(self, filter_name: str) -> bool:
@@ -85,20 +86,20 @@ class FilterManager:
         # CRITICAL: Quality score check FIRST (most important)
         quality_score = opportunity.get('quality_score', 0)
         if quality_score < self.min_quality_score:
-            print(f"[Filter] ❌ {symbol} {timeframe}: Quality too low ({quality_score} < {self.min_quality_score})")
+            vprint(f"[Filter] ❌ {symbol} {timeframe}: Quality too low ({quality_score} < {self.min_quality_score})")
             return False  # Reject low-quality setups immediately
 
         # SESSION AWARENESS - Avoid Asian session chop
         if self.avoid_asian_session:
             session = opportunity.get('session', market_analyzer.get_current_session())
             if session == 'asian' or session == 'dead':
-                print(f"[Filter] ❌ {symbol} {timeframe}: Asian/dead session rejected (session={session})")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Asian/dead session rejected (session={session})")
                 return False  # Skip low-quality sessions
 
         # SESSION QUALITY - Minimum session quality requirement
         session_quality = opportunity.get('session_quality', market_analyzer.get_session_quality_score())
         if session_quality < self.min_session_quality:
-            print(f"[Filter] ❌ {symbol} {timeframe}: Session quality too low ({session_quality} < {self.min_session_quality})")
+            vprint(f"[Filter] ❌ {symbol} {timeframe}: Session quality too low ({session_quality} < {self.min_session_quality})")
             return False
 
         # VOLUME FILTER - Dynamic threshold (must be adequate)
@@ -108,7 +109,7 @@ class FilterManager:
             timeframe = opportunity.get('timeframe', 'H1')
             min_volume = {'M5': 50, 'M15': 50, 'M30': 50, 'H1': 50, 'H4': 50}.get(timeframe, 50)
             if volume < min_volume:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Volume too low ({volume} < {min_volume})")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Volume too low ({volume} < {min_volume})")
                 return False
 
         # SPREAD FILTER - Dynamic (% of ATR, not static pips)
@@ -117,14 +118,14 @@ class FilterManager:
             atr = opportunity.get('atr', 10)  # Fallback ATR
             spread_pct = spread / atr if atr > 0 else 1.0
             if spread_pct > self.max_spread_pct_of_atr:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Spread too wide ({spread_pct:.2%} > {self.max_spread_pct_of_atr:.2%} of ATR)")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Spread too wide ({spread_pct:.2%} > {self.max_spread_pct_of_atr:.2%} of ATR)")
                 return False  # Spread too wide relative to volatility
 
         # STRONG PRICE MODEL - Pattern strength requirement
         if self.strong_price_model:
             strength = opportunity.get('pattern_strength', 0)
             if strength < self.min_pattern_strength:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Pattern strength too low ({strength} < {self.min_pattern_strength})")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Pattern strength too low ({strength} < {self.min_pattern_strength})")
                 return False
 
         # MULTI-TIMEFRAME - Check MTF alignment
@@ -133,20 +134,20 @@ class FilterManager:
                 # STRICT MODE: Must have perfect MTF alignment
                 mtf_score = opportunity.get('mtf_score', 0)
                 if mtf_score < 10:  # Perfect alignment = 10
-                    print(f"[Filter] ❌ {symbol} {timeframe}: MTF score too low ({mtf_score} < 10)")
+                    vprint(f"[Filter] ❌ {symbol} {timeframe}: MTF score too low ({mtf_score} < 10)")
                     return False
             else:
                 # RELAXED MODE: Just check if not counter-trend
                 mtf_confirmed = opportunity.get('mtf_confirmed', False)
                 if not mtf_confirmed:
-                    print(f"[Filter] ❌ {symbol} {timeframe}: MTF not confirmed (mtf_confirmed={mtf_confirmed})")
+                    vprint(f"[Filter] ❌ {symbol} {timeframe}: MTF not confirmed (mtf_confirmed={mtf_confirmed})")
                     return False
 
         # MINIMUM R:R FILTER - Professional traders demand min 1.5:1 R:R
         if self.dynamic_risk:
             rr = opportunity.get('risk_reward', 0)
             if rr < self.min_rr_ratio:
-                print(f"[Filter] ❌ {symbol} {timeframe}: R:R too low ({rr:.2f} < {self.min_rr_ratio})")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: R:R too low ({rr:.2f} < {self.min_rr_ratio})")
                 return False  # R:R too low
 
         # VOLATILITY FILTER - Universal check (works for any asset type)
@@ -156,13 +157,13 @@ class FilterManager:
             # UNIVERSAL: Just ensure ATR exists and is reasonable
             # ATR is in raw price units - works for forex, gold, bitcoin, anything
             if atr <= 0:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Invalid ATR ({atr:.5f})")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Invalid ATR ({atr:.5f})")
                 return False
 
             # Optional: Check if ATR is absurdly high (>10% of entry price)
             entry = opportunity.get('entry', 0)
             if entry > 0 and atr > entry * 0.1:
-                print(f"[Filter] ❌ {symbol} {timeframe}: ATR too high ({atr:.5f} > 10% of entry {entry:.5f})")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: ATR too high ({atr:.5f} > 10% of entry {entry:.5f})")
                 return False
 
         # SENTIMENT FILTER - Trend alignment
@@ -173,63 +174,63 @@ class FilterManager:
 
             # Reject counter-trend trades
             if direction == 'BUY' and h4_trend == 'bearish':
-                print(f"[Filter] ❌ {symbol} {timeframe}: Counter-trend (BUY vs bearish H4)")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Counter-trend (BUY vs bearish H4)")
                 return False
             if direction == 'SELL' and h4_trend == 'bullish':
-                print(f"[Filter] ❌ {symbol} {timeframe}: Counter-trend (SELL vs bullish H4)")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Counter-trend (SELL vs bullish H4)")
                 return False
 
         # LIQUIDITY SWEEP - Only show opportunities WITH liquidity sweeps
         if self.liquidity_sweep:
             has_sweep = opportunity.get('liquidity_sweep', False)
             if not has_sweep:
-                print(f"[Filter] ❌ {symbol} {timeframe}: No liquidity sweep detected")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: No liquidity sweep detected")
                 return False  # No liquidity sweep detected
 
         # RETAIL TRAP DETECTION - Filter out obvious retail traps
         if self.retail_trap_detection:
             is_trap = opportunity.get('is_retail_trap', False)
             if is_trap:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Retail trap detected")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Retail trap detected")
                 return False
 
         # ORDER BLOCK INVALIDATION - Only show valid order blocks
         if self.order_block_invalidation:
             ob_valid = opportunity.get('order_block_valid', True)
             if not ob_valid:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Order block invalid")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Order block invalid")
                 return False
 
         # MARKET STRUCTURE - Structure must be aligned
         if self.market_structure:
             structure_aligned = opportunity.get('structure_aligned', False)
             if not structure_aligned:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Market structure not aligned")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Market structure not aligned")
                 return False
 
         # PATTERN TRACKING (ML) - Pattern reliability check
         if self.pattern_tracking:
             pattern_reliability = opportunity.get('pattern_reliability', 0)
             if pattern_reliability < 65:  # Minimum 65% ML confidence
-                print(f"[Filter] ❌ {symbol} {timeframe}: Pattern reliability too low ({pattern_reliability}% < 65%)")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Pattern reliability too low ({pattern_reliability}% < 65%)")
                 return False
 
         # PARAMETER ADAPTATION - Parameters must be optimized
         if self.parameter_adaptation:
             params_optimized = opportunity.get('parameters_optimized', True)
             if not params_optimized:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Parameters not optimized")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Parameters not optimized")
                 return False
 
         # REGIME STRATEGY - Strategy must match current regime
         if self.regime_strategy:
             regime_match = opportunity.get('regime_match', True)
             if not regime_match:
-                print(f"[Filter] ❌ {symbol} {timeframe}: Regime mismatch")
+                vprint(f"[Filter] ❌ {symbol} {timeframe}: Regime mismatch")
                 return False
 
         # Passed all enabled filters
-        print(f"[Filter] ✅ {symbol} {timeframe}: PASSED all filters!")
+        vprint(f"[Filter] ✅ {symbol} {timeframe}: PASSED all filters!")
         return True
 
     def get_active_filters(self) -> list:

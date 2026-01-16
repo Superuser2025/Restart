@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from typing import List
 
+from core.symbol_manager import symbol_specs_manager
+
 
 class SymbolManagerDialog(QDialog):
     """
@@ -143,6 +145,7 @@ class SymbolManagerDialog(QDialog):
             QListWidget::item {
                 padding: 8px;
                 border-bottom: 1px solid #333;
+                color: #ffffff;
             }
             QListWidget::item:selected {
                 background-color: #0d7377;
@@ -227,11 +230,20 @@ class SymbolManagerDialog(QDialog):
         if not symbol:
             return
 
-        # Validate symbol format (should be 6 characters for forex)
-        if len(symbol) != 6:
+        # Validate symbol exists in MT5 Market Watch
+        available_symbols = symbol_specs_manager.get_all_symbols()
+
+        if symbol not in available_symbols:
+            # Show helpful error with suggestions
             QMessageBox.warning(
                 self, "Invalid Symbol",
-                "Symbol should be 6 characters (e.g., EURUSD, GBPJPY)"
+                f"❌ '{symbol}' not found in MT5 Market Watch.\n\n"
+                f"Please check:\n"
+                f"1. Symbol is spelled correctly\n"
+                f"2. Symbol is visible in MT5 Market Watch\n"
+                f"3. MT5 connection is active\n\n"
+                f"Available symbols: {len(available_symbols)}\n"
+                f"Examples: EURUSD, GBPUSD, AAPL, JPM, XAUUSD, US30"
             )
             return
 
@@ -242,6 +254,18 @@ class SymbolManagerDialog(QDialog):
                 f"{symbol} is already in the list"
             )
             return
+
+        # Add symbol with confirmation
+        specs = symbol_specs_manager.get_symbol_specs(symbol)
+        asset_class = specs.asset_class if specs else "unknown"
+        description = specs.description if specs else symbol
+
+        QMessageBox.information(
+            self, "Symbol Added",
+            f"✓ Added {symbol}\n"
+            f"Type: {asset_class.capitalize()}\n"
+            f"Description: {description}"
+        )
 
         # Add symbol
         self.symbols.append(symbol)
