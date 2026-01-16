@@ -41,6 +41,9 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.init_ui()
         self.setup_ai_assist("volatility_position")
 
+        # Load real account balance
+        self.load_account_balance()
+
         # Auto-refresh timer to get live data
         from PyQt6.QtCore import QTimer
         self.refresh_timer = QTimer()
@@ -430,13 +433,37 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         from core.multi_symbol_manager import symbol_manager
         symbol_manager.active_symbol = symbol
 
-        # Clear current data and wait for data_manager to update with new symbol data
+        # Clear current data
         self.current_data = None
-
-        # Update display to show we're waiting for data
         self.clear_display()
 
-        vprint(f"[VolatilityPosition] Waiting for data for symbol: {symbol}")
+        # Force immediate data update for new symbol
+        self.update_from_live_data()
+
+        vprint(f"[VolatilityPosition] Symbol changed - updating data for: {symbol}")
+
+    def load_account_balance(self):
+        """Load real account balance from data_manager or MT5"""
+        from core.data_manager import data_manager
+
+        account = data_manager.get_account_summary()
+        if account and account.get('balance', 0) > 0:
+            balance = account['balance']
+            self.balance_input.setValue(balance)
+            vprint(f"[VolatilityPosition] ✓ Loaded account balance: ${balance:,.2f}")
+        else:
+            # Try MT5 directly
+            try:
+                import MetaTrader5 as mt5
+                if mt5.initialize():
+                    account_info = mt5.account_info()
+                    if account_info:
+                        balance = account_info.balance
+                        self.balance_input.setValue(balance)
+                        vprint(f"[VolatilityPosition] ✓ Loaded MT5 account balance: ${balance:,.2f}")
+                    mt5.shutdown()
+            except:
+                vprint(f"[VolatilityPosition] ⚠️ Could not load account balance, using default $10,000")
 
     def set_market_data(self, symbol: str, df: pd.DataFrame):
         """
@@ -484,33 +511,48 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
             self.update_from_live_data()
 
     def update_from_live_data(self):
-        """Get live data from data_manager and update position sizing"""
-        from core.data_manager import data_manager
-
+        """Get live data from MT5 for current symbol and update position sizing"""
         vprint(f"\n[VolatilityPosition] update_from_live_data() called for {self.current_symbol}")
 
-        # Get candles from data_manager (uses currently loaded symbol)
-        candles = data_manager.get_candles(count=100)
+        # Try to get data from MT5 directly for the selected symbol
+        try:
+            import MetaTrader5 as mt5
 
-        if not candles:
-            vprint(f"[VolatilityPosition] ❌ No data available from data_manager")
+            if not mt5.initialize():
+                vprint(f"[VolatilityPosition] ❌ MT5 initialization failed")
+                self.clear_display()
+                return
+
+            # Get H1 timeframe data for selected symbol
+            rates = mt5.copy_rates_from_pos(self.current_symbol, mt5.TIMEFRAME_H1, 0, 100)
+
+            if rates is None or len(rates) == 0:
+                vprint(f"[VolatilityPosition] ❌ No data for {self.current_symbol}")
+                mt5.shutdown()
+                self.clear_display()
+                return
+
+            # Convert to DataFrame
+            df = pd.DataFrame(rates)
+            df['time'] = pd.to_datetime(df['time'], unit='s')
+
+            vprint(f"[VolatilityPosition] ✓ Got {len(df)} H1 candles for {self.current_symbol}")
+
+            # Show last close price for verification
+            if 'close' in df.columns and len(df) > 0:
+                last_close = df['close'].iloc[-1]
+                vprint(f"[VolatilityPosition]   → Last close: {last_close:.5f}")
+
+            mt5.shutdown()
+
+            # Set the market data (this will trigger calculations)
+            self.set_market_data(self.current_symbol, df)
+
+            vprint(f"[VolatilityPosition] ✓ Market data updated successfully for {self.current_symbol}")
+
+        except Exception as e:
+            vprint(f"[VolatilityPosition] ❌ Error loading data for {self.current_symbol}: {e}")
             self.clear_display()
-            return
-
-        # Convert to DataFrame
-        df = pd.DataFrame(candles)
-
-        vprint(f"[VolatilityPosition] ✓ Got {len(df)} candles for {self.current_symbol}")
-
-        # Show last close price for verification
-        if 'close' in df.columns:
-            last_close = df['close'].iloc[-1]
-            vprint(f"[VolatilityPosition]   → Last close: {last_close:.5f}")
-
-        # Set the market data (this will trigger calculations)
-        self.set_market_data(self.current_symbol, df)
-
-        vprint(f"[VolatilityPosition] ✓ Market data updated successfully")
 
     def update_market_conditions(self):
         """Update volatility and trend displays"""
@@ -892,6 +934,9 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
     def update_data(self):
         """Update widget with data based on current mode (demo/live)"""
         vprint(f"\n[VolatilityPosition] ====== Timer fired: update_data() ======")
+
+        # Refresh account balance periodically
+        self.load_account_balance()
 
         if is_demo_mode():
             vprint(f"[VolatilityPosition] Mode: DEMO - loading sample conditions")
