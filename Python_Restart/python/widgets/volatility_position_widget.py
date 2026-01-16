@@ -5,7 +5,7 @@ PyQt6 widget for displaying volatility-adjusted position sizing
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QGroupBox, QLineEdit, QPushButton, QSpinBox,
-                            QDoubleSpinBox, QFrame, QGridLayout, QCheckBox, QDialog, QSizePolicy)
+                            QDoubleSpinBox, QFrame, QGridLayout, QCheckBox, QDialog, QSizePolicy, QComboBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from typing import Dict, Optional
@@ -62,6 +62,16 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         header_layout.addWidget(title)
         header_layout.addStretch()
+
+        # Symbol selector
+        header_layout.addWidget(QLabel("Symbol:"))
+        self.symbol_selector = QComboBox()
+        self.symbol_selector.setMinimumWidth(150)
+        self.symbol_selector.setMaximumWidth(200)
+        self.populate_symbol_selector()
+        self.symbol_selector.currentTextChanged.connect(self.on_symbol_changed)
+        header_layout.addWidget(self.symbol_selector)
+
         self.ai_checkbox_placeholder = header_layout
         layout.addLayout(header_layout)
 
@@ -356,6 +366,72 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
                 color: #000000;
             }
         """)
+
+    def populate_symbol_selector(self):
+        """Populate symbol selector with available symbols from SymbolManager"""
+        # Get all symbols from symbol manager
+        symbols = symbol_manager.get_all_symbols()
+
+        if not symbols:
+            # Fallback if no symbols loaded
+            symbols = ['EURUSD']
+            vprint("[VolatilityPosition] ⚠️ No symbols loaded from SymbolManager, using EURUSD fallback")
+
+        # Group symbols by asset class for better organization
+        asset_classes = symbol_manager.get_asset_class_summary()
+
+        # Add symbols grouped by asset class
+        for asset_class in ['forex', 'stock', 'index', 'commodity', 'crypto']:
+            class_symbols = symbol_manager.get_symbols_by_asset_class(asset_class)
+            if class_symbols:
+                # Add separator with asset class name
+                self.symbol_selector.addItem(f"--- {asset_class.upper()} ---")
+                # Make separator non-selectable
+                model = self.symbol_selector.model()
+                item = model.item(self.symbol_selector.count() - 1)
+                item.setEnabled(False)
+
+                # Add symbols
+                for symbol in sorted(class_symbols):
+                    specs = symbol_manager.get_symbol_specs(symbol)
+                    if specs:
+                        # Show symbol with description
+                        display_text = f"{symbol} ({specs.asset_class})"
+                        self.symbol_selector.addItem(display_text, symbol)  # symbol as user data
+
+        # Set current symbol if we have one
+        if self.current_symbol:
+            index = self.symbol_selector.findData(self.current_symbol)
+            if index >= 0:
+                self.symbol_selector.setCurrentIndex(index)
+
+        vprint(f"[VolatilityPosition] ✓ Symbol selector populated with {len(symbols)} symbols")
+
+    def on_symbol_changed(self, text: str):
+        """Handle symbol selection change"""
+        # Get the actual symbol from combo box user data
+        symbol = self.symbol_selector.currentData()
+
+        if not symbol or symbol == self.current_symbol:
+            return
+
+        vprint(f"[VolatilityPosition] Symbol changed to: {symbol}")
+
+        # Update current symbol
+        self.current_symbol = symbol
+
+        # Get symbol specs and show info
+        specs = symbol_manager.get_symbol_specs(symbol)
+        if specs:
+            vprint(f"[VolatilityPosition]   → Asset class: {specs.asset_class}")
+            vprint(f"[VolatilityPosition]   → Default SL: {specs.default_sl_distance}")
+
+        # Load data for new symbol
+        from core.data_manager import data_manager
+        data_manager.load_symbol(symbol)  # This will trigger data update
+
+        # Update the widget
+        self.update_from_live_data()
 
     def set_market_data(self, symbol: str, df: pd.DataFrame):
         """
