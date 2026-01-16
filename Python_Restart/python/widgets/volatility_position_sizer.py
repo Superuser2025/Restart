@@ -2,6 +2,7 @@
 AppleTrader Pro - Volatility-Adjusted Position Sizing Optimizer (IMPROVEMENT #2)
 Dynamic lot size calculator based on market conditions
 Maintains true risk percentage regardless of volatility
+Supports multi-asset classes: Forex, Stocks, Indices, Commodities, Crypto
 """
 
 from typing import Dict, Optional, Tuple
@@ -9,6 +10,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from enum import Enum
+from core.symbol_manager import symbol_specs_manager
 
 
 class VolatilityRegime(Enum):
@@ -94,11 +96,27 @@ class VolatilityPositionSizer:
         Returns:
             Complete position sizing analysis
         """
-        # Calculate stop loss distance in pips
-        pip_multiplier = self._get_pip_multiplier(symbol)
-        sl_distance_pips = abs(entry_price - stop_loss) * pip_multiplier
+        # Calculate stop loss distance (dynamic for all asset classes)
+        sl_distance = abs(entry_price - stop_loss)
 
-        if sl_distance_pips == 0:
+        # Get symbol specs for proper calculations
+        symbol_specs = symbol_specs_manager.get_symbol_specs(symbol)
+        if symbol_specs:
+            asset_class = symbol_specs.asset_class
+        else:
+            asset_class = 'forex'  # Fallback
+
+        # Convert to appropriate units (pips/points/dollars)
+        if asset_class == 'forex':
+            if 'JPY' in symbol:
+                sl_distance_units = sl_distance * 100  # JPY pairs
+            else:
+                sl_distance_units = sl_distance * 10000  # Standard forex
+        else:
+            # For stocks, indices, commodities, crypto - use raw price distance
+            sl_distance_units = sl_distance
+
+        if sl_distance_units == 0:
             return self._error_result("Stop loss distance is zero")
 
         # Analyze market conditions
@@ -119,12 +137,39 @@ class VolatilityPositionSizer:
         # Calculate dollar risk
         dollar_risk = self.account_balance * (adjusted_risk_pct / 100)
 
-        # Calculate position size
-        # For forex: Position Size = Dollar Risk / (SL Distance Pips * Pip Value)
-        # Standard lot pip value = $10 for most pairs
-        standard_pip_value = 10 if symbol != 'USDJPY' else 1000
+        # Calculate position size (dynamic for all asset classes)
+        if asset_class == 'forex':
+            # Forex: Position Size (lots) = Dollar Risk / (SL Distance Pips * Pip Value)
+            # Standard lot pip value = $10 for most pairs
+            pip_value_per_lot = 10 if 'JPY' not in symbol else 1000
+            position_size_lots = dollar_risk / (sl_distance_units * pip_value_per_lot)
 
-        position_size_lots = dollar_risk / (sl_distance_pips * standard_pip_value)
+        elif asset_class == 'stock':
+            # Stocks: Position Size (shares) = Dollar Risk / SL Distance ($)
+            # 1 lot = 1 share for stocks
+            position_size_lots = dollar_risk / sl_distance if sl_distance > 0 else 0.01
+
+        elif asset_class == 'index':
+            # Indices: Position Size (lots) = Dollar Risk / (SL Distance Points * Point Value)
+            # Get point value from symbol specs or use default
+            point_value = symbol_specs.tick_value if symbol_specs else 10.0
+            position_size_lots = dollar_risk / (sl_distance_units * point_value) if sl_distance_units > 0 else 0.01
+
+        elif asset_class == 'commodity':
+            # Commodities: Position Size (lots) = Dollar Risk / (SL Distance * Tick Value)
+            tick_value = symbol_specs.tick_value if symbol_specs else 1.0
+            contract_size = symbol_specs.contract_size if symbol_specs else 100.0
+            # For gold: contract_size = 100 oz, so $5 SL = 0.5 lots for $250 risk
+            position_size_lots = dollar_risk / (sl_distance * tick_value * contract_size) if sl_distance > 0 else 0.01
+
+        elif asset_class == 'crypto':
+            # Crypto: Position Size (coins) = Dollar Risk / SL Distance ($)
+            position_size_lots = dollar_risk / sl_distance if sl_distance > 0 else 0.01
+
+        else:
+            # Fallback to forex calculation
+            pip_value_per_lot = 10
+            position_size_lots = dollar_risk / (sl_distance_units * pip_value_per_lot)
 
         # Round to 0.01 lots
         position_size_lots = round(position_size_lots, 2)
@@ -143,7 +188,9 @@ class VolatilityPositionSizer:
             'dollar_risk': dollar_risk,
             'entry_price': entry_price,
             'stop_loss': stop_loss,
-            'sl_distance_pips': sl_distance_pips,
+            'sl_distance_pips': sl_distance_units,  # Now supports pips/points/dollars
+            'sl_distance': sl_distance,  # Raw price distance
+            'asset_class': asset_class,  # Asset class for display
             'direction': direction,
             'volatility_regime': volatility_regime.value,
             'volatility_multiplier': volatility_multiplier,
@@ -151,7 +198,6 @@ class VolatilityPositionSizer:
             'trend_strength': trend_strength.value,
             'trend_multiplier': trend_multiplier,
             'trend_data': trend_data,
-            'pip_multiplier': pip_multiplier,
             'max_lots_allowed': max_lots,
             'calculation_time': self.last_calculation
         }
@@ -331,12 +377,7 @@ class VolatilityPositionSizer:
 
         return adx
 
-    def _get_pip_multiplier(self, symbol: str) -> float:
-        """Get pip multiplier for symbol"""
-        if 'JPY' in symbol:
-            return 100  # For JPY pairs, pip is 0.01
-        else:
-            return 10000  # For most pairs, pip is 0.0001
+    # Removed _get_pip_multiplier - now uses dynamic symbol specs from symbol_specs_manager
 
     def _calculate_max_lots(self) -> float:
         """Calculate maximum allowed lot size based on account"""
