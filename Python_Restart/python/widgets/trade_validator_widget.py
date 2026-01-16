@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from core.verbose_mode_manager import vprint
+from core.symbol_manager import symbol_manager
 
 try:
     import MetaTrader5 as mt5
@@ -192,6 +193,13 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
             return
 
         direction, symbol = parsed
+
+        # VALIDATE SYMBOL EXISTS
+        symbol_specs = symbol_manager.get_symbol_specs(symbol)
+        if not symbol_specs:
+            # Symbol doesn't exist - show helpful error with suggestions
+            self.show_invalid_symbol_error(symbol)
+            return
 
         # Get ML analysis
         analysis = self.analyze_trade(symbol, direction)
@@ -1064,6 +1072,121 @@ Note: Spread is YOUR call - we focus on ML predictions and market conditions.
 </div>
 """
         self.results_display.setHtml(html)
+
+    def show_invalid_symbol_error(self, invalid_symbol: str):
+        """Show detailed error for invalid symbol with suggestions"""
+        # Find similar symbols (fuzzy match)
+        all_symbols = symbol_manager.get_all_symbols()
+        suggestions = []
+
+        # Check for typos - look for symbols with similar letters
+        for sym in all_symbols:
+            # Calculate simple similarity (how many characters match)
+            matches = sum(1 for a, b in zip(invalid_symbol, sym) if a == b)
+            if matches >= 4:  # At least 4 chars match (USDJOY vs USDJPY = 5 matches)
+                suggestions.append(sym)
+
+        # If no close matches, show symbols by asset class
+        if not suggestions:
+            # Get asset class summary
+            asset_summary = symbol_manager.get_asset_class_summary()
+            by_class = {}
+            for asset_class in ['forex', 'stock', 'index', 'commodity', 'crypto']:
+                symbols = symbol_manager.get_symbols_by_asset_class(asset_class)
+                if symbols:
+                    by_class[asset_class] = symbols[:10]  # First 10 of each
+
+        # Build HTML
+        html = f"""
+<div style="padding: 20px; background-color: #1e1e1e; color: #fff; font-family: 'Segoe UI', Arial, sans-serif;">
+
+    <!-- ERROR HEADER -->
+    <div style="padding: 30px 20px; text-align: center; background-color: #2C1810; border-left: 8px solid #F44336;">
+        <div style="font-size: 64px; margin-bottom: 15px;">❌</div>
+        <h1 style="color: #F44336; font-size: 36px; margin: 0 0 10px 0; font-weight: bold;">INVALID SYMBOL</h1>
+        <p style="color: #FFB74D; font-size: 22px; margin: 0; font-weight: 500;">"{invalid_symbol}" not found</p>
+    </div>
+
+    <hr style="border: none; border-top: 1px solid #444; margin: 25px 0;">
+"""
+
+        # Add suggestions if found
+        if suggestions:
+            html += f"""
+    <div style="padding: 20px; background-color: #1C2833; border-left: 4px solid #4CAF50; margin-bottom: 20px;">
+        <h3 style="color: #4CAF50; margin: 0 0 15px 0; font-size: 20px;">💡 Did you mean one of these?</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;">
+"""
+            for sym in suggestions[:10]:
+                specs = symbol_manager.get_symbol_specs(sym)
+                asset_badge = specs.asset_class.upper() if specs else "?"
+                badge_color = {
+                    'forex': '#2196F3',
+                    'stock': '#9C27B0',
+                    'index': '#FF9800',
+                    'commodity': '#FFD700',
+                    'crypto': '#00BCD4'
+                }.get(specs.asset_class if specs else '', '#666')
+
+                html += f"""
+            <div style="padding: 10px; background-color: #263238; border: 1px solid {badge_color}; border-radius: 4px; text-align: center;">
+                <div style="color: #fff; font-weight: bold; font-size: 14px;">{sym}</div>
+                <div style="color: {badge_color}; font-size: 10px; margin-top: 3px;">{asset_badge}</div>
+            </div>
+"""
+            html += """
+        </div>
+    </div>
+"""
+
+        # Show available symbols by asset class
+        html += """
+    <div style="padding: 20px; background-color: #1C2833; border-left: 4px solid #2196F3;">
+        <h3 style="color: #2196F3; margin: 0 0 15px 0; font-size: 18px;">📊 Available Symbols</h3>
+"""
+
+        total_symbols = symbol_manager.symbol_count()
+        asset_summary = symbol_manager.get_asset_class_summary()
+
+        for asset_class in ['forex', 'stock', 'index', 'commodity', 'crypto']:
+            if asset_class in asset_summary:
+                count = asset_summary[asset_class]
+                badge_color = {
+                    'forex': '#2196F3',
+                    'stock': '#9C27B0',
+                    'index': '#FF9800',
+                    'commodity': '#FFD700',
+                    'crypto': '#00BCD4'
+                }[asset_class]
+
+                symbols = symbol_manager.get_symbols_by_asset_class(asset_class)
+                examples = ', '.join(symbols[:5])
+
+                html += f"""
+        <div style="padding: 10px; margin-bottom: 10px; background-color: #263238; border-left: 3px solid {badge_color};">
+            <div style="color: {badge_color}; font-weight: bold; font-size: 14px; margin-bottom: 5px;">
+                {asset_class.upper()} ({count} available)
+            </div>
+            <div style="color: #aaa; font-size: 12px;">
+                Examples: {examples}
+            </div>
+        </div>
+"""
+
+        html += f"""
+    </div>
+
+    <div style="padding: 15px; text-align: center; background-color: #263238; border-radius: 4px; margin-top: 20px;">
+        <p style="color: #aaa; font-size: 13px; margin: 0;">
+            <strong>{total_symbols} symbols</strong> loaded from MT5 Market Watch
+        </p>
+    </div>
+
+</div>
+"""
+
+        self.results_display.setHtml(html)
+        vprint(f"[TradeValidator] ❌ Invalid symbol '{invalid_symbol}' - showing suggestions")
 
     def _get_phase_interpretation(self, phase: str, trade_direction: str) -> dict:
         """
