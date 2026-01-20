@@ -36,7 +36,7 @@ logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 from core.data_manager import data_manager
 from core.verbose_mode_manager import vprint
 from core.visual_controls import visual_controls
-from core.verbose_mode_manager import vprint
+from core.symbol_manager import SymbolManager
 
 
 # Simple theme and settings (inline replacement for config module)
@@ -119,6 +119,9 @@ class ChartPanel(QWidget):
         self.mt5_initialized = False
         self.init_mt5_connection()
 
+        # Initialize symbol manager to get available symbols
+        self.symbol_manager = SymbolManager()
+
         self.init_ui()
 
         # Update timer
@@ -178,11 +181,17 @@ class ChartPanel(QWidget):
         """)
         layout.addWidget(symbol_label_text)
 
-        # Symbol dropdown
+        # Symbol dropdown - Load from Symbol Manager (includes all MT5 Market Watch symbols)
         self.symbol_combo = QComboBox()
-        self.symbol_combo.addItems(['GBPUSD', 'EURUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-                                     'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'])
-        self.symbol_combo.setCurrentText(self.current_symbol)
+        # Get symbols from symbol manager (sorted alphabetically)
+        available_symbols = sorted(self.symbol_manager.symbols.keys()) if self.symbol_manager.symbols else ['EURUSD']
+        self.symbol_combo.addItems(available_symbols)
+        # Set current symbol if it exists, otherwise use first available
+        if self.current_symbol in available_symbols:
+            self.symbol_combo.setCurrentText(self.current_symbol)
+        elif available_symbols:
+            self.symbol_combo.setCurrentText(available_symbols[0])
+            self.current_symbol = available_symbols[0]
         self.symbol_combo.currentTextChanged.connect(self.on_symbol_changed)
         self.symbol_combo.setStyleSheet(f"""
             QComboBox {{
@@ -2234,6 +2243,31 @@ class ChartPanel(QWidget):
 
         # Clear loading flag - updates can resume
         self.is_loading = False
+
+    def refresh_symbol_list(self):
+        """Refresh symbol dropdown from Symbol Manager (called when symbols are updated)"""
+        vprint("[Chart] Refreshing symbol dropdown from Symbol Manager...")
+
+        # Refresh symbols from MT5
+        self.symbol_manager.refresh_symbols()
+
+        # Get updated symbol list
+        available_symbols = sorted(self.symbol_manager.symbols.keys()) if self.symbol_manager.symbols else ['EURUSD']
+
+        # Store current selection
+        current_symbol = self.symbol_combo.currentText()
+
+        # Clear and repopulate dropdown
+        self.symbol_combo.clear()
+        self.symbol_combo.addItems(available_symbols)
+
+        # Restore selection if still available
+        if current_symbol in available_symbols:
+            self.symbol_combo.setCurrentText(current_symbol)
+        elif available_symbols:
+            self.symbol_combo.setCurrentText(available_symbols[0])
+
+        vprint(f"[Chart] ✓ Symbol dropdown updated: {len(available_symbols)} symbols")
 
     def toggle_display_mode(self):
         """Toggle between small and max display modes"""

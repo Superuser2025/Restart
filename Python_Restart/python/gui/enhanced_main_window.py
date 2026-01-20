@@ -641,6 +641,9 @@ class EnhancedMainWindow(QMainWindow):
         if hasattr(self, 'scanner_widget'):
             self.scanner_widget.pairs_to_scan = symbols
             self.scanner_widget.scan_market()
+        # Update chart panel symbol dropdown
+        if hasattr(self, 'chart_panel'):
+            self.chart_panel.refresh_symbol_list()
 
     def on_toggle_mode(self, checked: bool):
         """Toggle between Demo and Live mode"""
