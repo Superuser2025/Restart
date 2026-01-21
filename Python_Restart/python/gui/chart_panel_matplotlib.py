@@ -181,17 +181,52 @@ class ChartPanel(QWidget):
         """)
         layout.addWidget(symbol_label_text)
 
-        # Symbol dropdown - Load from Symbol Manager (includes all MT5 Market Watch symbols)
+        # Symbol dropdown - Load from Symbol Manager with grouping by asset class
         self.symbol_combo = QComboBox()
-        # Get symbols from symbol manager (sorted alphabetically)
-        available_symbols = sorted(self.symbol_manager.symbols.keys()) if self.symbol_manager.symbols else ['EURUSD']
-        self.symbol_combo.addItems(available_symbols)
-        # Set current symbol if it exists, otherwise use first available
-        if self.current_symbol in available_symbols:
-            self.symbol_combo.setCurrentText(self.current_symbol)
-        elif available_symbols:
-            self.symbol_combo.setCurrentText(available_symbols[0])
-            self.current_symbol = available_symbols[0]
+
+        # Group symbols by asset class
+        if self.symbol_manager.symbols:
+            from collections import defaultdict
+            grouped_symbols = defaultdict(list)
+
+            for symbol, specs in self.symbol_manager.symbols.items():
+                grouped_symbols[specs.asset_class].append(symbol)
+
+            # Define group order and display names
+            group_order = [
+                ('forex', '═══ FOREX ═══'),
+                ('index', '═══ INDICES ═══'),
+                ('stock', '═══ STOCKS ═══'),
+                ('commodity', '═══ COMMODITIES ═══'),
+                ('crypto', '═══ CRYPTO ═══')
+            ]
+
+            all_symbols = []
+            for asset_class, group_label in group_order:
+                if asset_class in grouped_symbols and grouped_symbols[asset_class]:
+                    # Add group header
+                    self.symbol_combo.addItem(group_label)
+                    # Make header non-selectable by disabling it
+                    model = self.symbol_combo.model()
+                    item = model.item(self.symbol_combo.count() - 1)
+                    item.setEnabled(False)
+
+                    # Add symbols in this group (sorted alphabetically)
+                    symbols_in_group = sorted(grouped_symbols[asset_class])
+                    for symbol in symbols_in_group:
+                        self.symbol_combo.addItem(symbol)
+                        all_symbols.append(symbol)
+
+            # Set current symbol if it exists, otherwise use first available
+            if self.current_symbol in all_symbols:
+                self.symbol_combo.setCurrentText(self.current_symbol)
+            elif all_symbols:
+                self.symbol_combo.setCurrentText(all_symbols[0])
+                self.current_symbol = all_symbols[0]
+        else:
+            # Fallback if no symbols
+            self.symbol_combo.addItems(['EURUSD'])
+            self.current_symbol = 'EURUSD'
         self.symbol_combo.currentTextChanged.connect(self.on_symbol_changed)
         self.symbol_combo.setStyleSheet(f"""
             QComboBox {{
@@ -2251,23 +2286,56 @@ class ChartPanel(QWidget):
         # Refresh symbols from MT5
         self.symbol_manager.refresh_symbols()
 
-        # Get updated symbol list
-        available_symbols = sorted(self.symbol_manager.symbols.keys()) if self.symbol_manager.symbols else ['EURUSD']
-
         # Store current selection
         current_symbol = self.symbol_combo.currentText()
 
-        # Clear and repopulate dropdown
+        # Clear dropdown
         self.symbol_combo.clear()
-        self.symbol_combo.addItems(available_symbols)
 
-        # Restore selection if still available
-        if current_symbol in available_symbols:
-            self.symbol_combo.setCurrentText(current_symbol)
-        elif available_symbols:
-            self.symbol_combo.setCurrentText(available_symbols[0])
+        # Group symbols by asset class
+        if self.symbol_manager.symbols:
+            from collections import defaultdict
+            grouped_symbols = defaultdict(list)
 
-        vprint(f"[Chart] ✓ Symbol dropdown updated: {len(available_symbols)} symbols")
+            for symbol, specs in self.symbol_manager.symbols.items():
+                grouped_symbols[specs.asset_class].append(symbol)
+
+            # Define group order and display names
+            group_order = [
+                ('forex', '═══ FOREX ═══'),
+                ('index', '═══ INDICES ═══'),
+                ('stock', '═══ STOCKS ═══'),
+                ('commodity', '═══ COMMODITIES ═══'),
+                ('crypto', '═══ CRYPTO ═══')
+            ]
+
+            all_symbols = []
+            for asset_class, group_label in group_order:
+                if asset_class in grouped_symbols and grouped_symbols[asset_class]:
+                    # Add group header
+                    self.symbol_combo.addItem(group_label)
+                    # Make header non-selectable
+                    model = self.symbol_combo.model()
+                    item = model.item(self.symbol_combo.count() - 1)
+                    item.setEnabled(False)
+
+                    # Add symbols in this group (sorted)
+                    symbols_in_group = sorted(grouped_symbols[asset_class])
+                    for symbol in symbols_in_group:
+                        self.symbol_combo.addItem(symbol)
+                        all_symbols.append(symbol)
+
+            # Restore selection if still available
+            if current_symbol in all_symbols:
+                self.symbol_combo.setCurrentText(current_symbol)
+            elif all_symbols:
+                self.symbol_combo.setCurrentText(all_symbols[0])
+
+            vprint(f"[Chart] ✓ Symbol dropdown updated: {len(all_symbols)} symbols grouped by asset class")
+        else:
+            # Fallback
+            self.symbol_combo.addItems(['EURUSD'])
+            vprint("[Chart] ✓ Symbol dropdown updated: Fallback to EURUSD")
 
     def toggle_display_mode(self):
         """Toggle between small and max display modes"""
