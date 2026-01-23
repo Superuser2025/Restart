@@ -1439,6 +1439,119 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             color="orange"
         )
 
+    def enhance_opportunities_with_statistics(self, opportunities: List[Dict]):
+        """
+        Enhance opportunities with statistical analysis data
+
+        Adds:
+        - Win probability (Bayesian)
+        - Expected Value
+        - Kelly Criterion sizing
+        - Confidence intervals
+        - Statistical recommendation
+
+        This implements Requirement #5: Integration with existing functionality
+        """
+        try:
+            stats_manager = StatisticalAnalysisManager.get_instance()
+
+            # Only enhance if statistics is globally enabled
+            if not stats_manager.is_enabled():
+                vprint("[Scanner] Statistics disabled - skipping statistical enhancement")
+                return
+
+            vprint(f"[Scanner] Enhancing {len(opportunities)} opportunities with statistical analysis...")
+
+            for opp in opportunities:
+                try:
+                    timeframe = opp.get('timeframe', 'H1')
+                    pattern = opp.get('pattern', 'Unknown')
+
+                    # Get calculators for this timeframe
+                    bayesian_calc = stats_manager.get_calculator(timeframe, 'bayesian')
+                    ev_calc = stats_manager.get_calculator(timeframe, 'expected_value')
+                    kelly_calc = stats_manager.get_calculator(timeframe, 'kelly')
+
+                    # Get Bayesian win probability
+                    try:
+                        bayesian_data = bayesian_calc.get_pattern_probability(pattern)
+                        opp['statistical_win_prob'] = bayesian_data['posterior_mean']
+                        opp['statistical_ci_lower'] = bayesian_data['credible_interval'][0]
+                        opp['statistical_ci_upper'] = bayesian_data['credible_interval'][1]
+                        opp['statistical_sample_size'] = bayesian_data['sample_size']
+                        opp['statistical_confidence'] = bayesian_data['confidence']
+                    except Exception as e:
+                        vprint(f"[Scanner] Bayesian calc error for {pattern}: {e}")
+                        opp['statistical_win_prob'] = 0.50
+                        opp['statistical_ci_lower'] = 0.40
+                        opp['statistical_ci_upper'] = 0.60
+                        opp['statistical_sample_size'] = 0
+                        opp['statistical_confidence'] = 'No data'
+
+                    # Get Expected Value
+                    try:
+                        ev_data = ev_calc.get_detailed_analysis(opp)
+                        opp['statistical_ev'] = ev_data['adjusted_ev']
+                        opp['statistical_ev_confidence'] = ev_data['confidence']
+                    except Exception as e:
+                        vprint(f"[Scanner] EV calc error for {pattern}: {e}")
+                        opp['statistical_ev'] = 0.0
+                        opp['statistical_ev_confidence'] = 'No data'
+
+                    # Get Kelly sizing
+                    try:
+                        kelly_data = kelly_calc.calculate_kelly_fraction(opp)
+                        opp['statistical_kelly_half'] = kelly_data['kelly_half']
+                        opp['statistical_kelly_quarter'] = kelly_data['kelly_quarter']
+                    except Exception as e:
+                        vprint(f"[Scanner] Kelly calc error for {pattern}: {e}")
+                        opp['statistical_kelly_half'] = 0.0
+                        opp['statistical_kelly_quarter'] = 0.0
+
+                    # Generate recommendation
+                    win_prob = opp.get('statistical_win_prob', 0.50)
+                    ev = opp.get('statistical_ev', 0.0)
+
+                    if ev > 0.5 and win_prob >= 0.60:
+                        opp['statistical_recommendation'] = '✓✓ STRONG'
+                        opp['statistical_rec_color'] = '#10B981'
+                    elif ev > 0 and win_prob >= 0.55:
+                        opp['statistical_recommendation'] = '✓ Good'
+                        opp['statistical_rec_color'] = '#F59E0B'
+                    elif ev > 0:
+                        opp['statistical_recommendation'] = '⚠ Marginal'
+                        opp['statistical_rec_color'] = '#F59E0B'
+                    else:
+                        opp['statistical_recommendation'] = '✗ Skip'
+                        opp['statistical_rec_color'] = '#EF4444'
+
+                    # Enhance quality score with statistical data
+                    # Blend original quality score with statistical recommendation
+                    if win_prob >= 0.60 and ev > 0.5:
+                        # Strong statistical edge - boost quality score
+                        opp['quality_score'] = min(95, opp.get('quality_score', 70) + 10)
+                    elif win_prob >= 0.55 and ev > 0:
+                        # Positive statistical edge - slightly boost
+                        opp['quality_score'] = min(90, opp.get('quality_score', 70) + 5)
+                    elif ev < 0:
+                        # Negative EV - reduce quality score
+                        opp['quality_score'] = max(50, opp.get('quality_score', 70) - 10)
+
+                    vprint(f"[Scanner]   {opp['symbol']} {timeframe}: WinProb={win_prob*100:.1f}%, EV={ev:+.2f}R, Rec={opp['statistical_recommendation']}")
+
+                except Exception as e:
+                    vprint(f"[Scanner] Error enhancing opportunity {opp.get('symbol', 'Unknown')}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+
+            vprint(f"[Scanner] ✓ Enhanced {len(opportunities)} opportunities with statistical data")
+
+        except Exception as e:
+            vprint(f"[Scanner] Error in enhance_opportunities_with_statistics: {e}")
+            import traceback
+            traceback.print_exc()
+
 
 class MiniChartPopup(QDialog):
     """
@@ -1588,115 +1701,3 @@ class MiniChartPopup(QDialog):
 
     # REMOVED showEvent - it was repositioning the popup after we set its position!
 
-    def enhance_opportunities_with_statistics(self, opportunities: List[Dict]):
-        """
-        Enhance opportunities with statistical analysis data
-        
-        Adds:
-        - Win probability (Bayesian)
-        - Expected Value
-        - Kelly Criterion sizing
-        - Confidence intervals
-        - Statistical recommendation
-        
-        This implements Requirement #5: Integration with existing functionality
-        """
-        try:
-            stats_manager = StatisticalAnalysisManager.get_instance()
-            
-            # Only enhance if statistics is globally enabled
-            if not stats_manager.is_enabled():
-                vprint("[Scanner] Statistics disabled - skipping statistical enhancement")
-                return
-            
-            vprint(f"[Scanner] Enhancing {len(opportunities)} opportunities with statistical analysis...")
-            
-            for opp in opportunities:
-                try:
-                    timeframe = opp.get('timeframe', 'H1')
-                    pattern = opp.get('pattern', 'Unknown')
-                    
-                    # Get calculators for this timeframe
-                    bayesian_calc = stats_manager.get_calculator(timeframe, 'bayesian')
-                    ev_calc = stats_manager.get_calculator(timeframe, 'expected_value')
-                    kelly_calc = stats_manager.get_calculator(timeframe, 'kelly')
-                    
-                    # Get Bayesian win probability
-                    try:
-                        bayesian_data = bayesian_calc.get_pattern_probability(pattern)
-                        opp['statistical_win_prob'] = bayesian_data['posterior_mean']
-                        opp['statistical_ci_lower'] = bayesian_data['credible_interval'][0]
-                        opp['statistical_ci_upper'] = bayesian_data['credible_interval'][1]
-                        opp['statistical_sample_size'] = bayesian_data['sample_size']
-                        opp['statistical_confidence'] = bayesian_data['confidence']
-                    except Exception as e:
-                        vprint(f"[Scanner] Bayesian calc error for {pattern}: {e}")
-                        opp['statistical_win_prob'] = 0.50
-                        opp['statistical_ci_lower'] = 0.40
-                        opp['statistical_ci_upper'] = 0.60
-                        opp['statistical_sample_size'] = 0
-                        opp['statistical_confidence'] = 'No data'
-                    
-                    # Get Expected Value
-                    try:
-                        ev_data = ev_calc.get_detailed_analysis(opp)
-                        opp['statistical_ev'] = ev_data['adjusted_ev']
-                        opp['statistical_ev_confidence'] = ev_data['confidence']
-                    except Exception as e:
-                        vprint(f"[Scanner] EV calc error for {pattern}: {e}")
-                        opp['statistical_ev'] = 0.0
-                        opp['statistical_ev_confidence'] = 'No data'
-                    
-                    # Get Kelly sizing
-                    try:
-                        kelly_data = kelly_calc.calculate_kelly_fraction(opp)
-                        opp['statistical_kelly_half'] = kelly_data['kelly_half']
-                        opp['statistical_kelly_quarter'] = kelly_data['kelly_quarter']
-                    except Exception as e:
-                        vprint(f"[Scanner] Kelly calc error for {pattern}: {e}")
-                        opp['statistical_kelly_half'] = 0.0
-                        opp['statistical_kelly_quarter'] = 0.0
-                    
-                    # Generate recommendation
-                    win_prob = opp.get('statistical_win_prob', 0.50)
-                    ev = opp.get('statistical_ev', 0.0)
-                    
-                    if ev > 0.5 and win_prob >= 0.60:
-                        opp['statistical_recommendation'] = '✓✓ STRONG'
-                        opp['statistical_rec_color'] = '#10B981'
-                    elif ev > 0 and win_prob >= 0.55:
-                        opp['statistical_recommendation'] = '✓ Good'
-                        opp['statistical_rec_color'] = '#F59E0B'
-                    elif ev > 0:
-                        opp['statistical_recommendation'] = '⚠ Marginal'
-                        opp['statistical_rec_color'] = '#F59E0B'
-                    else:
-                        opp['statistical_recommendation'] = '✗ Skip'
-                        opp['statistical_rec_color'] = '#EF4444'
-                    
-                    # Enhance quality score with statistical data
-                    # Blend original quality score with statistical recommendation
-                    if win_prob >= 0.60 and ev > 0.5:
-                        # Strong statistical edge - boost quality score
-                        opp['quality_score'] = min(95, opp.get('quality_score', 70) + 10)
-                    elif win_prob >= 0.55 and ev > 0:
-                        # Positive statistical edge - slightly boost
-                        opp['quality_score'] = min(90, opp.get('quality_score', 70) + 5)
-                    elif ev < 0:
-                        # Negative EV - reduce quality score
-                        opp['quality_score'] = max(50, opp.get('quality_score', 70) - 10)
-                    
-                    vprint(f"[Scanner]   {opp['symbol']} {timeframe}: WinProb={win_prob*100:.1f}%, EV={ev:+.2f}R, Rec={opp['statistical_recommendation']}")
-                    
-                except Exception as e:
-                    vprint(f"[Scanner] Error enhancing opportunity {opp.get('symbol', 'Unknown')}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    continue
-            
-            vprint(f"[Scanner] ✓ Enhanced {len(opportunities)} opportunities with statistical data")
-            
-        except Exception as e:
-            vprint(f"[Scanner] Error in enhance_opportunities_with_statistics: {e}")
-            import traceback
-            traceback.print_exc()
