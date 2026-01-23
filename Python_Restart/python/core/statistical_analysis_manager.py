@@ -336,6 +336,45 @@ class StatisticalAnalysisManager:
 
         return None
 
+    def record_pattern_outcome(self, timeframe: str, pattern: str, is_win: bool, profit: float = 0.0):
+        """
+        Record a trade outcome for pattern learning
+
+        Args:
+            timeframe: Timeframe (M15, H1, H4, D1)
+            pattern: Pattern name (e.g., 'Bullish_Engulfing')
+            is_win: True if trade won, False if lost
+            profit: Profit amount (for EV calculation)
+        """
+        tf_data = self.get_timeframe_data(timeframe)
+
+        # Initialize pattern stats if not exists
+        if pattern not in tf_data['patterns']:
+            tf_data['patterns'][pattern] = {
+                'wins': 0,
+                'losses': 0,
+                'total_profit': 0.0,
+                'total_loss': 0.0,
+                'trade_count': 0
+            }
+
+        pattern_stats = tf_data['patterns'][pattern]
+
+        # Update counts
+        pattern_stats['trade_count'] += 1
+
+        if is_win:
+            pattern_stats['wins'] += 1
+            pattern_stats['total_profit'] += profit
+        else:
+            pattern_stats['losses'] += 1
+            pattern_stats['total_loss'] += abs(profit)
+
+        # Save updated data
+        self.save_data()
+
+        vprint(f"[StatsManager] Recorded outcome for {pattern} on {timeframe}: {'WIN' if is_win else 'LOSS'} | P&L: {profit:+.2f}")
+        vprint(f"[StatsManager]   Updated stats: {pattern_stats['wins']}W / {pattern_stats['losses']}L = {pattern_stats['wins']/(pattern_stats['wins']+pattern_stats['losses'])*100:.1f}% win rate")
 
 # Singleton instance
 statistical_analysis_manager = StatisticalAnalysisManager()

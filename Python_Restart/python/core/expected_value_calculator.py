@@ -244,3 +244,35 @@ class ExpectedValueCalculator:
         """
         ev = self.calculate(opportunity)
         return ev >= min_ev
+
+    def record_trade_outcome(self, pattern: str, outcome_data: Dict):
+        """
+        Record actual trade outcome for EV calculation
+
+        Updates win/loss statistics and actual profit/loss amounts
+        so Expected Value calculation reflects REAL performance.
+
+        Args:
+            pattern: Pattern name (e.g., 'Bullish_Engulfing')
+            outcome_data: Dict with:
+                - profit: float (profit/loss amount)
+                - r_multiple: float (profit in R units)
+                - outcome: 'WIN' or 'LOSS'
+        """
+        is_win = outcome_data.get('outcome') == 'WIN'
+        profit = outcome_data.get('profit', 0.0)
+
+        # Update pattern statistics in manager
+        self.manager.record_pattern_outcome(
+            timeframe=self.timeframe,
+            pattern=pattern,
+            is_win=is_win,
+            profit=profit
+        )
+
+        vprint(f"[EVCalculator] Recorded {pattern} trade on {self.timeframe}: {outcome_data.get('outcome')} | R={outcome_data.get('r_multiple', 0):+.2f}")
+
+        # Get updated EV
+        mock_opportunity = {'pattern': pattern, 'timeframe': self.timeframe}
+        updated_ev = self.get_detailed_analysis(mock_opportunity)
+        vprint(f"[EVCalculator]   New EV: {updated_ev['adjusted_ev']:+.2f}R ({updated_ev['confidence']})")

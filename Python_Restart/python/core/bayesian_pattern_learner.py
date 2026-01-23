@@ -428,3 +428,28 @@ class BayesianPatternLearner:
 
         self.manager._save_historical_data()
         vprint(f"[BayesianLearner] Reset {pattern} to prior")
+
+    def record_outcome(self, pattern: str, is_win: bool):
+        """
+        Record a trade outcome to update Bayesian probability
+
+        This is the LEARNING mechanism - each trade outcome updates
+        the posterior probability for this pattern.
+
+        Args:
+            pattern: Pattern name (e.g., 'Bullish_Engulfing')
+            is_win: True if trade won, False if lost
+        """
+        # Update pattern statistics in manager
+        self.manager.record_pattern_outcome(
+            timeframe=self.timeframe,
+            pattern=pattern,
+            is_win=is_win,
+            profit=0.0  # Profit tracked separately by EV calculator
+        )
+
+        vprint(f"[BayesianLearner] Recorded {pattern} outcome on {self.timeframe}: {'WIN' if is_win else 'LOSS'}")
+
+        # Get updated probability
+        updated_prob = self.get_pattern_probability(pattern)
+        vprint(f"[BayesianLearner]   New probability: {updated_prob['posterior_mean']*100:.1f}% (from {updated_prob['sample_size']} trades)")
