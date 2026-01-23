@@ -2734,15 +2734,51 @@ class ChartPanel(QWidget):
         # Redraw chart
         self.plot_candlesticks()
 
+    def get_latest_pattern(self) -> str:
+        """
+        Detect the most recent candlestick pattern on the chart
+        Returns pattern name or None if no pattern detected
+        """
+        if not self.candle_data or len(self.candle_data) < 3:
+            return None
+
+        # Check last 10 candles for patterns (most recent first)
+        for i in range(len(self.candle_data) - 1, max(2, len(self.candle_data) - 11), -1):
+            pattern = self.detect_pattern_at_index(i)
+            if pattern:
+                # Normalize pattern names to match Bayesian learner format
+                # "BULLISH ENGULF" -> "Bullish_Engulfing"
+                # "BEARISH ENGULF" -> "Bearish_Engulfing"
+                # "HAMMER" -> "Hammer"
+                # "SHOOT STAR" -> "Shooting_Star"
+                # "DOJI" -> "Doji"
+                pattern_map = {
+                    "BULLISH ENGULF": "Bullish_Engulfing",
+                    "BEARISH ENGULF": "Bearish_Engulfing",
+                    "HAMMER": "Hammer",
+                    "SHOOT STAR": "Shooting_Star",
+                    "DOJI": "Doji"
+                }
+                normalized = pattern_map.get(pattern, pattern)
+                vprint(f"[Chart] Detected pattern: {normalized} at index {i}")
+                return normalized
+
+        # No pattern detected in recent candles
+        return None
+
     def draw_statistics_overlay(self):
         """Draw statistical analysis information as overlay on chart"""
         if not self.stats_manager.is_enabled():
             return
 
         try:
-            # Get current pattern (if any) - you might need to detect this from your pattern recognition
-            # For now, we'll use a placeholder or the most recent pattern
-            current_pattern = "Bullish_Engulfing"  # This should be dynamically detected
+            # DETECT REAL PATTERN from chart data
+            current_pattern = self.get_latest_pattern()
+
+            # If no pattern detected, show message and return
+            if not current_pattern:
+                self.draw_no_pattern_message()
+                return
 
             # Get calculators for current timeframe
             ev_calc = self.stats_manager.get_calculator(self.current_timeframe, 'expected_value')
@@ -2912,3 +2948,48 @@ class ChartPanel(QWidget):
             vprint(f"[Chart] Error drawing statistics overlay: {e}")
             import traceback
             traceback.print_exc()
+
+    def draw_no_pattern_message(self):
+        """Draw message when no pattern is detected"""
+        try:
+            ax = self.canvas.axes
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+
+            # Small panel in top-right
+            panel_width = (xlim[1] - xlim[0]) * 0.20
+            panel_height = (ylim[1] - ylim[0]) * 0.15
+            panel_x = xlim[1] - panel_width - 2
+            panel_y = ylim[1] - panel_height - (ylim[1] - ylim[0]) * 0.02
+
+            # Panel background
+            from matplotlib.patches import FancyBboxPatch
+            panel_bg = FancyBboxPatch(
+                (panel_x, panel_y),
+                panel_width,
+                panel_height,
+                boxstyle="round,pad=0.05",
+                facecolor='#1E293B',
+                edgecolor='#64748B',
+                alpha=0.90,
+                linewidth=1,
+                zorder=1000
+            )
+            ax.add_patch(panel_bg)
+
+            # Message
+            text_x = panel_x + panel_width * 0.5
+            text_y = panel_y + panel_height * 0.5
+
+            ax.text(
+                text_x, text_y,
+                '📊 STATISTICS\n\nNo Pattern\nDetected',
+                fontsize=9,
+                color='#94A3B8',
+                ha='center',
+                va='center',
+                zorder=1001
+            )
+
+        except Exception as e:
+            vprint(f"[Chart] Error drawing no pattern message: {e}")
