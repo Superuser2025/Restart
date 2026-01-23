@@ -37,6 +37,7 @@ from core.data_manager import data_manager
 from core.verbose_mode_manager import vprint
 from core.visual_controls import visual_controls
 from core.symbol_manager import SymbolManager
+from core.statistical_analysis_manager import StatisticalAnalysisManager
 
 
 # Simple theme and settings (inline replacement for config module)
@@ -114,6 +115,7 @@ class ChartPanel(QWidget):
         # Overlay visibility flags (user can toggle these) - OFF BY DEFAULT
         self.show_overlays = False  # FVG, OB, Liquidity zones - user turns ON when needed
         self.show_levels = False    # S/R, Pivots, PDH/PDL/PDC - user turns ON when needed
+        self.show_statistics = False  # Statistical analysis overlays - user turns ON when needed
 
         # MT5 connection status
         self.mt5_initialized = False
@@ -121,6 +123,9 @@ class ChartPanel(QWidget):
 
         # Initialize symbol manager to get available symbols
         self.symbol_manager = SymbolManager()
+
+        # Initialize statistical analysis manager (singleton)
+        self.stats_manager = StatisticalAnalysisManager.get_instance()
 
         # Symbol favorites and recent history
         self.favorite_symbols = []  # Pinned symbols
@@ -612,6 +617,30 @@ class ChartPanel(QWidget):
         """)
         layout.addWidget(self.levels_toggle_btn)
 
+        layout.addSpacing(10)
+
+        # Statistics toggle button - OFF/RED by default
+        self.statistics_toggle_btn = QPushButton("📊 Statistics: OFF")
+        self.statistics_toggle_btn.clicked.connect(self.toggle_statistics)
+        self.statistics_toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #EF4444;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: {settings.theme.font_size_sm}px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #DC2626;
+            }}
+            QPushButton:pressed {{
+                background-color: #B91C1C;
+            }}
+        """)
+        layout.addWidget(self.statistics_toggle_btn)
+
         layout.addSpacing(20)
 
         # MT5 Connection status (moved from top toolbar)
@@ -1025,6 +1054,10 @@ class ChartPanel(QWidget):
             self.draw_pivot_points()
             self.draw_previous_day_levels()
             self.draw_session_markers()
+
+        if self.show_statistics:
+            # Draw statistical analysis overlays
+            self.draw_statistics_overlay()
 
         # Adjust layout with proper margins
         try:
@@ -2649,3 +2682,233 @@ class ChartPanel(QWidget):
         # Redraw chart
         self.plot_candlesticks()
 
+    def toggle_statistics(self):
+        """Toggle statistical analysis overlays on/off"""
+        # Check if statistical analysis is globally enabled
+        if not self.stats_manager.is_enabled():
+            vprint("[Chart] Statistics system is globally disabled. Enable it in the Statistics tab.")
+            # You could add a QMessageBox here to notify the user
+            return
+
+        self.show_statistics = not self.show_statistics
+
+        if self.show_statistics:
+            self.statistics_toggle_btn.setText("📊 Statistics: ON")
+            self.statistics_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #10B981;
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-size: {settings.theme.font_size_sm}px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #059669;
+                }}
+                QPushButton:pressed {{
+                    background-color: #047857;
+                }}
+            """)
+        else:
+            self.statistics_toggle_btn.setText("📊 Statistics: OFF")
+            self.statistics_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #EF4444;
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-size: {settings.theme.font_size_sm}px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #DC2626;
+                }}
+                QPushButton:pressed {{
+                    background-color: #B91C1C;
+                }}
+            """)
+
+        # Redraw chart
+        self.plot_candlesticks()
+
+    def draw_statistics_overlay(self):
+        """Draw statistical analysis information as overlay on chart"""
+        if not self.stats_manager.is_enabled():
+            return
+
+        try:
+            # Get current pattern (if any) - you might need to detect this from your pattern recognition
+            # For now, we'll use a placeholder or the most recent pattern
+            current_pattern = "Bullish_Engulfing"  # This should be dynamically detected
+
+            # Get calculators for current timeframe
+            ev_calc = self.stats_manager.get_calculator(self.current_timeframe, 'expected_value')
+            kelly_calc = self.stats_manager.get_calculator(self.current_timeframe, 'kelly')
+            bayesian_calc = self.stats_manager.get_calculator(self.current_timeframe, 'bayesian')
+            ci_calc = self.stats_manager.get_calculator(self.current_timeframe, 'confidence_interval')
+
+            # Create overlay panel (top-right corner of chart)
+            ax = self.canvas.axes
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+
+            # Panel dimensions
+            panel_width = (xlim[1] - xlim[0]) * 0.25  # 25% of chart width
+            panel_height = (ylim[1] - ylim[0]) * 0.35  # 35% of chart height
+            panel_x = xlim[1] - panel_width - 2  # 2 units from right edge
+            panel_y = ylim[1] - panel_height - (ylim[1] - ylim[0]) * 0.02  # Small margin from top
+
+            # Draw panel background
+            from matplotlib.patches import FancyBboxPatch
+            panel_bg = FancyBboxPatch(
+                (panel_x, panel_y),
+                panel_width,
+                panel_height,
+                boxstyle="round,pad=0.05",
+                facecolor='#1E293B',
+                edgecolor='#3B82F6',
+                alpha=0.95,
+                linewidth=2,
+                zorder=1000
+            )
+            ax.add_patch(panel_bg)
+
+            # Get Bayesian probability for current pattern
+            try:
+                bayesian_data = bayesian_calc.get_pattern_probability(current_pattern)
+                win_prob = bayesian_data['posterior_mean']
+                ci_lower = bayesian_data['credible_interval'][0]
+                ci_upper = bayesian_data['credible_interval'][1]
+                sample_size = bayesian_data['sample_size']
+            except:
+                win_prob = 0.50
+                ci_lower = 0.40
+                ci_upper = 0.60
+                sample_size = 0
+
+            # Get Expected Value
+            try:
+                # Create a mock opportunity for EV calculation
+                mock_opportunity = {
+                    'pattern': current_pattern,
+                    'timeframe': self.current_timeframe
+                }
+                ev_data = ev_calc.get_detailed_analysis(mock_opportunity)
+                expected_value = ev_data['adjusted_ev']
+                confidence = ev_data['confidence']
+            except:
+                expected_value = 0.0
+                confidence = 'No data'
+
+            # Get Kelly fraction
+            try:
+                kelly_data = kelly_calc.calculate_kelly_fraction(mock_opportunity)
+                kelly_half = kelly_data['kelly_half']
+                kelly_quarter = kelly_data['kelly_quarter']
+            except:
+                kelly_half = 0.0
+                kelly_quarter = 0.0
+
+            # Text positioning
+            text_x = panel_x + panel_width * 0.05
+            text_y_start = panel_y + panel_height * 0.90
+            line_height = panel_height * 0.12
+
+            # Title
+            ax.text(
+                text_x, text_y_start,
+                f'📊 STATISTICS - {self.current_timeframe}',
+                fontsize=10,
+                fontweight='bold',
+                color='#3B82F6',
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Win Probability
+            prob_color = '#10B981' if win_prob >= 0.55 else '#EF4444'
+            ax.text(
+                text_x, text_y_start - line_height * 1,
+                f'Win Rate: {win_prob*100:.1f}%',
+                fontsize=9,
+                fontweight='bold',
+                color=prob_color,
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Credible Interval
+            ax.text(
+                text_x, text_y_start - line_height * 1.8,
+                f'95% CI: [{ci_lower*100:.1f}%-{ci_upper*100:.1f}%]',
+                fontsize=8,
+                color='#94A3B8',
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Expected Value
+            ev_color = '#10B981' if expected_value > 0 else '#EF4444'
+            ax.text(
+                text_x, text_y_start - line_height * 2.8,
+                f'Expected Value: {expected_value:+.2f}R',
+                fontsize=9,
+                fontweight='bold',
+                color=ev_color,
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Kelly sizing
+            ax.text(
+                text_x, text_y_start - line_height * 3.8,
+                f'Kelly: {kelly_half*100:.1f}% (½) / {kelly_quarter*100:.1f}% (¼)',
+                fontsize=8,
+                color='#94A3B8',
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Sample size
+            ax.text(
+                text_x, text_y_start - line_height * 4.6,
+                f'Data: {sample_size} trades | {confidence}',
+                fontsize=7,
+                color='#64748B',
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Recommendation
+            if expected_value > 0.5 and win_prob >= 0.60:
+                recommendation = "✓ STRONG SETUP"
+                rec_color = '#10B981'
+            elif expected_value > 0 and win_prob >= 0.55:
+                recommendation = "✓ Good Setup"
+                rec_color = '#F59E0B'
+            elif expected_value > 0:
+                recommendation = "⚠ Marginal"
+                rec_color = '#F59E0B'
+            else:
+                recommendation = "✗ Skip"
+                rec_color = '#EF4444'
+
+            ax.text(
+                text_x, text_y_start - line_height * 5.8,
+                recommendation,
+                fontsize=9,
+                fontweight='bold',
+                color=rec_color,
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            vprint(f"[Chart] Drew statistics overlay for {self.current_timeframe}")
+
+        except Exception as e:
+            vprint(f"[Chart] Error drawing statistics overlay: {e}")
+            import traceback
+            traceback.print_exc()
