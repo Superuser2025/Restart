@@ -5,7 +5,7 @@ Professional candlestick charts without WebEngine dependencies
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QFrame
+    QPushButton, QFrame, QLineEdit
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
@@ -122,12 +122,83 @@ class ChartPanel(QWidget):
         # Initialize symbol manager to get available symbols
         self.symbol_manager = SymbolManager()
 
+        # Symbol favorites and recent history
+        self.favorite_symbols = []  # Pinned symbols
+        self.recent_symbols = []    # Last 5 viewed symbols
+        self.max_recent = 5
+        self._load_symbol_preferences()
+
         self.init_ui()
 
         # Update timer
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_chart)
         self.update_timer.start(settings.app.chart_refresh_interval)
+
+    def _load_symbol_preferences(self):
+        """Load favorite and recent symbols from config file"""
+        try:
+            from pathlib import Path
+            import json
+            config_file = Path(__file__).parent.parent / "config" / "symbol_preferences.json"
+
+            if config_file.exists():
+                with open(config_file, 'r') as f:
+                    data = json.load(f)
+                    self.favorite_symbols = data.get('favorites', [])
+                    self.recent_symbols = data.get('recent', [])
+                    vprint(f"[Chart] Loaded {len(self.favorite_symbols)} favorites, {len(self.recent_symbols)} recent")
+        except Exception as e:
+            vprint(f"[Chart] Could not load symbol preferences: {e}")
+            self.favorite_symbols = []
+            self.recent_symbols = []
+
+    def _save_symbol_preferences(self):
+        """Save favorite and recent symbols to config file"""
+        try:
+            from pathlib import Path
+            import json
+            config_file = Path(__file__).parent.parent / "config" / "symbol_preferences.json"
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+
+            data = {
+                'favorites': self.favorite_symbols,
+                'recent': self.recent_symbols
+            }
+
+            with open(config_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            vprint(f"[Chart] Saved symbol preferences")
+        except Exception as e:
+            vprint(f"[Chart] Could not save symbol preferences: {e}")
+
+    def toggle_favorite(self, symbol: str):
+        """Add or remove symbol from favorites"""
+        if symbol in self.favorite_symbols:
+            self.favorite_symbols.remove(symbol)
+            vprint(f"[Chart] Removed {symbol} from favorites")
+        else:
+            self.favorite_symbols.append(symbol)
+            vprint(f"[Chart] Added {symbol} to favorites")
+
+        self._save_symbol_preferences()
+        # Repopulate with current search filter
+        search_text = self.symbol_search.text() if hasattr(self, 'symbol_search') else ""
+        self.populate_symbol_dropdown(filter_text=search_text)
+
+    def add_to_recent(self, symbol: str):
+        """Add symbol to recent history"""
+        # Remove if already in list
+        if symbol in self.recent_symbols:
+            self.recent_symbols.remove(symbol)
+
+        # Add to front
+        self.recent_symbols.insert(0, symbol)
+
+        # Keep only last N symbols
+        self.recent_symbols = self.recent_symbols[:self.max_recent]
+
+        self._save_symbol_preferences()
 
     def init_ui(self):
         """Initialize UI components"""
@@ -169,6 +240,32 @@ class ChartPanel(QWidget):
         layout = QHBoxLayout(toolbar)
         layout.setContentsMargins(16, 8, 16, 8)
 
+        # Search box for filtering symbols
+        search_label = QLabel("🔍")
+        search_label.setStyleSheet(f"color: {settings.theme.text_secondary}; font-size: 18px;")
+        layout.addWidget(search_label)
+
+        self.symbol_search = QLineEdit()
+        self.symbol_search.setPlaceholderText("Search symbols...")
+        self.symbol_search.textChanged.connect(self.on_search_changed)
+        self.symbol_search.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {settings.theme.surface_light};
+                color: {settings.theme.text_primary};
+                border: 1px solid {settings.theme.border_color};
+                border-radius: 6px;
+                padding: 8px 12px;
+                min-width: 150px;
+                font-size: {settings.theme.font_size_sm}px;
+            }}
+            QLineEdit:focus {{
+                border-color: {settings.theme.accent};
+            }}
+        """)
+        layout.addWidget(self.symbol_search)
+
+        layout.addSpacing(10)
+
         # Symbol selector (allow user to view any symbol)
         symbol_label_text = QLabel("Symbol:")
         symbol_label_text.setStyleSheet(f"""
@@ -181,17 +278,10 @@ class ChartPanel(QWidget):
         """)
         layout.addWidget(symbol_label_text)
 
-        # Symbol dropdown - Load from Symbol Manager (includes all MT5 Market Watch symbols)
+        # Symbol dropdown
         self.symbol_combo = QComboBox()
-        # Get symbols from symbol manager (sorted alphabetically)
-        available_symbols = sorted(self.symbol_manager.symbols.keys()) if self.symbol_manager.symbols else ['EURUSD']
-        self.symbol_combo.addItems(available_symbols)
-        # Set current symbol if it exists, otherwise use first available
-        if self.current_symbol in available_symbols:
-            self.symbol_combo.setCurrentText(self.current_symbol)
-        elif available_symbols:
-            self.symbol_combo.setCurrentText(available_symbols[0])
-            self.current_symbol = available_symbols[0]
+        self.symbol_combo.setEditable(False)
+        self.populate_symbol_dropdown()
         self.symbol_combo.currentTextChanged.connect(self.on_symbol_changed)
         self.symbol_combo.setStyleSheet(f"""
             QComboBox {{
@@ -228,6 +318,26 @@ class ChartPanel(QWidget):
             }}
         """)
         layout.addWidget(self.symbol_combo)
+
+        # Favorite button
+        self.favorite_btn = QPushButton("☆")
+        self.favorite_btn.setFixedSize(36, 36)
+        self.favorite_btn.clicked.connect(self.on_favorite_clicked)
+        self.favorite_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {settings.theme.surface_light};
+                color: {settings.theme.warning};
+                border: 1px solid {settings.theme.border_color};
+                border-radius: 6px;
+                font-size: 18px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {settings.theme.accent};
+                color: #FFFFFF;
+            }}
+        """)
+        layout.addWidget(self.favorite_btn)
 
         layout.addSpacing(20)
 
@@ -519,6 +629,139 @@ class ChartPanel(QWidget):
         layout.addWidget(self.connection_label)
 
         return toolbar
+
+    def populate_symbol_dropdown(self, filter_text: str = ""):
+        """Populate dropdown with favorites, recent, and grouped symbols"""
+        self.symbol_combo.blockSignals(True)  # Prevent triggering on_symbol_changed during population
+        current_symbol = self.symbol_combo.currentText()
+        self.symbol_combo.clear()
+
+        if not self.symbol_manager.symbols:
+            self.symbol_combo.addItems(['EURUSD'])
+            self.symbol_combo.blockSignals(False)
+            return
+
+        from collections import defaultdict
+
+        # Collect all symbols
+        all_symbols = []
+
+        # Filter by search text if provided
+        filtered_symbols = {}
+        for symbol, specs in self.symbol_manager.symbols.items():
+            if not filter_text or filter_text.upper() in symbol.upper():
+                filtered_symbols[symbol] = specs
+
+        # SECTION 1: FAVORITES
+        favorites_in_list = [s for s in self.favorite_symbols if s in filtered_symbols]
+        if favorites_in_list:
+            self.symbol_combo.addItem("★ FAVORITES")
+            model = self.symbol_combo.model()
+            item = model.item(self.symbol_combo.count() - 1)
+            item.setEnabled(False)
+
+            for symbol in favorites_in_list:
+                self.symbol_combo.addItem(f"  ★ {symbol}")
+                all_symbols.append(symbol)
+
+        # SECTION 2: RECENT
+        recent_in_list = [s for s in self.recent_symbols if s in filtered_symbols and s not in favorites_in_list]
+        if recent_in_list:
+            self.symbol_combo.addItem("🕐 RECENT")
+            model = self.symbol_combo.model()
+            item = model.item(self.symbol_combo.count() - 1)
+            item.setEnabled(False)
+
+            for symbol in recent_in_list:
+                self.symbol_combo.addItem(f"  {symbol}")
+                all_symbols.append(symbol)
+
+        # SECTION 3: GROUPED BY ASSET CLASS
+        grouped_symbols = defaultdict(list)
+        for symbol, specs in filtered_symbols.items():
+            # Skip if already in favorites or recent
+            if symbol not in favorites_in_list and symbol not in recent_in_list:
+                grouped_symbols[specs.asset_class].append(symbol)
+
+        group_order = [
+            ('forex', '═══ FOREX ═══'),
+            ('index', '═══ INDICES ═══'),
+            ('stock', '═══ STOCKS ═══'),
+            ('commodity', '═══ COMMODITIES ═══'),
+            ('crypto', '═══ CRYPTO ═══')
+        ]
+
+        for asset_class, group_label in group_order:
+            if asset_class in grouped_symbols and grouped_symbols[asset_class]:
+                self.symbol_combo.addItem(group_label)
+                model = self.symbol_combo.model()
+                item = model.item(self.symbol_combo.count() - 1)
+                item.setEnabled(False)
+
+                symbols_in_group = sorted(grouped_symbols[asset_class])
+                for symbol in symbols_in_group:
+                    self.symbol_combo.addItem(symbol)
+                    all_symbols.append(symbol)
+
+        # Restore selection or set first available
+        if current_symbol in all_symbols:
+            # Find the display text (might have prefix like "★ ")
+            for i in range(self.symbol_combo.count()):
+                item_text = self.symbol_combo.itemText(i)
+                if current_symbol in item_text:
+                    self.symbol_combo.setCurrentIndex(i)
+                    break
+        elif all_symbols:
+            self.symbol_combo.setCurrentIndex(self.symbol_combo.findText(all_symbols[0], Qt.MatchFlag.MatchContains))
+
+        self.symbol_combo.blockSignals(False)
+        vprint(f"[Chart] Populated dropdown: {len(all_symbols)} symbols")
+
+    def on_search_changed(self, text: str):
+        """Filter symbol dropdown based on search text"""
+        self.populate_symbol_dropdown(filter_text=text)
+
+    def on_favorite_clicked(self):
+        """Toggle favorite status of current symbol"""
+        symbol = self.current_symbol
+        if symbol:
+            self.toggle_favorite(symbol)
+            self.update_favorite_button()
+
+    def update_favorite_button(self):
+        """Update favorite button appearance based on current symbol"""
+        if self.current_symbol in self.favorite_symbols:
+            self.favorite_btn.setText("★")  # Filled star
+            self.favorite_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {settings.theme.warning};
+                    color: #FFFFFF;
+                    border: 1px solid {settings.theme.warning};
+                    border-radius: 6px;
+                    font-size: 18px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {settings.theme.surface_light};
+                    color: {settings.theme.warning};
+                }}
+            """)
+        else:
+            self.favorite_btn.setText("☆")  # Empty star
+            self.favorite_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {settings.theme.surface_light};
+                    color: {settings.theme.warning};
+                    border: 1px solid {settings.theme.border_color};
+                    border-radius: 6px;
+                    font-size: 18px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {settings.theme.accent};
+                    color: #FFFFFF;
+                }}
+            """)
 
     def init_mt5_connection(self):
         """Initialize connection to MetaTrader5"""
@@ -2205,8 +2448,17 @@ class ChartPanel(QWidget):
         # Set loading flag to prevent update_chart from interfering
         self.is_loading = True
 
-        self.current_symbol = symbol
+        # Clean symbol name (remove prefixes like "★ " or "  ")
+        clean_symbol = symbol.replace("★", "").strip()
+
+        self.current_symbol = clean_symbol
         vprint(f"[Chart] current_symbol set to: {self.current_symbol}")
+
+        # Add to recent history
+        self.add_to_recent(clean_symbol)
+
+        # Update favorite button
+        self.update_favorite_button()
 
         # Emit signal to notify main window
         self.symbol_changed.emit(symbol)
@@ -2251,23 +2503,13 @@ class ChartPanel(QWidget):
         # Refresh symbols from MT5
         self.symbol_manager.refresh_symbols()
 
-        # Get updated symbol list
-        available_symbols = sorted(self.symbol_manager.symbols.keys()) if self.symbol_manager.symbols else ['EURUSD']
+        # Repopulate using the standard method (includes favorites, recent, and groups)
+        self.populate_symbol_dropdown()
 
-        # Store current selection
-        current_symbol = self.symbol_combo.currentText()
+        # Update favorite button for current symbol
+        self.update_favorite_button()
 
-        # Clear and repopulate dropdown
-        self.symbol_combo.clear()
-        self.symbol_combo.addItems(available_symbols)
-
-        # Restore selection if still available
-        if current_symbol in available_symbols:
-            self.symbol_combo.setCurrentText(current_symbol)
-        elif available_symbols:
-            self.symbol_combo.setCurrentText(available_symbols[0])
-
-        vprint(f"[Chart] ✓ Symbol dropdown updated: {len(available_symbols)} symbols")
+        vprint("[Chart] ✓ Symbol dropdown refreshed")
 
     def toggle_display_mode(self):
         """Toggle between small and max display modes"""
