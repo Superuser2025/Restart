@@ -2388,32 +2388,9 @@ class ChartPanel(QWidget):
             if hasattr(self, 'time_label'):
                 self.time_label.setText(datetime.now().strftime("%H:%M:%S"))
 
-            # Update MT5 connection status
-            if hasattr(self, 'connection_label'):
-                if self.mt5_initialized and mt5.terminal_info() is not None:
-                    self.connection_label.setText("🟢 MT5: Connected")
-                    self.connection_label.setStyleSheet(f"""
-                        QLabel {{
-                            color: {settings.theme.success};
-                            font-size: {settings.theme.font_size_sm}px;
-                            font-weight: bold;
-                            background-color: {settings.theme.surface};
-                            padding: 5px 10px;
-                            border-radius: 5px;
-                        }}
-                    """)
-                else:
-                    self.connection_label.setText("🔴 MT5: Disconnected")
-                    self.connection_label.setStyleSheet(f"""
-                        QLabel {{
-                            color: {settings.theme.danger};
-                            font-size: {settings.theme.font_size_sm}px;
-                            font-weight: bold;
-                            background-color: {settings.theme.surface};
-                            padding: 5px 10px;
-                            border-radius: 5px;
-                        }}
-                    """)
+            # NOTE: MT5 connection status removed from here
+            # Connection status is now managed by MT5Connector with proper debouncing
+            # to prevent flapping. Status updates via connection_status_changed signal.
 
             # Skip update if we're currently loading new data (symbol/timeframe change)
             if self.is_loading:
