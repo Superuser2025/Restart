@@ -619,6 +619,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.setObjectName("OpportunityScannerWidget")
 
         self.opportunities = []
+        self.mirror_mode_enabled = False  # Direction-neutral mode (show SELLs as BUYs)
 
         # Load selected symbols from config (or use defaults)
         self.pairs_to_scan = self.load_scanner_config()
@@ -1255,6 +1256,10 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         vprint(f"\n[Scanner] update_display() called with {len(self.opportunities)} opportunities")
 
+        # Apply Mirror Mode if enabled (reframe SELLs as BUYs)
+        if self.mirror_mode_enabled:
+            self.apply_mirror_mode(self.opportunities)
+
         # Apply institutional filters to all opportunities
         filtered_opportunities = [
             opp for opp in self.opportunities
@@ -1551,6 +1556,48 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             vprint(f"[Scanner] Error in enhance_opportunities_with_statistics: {e}")
             import traceback
             traceback.print_exc()
+
+    def apply_mirror_mode(self, opportunities: List[Dict]):
+        """
+        Apply Mirror Mode to SELL opportunities
+
+        Reframes SELL trades as BUY opportunities (inverted pairs)
+        SELL EURUSD → BUY USDEUR
+
+        This helps traders overcome long bias by making SELLs psychologically comfortable.
+        """
+        if not self.mirror_mode_enabled:
+            return  # Mirror mode disabled, do nothing
+
+        from core.direction_neutral_system import direction_neutralizer
+
+        vprint(f"[Scanner] 🔄 Applying Mirror Mode to {len(opportunities)} opportunities...")
+
+        for opp in opportunities:
+            if opp.get('direction') == 'SELL':
+                # Reframe SELL as BUY
+                neutral_view = direction_neutralizer.reframe_as_buy(opp)
+
+                # Update opportunity fields
+                opp['original_symbol'] = opp['symbol']
+                opp['original_direction'] = opp['direction']
+
+                # Show as BUY with inverted symbol
+                opp['symbol'] = neutral_view.reframed_symbol
+                opp['direction'] = 'BUY'
+                opp['mirror_mode_active'] = True
+                opp['reframed_narrative'] = neutral_view.reframed_narrative
+
+                vprint(f"[Scanner]   🔄 {opp['original_direction']} {opp['original_symbol']} → {opp['direction']} {opp['symbol']}")
+            else:
+                opp['mirror_mode_active'] = False
+
+        vprint(f"[Scanner] ✓ Mirror Mode applied")
+
+    def refresh_opportunities(self):
+        """Refresh opportunity display (e.g., after enabling/disabling Mirror Mode)"""
+        vprint("[Scanner] Refreshing opportunities display...")
+        self.update_display()
 
 
 class MiniChartPopup(QDialog):
