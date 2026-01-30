@@ -931,7 +931,7 @@ class EnhancedMainWindow(QMainWindow):
             "Confirm Exit",
             "Are you sure you want to exit AppleTrader Pro?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes  # Default to Yes for quick exit
         )
 
         if reply == QMessageBox.StandardButton.Yes:
