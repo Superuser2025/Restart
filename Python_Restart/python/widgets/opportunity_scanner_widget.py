@@ -1659,8 +1659,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.update_display()
 
     def blink_all_cards(self):
-        """Make all visible opportunity cards blink again with visual button feedback"""
-        vprint("[Scanner] ✨ Restarting blink animation on all cards...")
+        """Re-blink ONLY the cards that were NEW in the last scan (not all cards)"""
+        vprint("[Scanner] ✨ Re-blinking cards from last signal set...")
 
         # VISUAL FEEDBACK: Change button appearance immediately
         self.blink_btn.setText("✓ BLINKING!")
@@ -1684,14 +1684,19 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             for i in range(group.grid_layout.count()):
                 widget = group.grid_layout.itemAt(i).widget()
                 if widget and isinstance(widget, OpportunityCard):
-                    # Reset blink counter and restart blinking
-                    widget.blink_count = 0
-                    if widget.blink_timer:
-                        widget.blink_timer.stop()
-                    widget.start_blinking()
-                    blinking_count += 1
+                    # ONLY restart blinking if this card was marked as NEW
+                    if widget.is_new:
+                        # Reset blink counter and restart blinking
+                        widget.blink_count = 0
+                        if widget.blink_timer:
+                            widget.blink_timer.stop()
+                        widget.start_blinking()
+                        blinking_count += 1
 
-        vprint(f"[Scanner] ✨ Restarted blinking on {blinking_count} cards")
+        if blinking_count > 0:
+            vprint(f"[Scanner] ✨ Re-started blinking on {blinking_count} NEW cards from last signal")
+        else:
+            vprint(f"[Scanner] ⚠️ No new cards to blink (wait for next scan to generate new signals)")
 
         # RESTORE BUTTON: After 2 seconds, restore original appearance
         QTimer.singleShot(2000, self.restore_blink_button)
