@@ -89,6 +89,8 @@ class MT5Connector(QObject):
             modified = self.market_data_file.stat().st_mtime
 
             if modified == self.last_file_modified:
+                # File exists but hasn't been modified - still good, reset fail counter
+                self.connection_fail_count = 0
                 return  # No changes
 
             self.last_file_modified = modified
