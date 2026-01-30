@@ -735,8 +735,8 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         header_layout.addWidget(settings_btn)
 
         # Blink Again button
-        blink_btn = QPushButton("✨ Blink Again")
-        blink_btn.setStyleSheet("""
+        self.blink_btn = QPushButton("✨ Blink Again")
+        self.blink_btn.setStyleSheet("""
             QPushButton {
                 background-color: #10B981;
                 color: white;
@@ -749,9 +749,9 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 background-color: #059669;
             }
         """)
-        blink_btn.setToolTip("Make all opportunity cards blink again to see which ones are active")
-        blink_btn.clicked.connect(self.blink_all_cards)
-        header_layout.addWidget(blink_btn)
+        self.blink_btn.setToolTip("Make all opportunity cards blink again to see which ones are active")
+        self.blink_btn.clicked.connect(self.blink_all_cards)
+        header_layout.addWidget(self.blink_btn)
 
         # Symbol count label
         self.symbol_count_label = QLabel(f"Scanning {len(self.pairs_to_scan)} symbols")
@@ -1659,8 +1659,22 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.update_display()
 
     def blink_all_cards(self):
-        """Make all visible opportunity cards blink again"""
+        """Make all visible opportunity cards blink again with visual button feedback"""
         vprint("[Scanner] ✨ Restarting blink animation on all cards...")
+
+        # VISUAL FEEDBACK: Change button appearance immediately
+        self.blink_btn.setText("✓ BLINKING!")
+        self.blink_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F59E0B;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+        """)
+        self.blink_btn.setEnabled(False)  # Disable temporarily to prevent spam
 
         blinking_count = 0
 
@@ -1678,6 +1692,27 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                     blinking_count += 1
 
         vprint(f"[Scanner] ✨ Restarted blinking on {blinking_count} cards")
+
+        # RESTORE BUTTON: After 2 seconds, restore original appearance
+        QTimer.singleShot(2000, self.restore_blink_button)
+
+    def restore_blink_button(self):
+        """Restore Blink Again button to original state"""
+        self.blink_btn.setText("✨ Blink Again")
+        self.blink_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+            }
+        """)
+        self.blink_btn.setEnabled(True)  # Re-enable button
 
 
 class MiniChartPopup(QDialog):
