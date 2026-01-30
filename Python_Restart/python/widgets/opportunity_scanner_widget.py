@@ -1564,35 +1564,75 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         Reframes SELL trades as BUY opportunities (inverted pairs)
         SELL EURUSD → BUY USDEUR
 
+        When disabled, restores original symbols and directions.
+
         This helps traders overcome long bias by making SELLs psychologically comfortable.
         """
         if not self.mirror_mode_enabled:
-            return  # Mirror mode disabled, do nothing
+            # Mirror mode disabled - RESTORE original values
+            restored_count = 0
+            for opp in opportunities:
+                if opp.get('mirror_mode_active', False):
+                    # Restore original symbol and direction
+                    if 'original_symbol' in opp and 'original_direction' in opp:
+                        opp['symbol'] = opp['original_symbol']
+                        opp['direction'] = opp['original_direction']
+                        opp['mirror_mode_active'] = False
+                        restored_count += 1
 
+                    # Clean up mirror mode fields
+                    opp.pop('original_symbol', None)
+                    opp.pop('original_direction', None)
+                    opp.pop('reframed_narrative', None)
+
+            if restored_count > 0:
+                vprint(f"[Scanner] ↩️ Restored {restored_count} opportunities to original directions")
+            return
+
+        # Mirror mode enabled - REFRAME SELLs as BUYs
         from core.direction_neutral_system import direction_neutralizer
 
-        vprint(f"[Scanner] 🔄 Applying Mirror Mode to {len(opportunities)} opportunities...")
-
+        mirrored_count = 0
         for opp in opportunities:
-            if opp.get('direction') == 'SELL':
+            # Skip if already mirrored
+            if opp.get('mirror_mode_active', False):
+                continue
+
+            # Check original direction (not current, in case it's already been modified)
+            original_direction = opp.get('original_direction', opp.get('direction'))
+
+            if original_direction == 'SELL':
                 # Reframe SELL as BUY
-                neutral_view = direction_neutralizer.reframe_as_buy(opp)
+                # Need to temporarily restore for reframing if already modified
+                if 'original_symbol' in opp:
+                    temp_symbol = opp['original_symbol']
+                    temp_direction = opp['original_direction']
+                else:
+                    temp_symbol = opp['symbol']
+                    temp_direction = opp['direction']
 
-                # Update opportunity fields
-                opp['original_symbol'] = opp['symbol']
-                opp['original_direction'] = opp['direction']
+                # Create temp opp for reframing
+                temp_opp = {'symbol': temp_symbol, 'direction': temp_direction}
+                neutral_view = direction_neutralizer.reframe_as_buy(temp_opp)
 
-                # Show as BUY with inverted symbol
+                # Store original values (if not already stored)
+                if 'original_symbol' not in opp:
+                    opp['original_symbol'] = opp['symbol']
+                    opp['original_direction'] = opp['direction']
+
+                # Apply mirrored values
                 opp['symbol'] = neutral_view.reframed_symbol
                 opp['direction'] = 'BUY'
                 opp['mirror_mode_active'] = True
                 opp['reframed_narrative'] = neutral_view.reframed_narrative
 
-                vprint(f"[Scanner]   🔄 {opp['original_direction']} {opp['original_symbol']} → {opp['direction']} {opp['symbol']}")
+                mirrored_count += 1
             else:
                 opp['mirror_mode_active'] = False
 
-        vprint(f"[Scanner] ✓ Mirror Mode applied")
+        if mirrored_count > 0:
+            vprint(f"[Scanner] 🔄 Mirrored {mirrored_count} SELL opportunities to BUY")
+
 
     def refresh_opportunities(self):
         """Refresh opportunity display (e.g., after enabling/disabling Mirror Mode)"""
