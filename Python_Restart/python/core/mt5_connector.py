@@ -41,6 +41,10 @@ class MT5Connector(QObject):
         self.last_file_modified = None
         self.is_connected = False
 
+        # Connection stability - prevent flapping
+        self.connection_fail_count = 0
+        self.connection_required_fails = 5  # Must fail 5 times before disconnecting (5 seconds)
+
         # Auto-update timer
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_data)
@@ -68,11 +72,16 @@ class MT5Connector(QObject):
             return None
 
     def update_data(self):
-        """Check for and load new data from MT5"""
+        """Check for and load new data from MT5 (with connection stability)"""
         if not self.market_data_file or not self.market_data_file.exists():
-            if self.is_connected:
+            # File missing - increment fail counter
+            self.connection_fail_count += 1
+
+            # Only disconnect after sustained failure (5+ consecutive checks)
+            if self.is_connected and self.connection_fail_count >= self.connection_required_fails:
                 self.is_connected = False
                 self.connection_status_changed.emit(False)
+                print(f"[MT5] Disconnected after {self.connection_fail_count} failed checks")
             return
 
         try:
@@ -90,20 +99,29 @@ class MT5Connector(QObject):
 
             self.last_data = data
 
+            # Reset fail counter on successful read
+            self.connection_fail_count = 0
+
             # Update connection status
             if not self.is_connected:
                 self.is_connected = True
                 self.connection_status_changed.emit(True)
+                print(f"[MT5] Connected - market_data.json found and readable")
 
             # Emit data update
             self.data_updated.emit(data)
 
         except Exception as e:
+            # Read error - increment fail counter
+            self.connection_fail_count += 1
+
             self.error_occurred.emit(f"Error reading MT5 data: {str(e)}")
 
-            if self.is_connected:
+            # Only disconnect after sustained failure
+            if self.is_connected and self.connection_fail_count >= self.connection_required_fails:
                 self.is_connected = False
                 self.connection_status_changed.emit(False)
+                print(f"[MT5] Disconnected after {self.connection_fail_count} read errors")
 
     def get_candles(self, symbol: str, timeframe: str, count: int = 200) -> Optional[pd.DataFrame]:
         """

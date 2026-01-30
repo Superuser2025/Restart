@@ -2493,16 +2493,16 @@ class ChartPanel(QWidget):
         # Update favorite button
         self.update_favorite_button()
 
-        # Emit signal to notify main window
-        self.symbol_changed.emit(symbol)
+        # Emit signal to notify main window (use clean_symbol for consistency)
+        self.symbol_changed.emit(clean_symbol)
 
         # Reload historical data for new symbol
         if self.mt5_initialized:
-            success = self.load_historical_data(symbol=symbol)
+            success = self.load_historical_data(symbol=clean_symbol)  # Use clean_symbol, not raw symbol
             if success:
-                vprint(f"[Chart] ✓ Loaded {len(self.candle_data)} candles for {symbol} from MT5")
+                vprint(f"[Chart] ✓ Loaded {len(self.candle_data)} candles for {clean_symbol} from MT5")
             else:
-                vprint(f"[Chart] ✗ Failed to load {symbol} from MT5, trying fallback...")
+                vprint(f"[Chart] ✗ Failed to load {clean_symbol} from MT5, trying fallback...")
                 # Fallback to live data if historical load fails
                 self.candle_data = []
                 self.get_live_mt5_data()
@@ -2510,17 +2510,17 @@ class ChartPanel(QWidget):
                 # CRITICAL: Even in fallback, update data_manager with current symbol!
                 # This ensures widgets know we're on a different symbol even with no data
                 import pandas as pd
-                data_manager.candle_buffer.symbol = symbol
+                data_manager.candle_buffer.symbol = clean_symbol
                 data_manager.candle_buffer.timeframe = self.current_timeframe
-                vprint(f"[Chart] Updated data_manager to {symbol} (fallback mode)")
+                vprint(f"[Chart] Updated data_manager to {clean_symbol} (fallback mode)")
         else:
-            vprint(f"[Chart] MT5 not initialized, using live data for {symbol}")
+            vprint(f"[Chart] MT5 not initialized, using live data for {clean_symbol}")
             # MT5 not available, use live data
             self.candle_data = []
             self.get_live_mt5_data()
 
             # CRITICAL: Update data_manager symbol even without MT5
-            data_manager.candle_buffer.symbol = symbol
+            data_manager.candle_buffer.symbol = clean_symbol
             data_manager.candle_buffer.timeframe = self.current_timeframe
             vprint(f"[Chart] Updated data_manager to {symbol} (no MT5 mode)")
 
