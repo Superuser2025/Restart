@@ -734,6 +734,25 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         settings_btn.clicked.connect(self.open_symbol_selector)
         header_layout.addWidget(settings_btn)
 
+        # Blink Again button
+        blink_btn = QPushButton("✨ Blink Again")
+        blink_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+            }
+        """)
+        blink_btn.setToolTip("Make all opportunity cards blink again to see which ones are active")
+        blink_btn.clicked.connect(self.blink_all_cards)
+        header_layout.addWidget(blink_btn)
+
         # Symbol count label
         self.symbol_count_label = QLabel(f"Scanning {len(self.pairs_to_scan)} symbols")
         self.symbol_count_label.setStyleSheet("color: #94A3B8; font-size: 9pt; padding: 0 10px;")
@@ -1638,6 +1657,27 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         """Refresh opportunity display (e.g., after enabling/disabling Mirror Mode)"""
         vprint("[Scanner] Refreshing opportunities display...")
         self.update_display()
+
+    def blink_all_cards(self):
+        """Make all visible opportunity cards blink again"""
+        vprint("[Scanner] ✨ Restarting blink animation on all cards...")
+
+        blinking_count = 0
+
+        # Iterate through all three timeframe groups
+        for group in [self.short_group, self.mid_group, self.long_group]:
+            # Get all cards from the grid layout
+            for i in range(group.grid_layout.count()):
+                widget = group.grid_layout.itemAt(i).widget()
+                if widget and isinstance(widget, OpportunityCard):
+                    # Reset blink counter and restart blinking
+                    widget.blink_count = 0
+                    if widget.blink_timer:
+                        widget.blink_timer.stop()
+                    widget.start_blinking()
+                    blinking_count += 1
+
+        vprint(f"[Scanner] ✨ Restarted blinking on {blinking_count} cards")
 
 
 class MiniChartPopup(QDialog):
