@@ -50,6 +50,9 @@ class MT5Connector(QObject):
         self.update_timer.timeout.connect(self.update_data)
         self.update_timer.start(1000)  # Check every 1 second
 
+        # Immediate initial check (don't wait for timer)
+        QTimer.singleShot(100, self.update_data)  # Check after 100ms (let UI initialize first)
+
     def _find_mt5_data_dir(self) -> Optional[Path]:
         """Find MT5 data directory"""
         # Try common locations

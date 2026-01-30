@@ -139,6 +139,8 @@ class ChartPanel(QWidget):
         # Connect to MT5Connector signal for connection status updates
         if self.mt5_connector_instance:
             self.mt5_connector_instance.connection_status_changed.connect(self.update_connection_status)
+            # Check and display initial connection status (don't wait for signal)
+            QTimer.singleShot(200, lambda: self.update_connection_status(self.mt5_connector_instance.is_connected))
 
         # Update timer
         self.update_timer = QTimer()
