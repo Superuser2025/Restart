@@ -626,6 +626,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.opportunities = []
         self.mirror_mode_enabled = False  # Direction-neutral mode (show SELLs as BUYs)
         self.last_new_opportunity_keys = set()  # Track the most recent NEW signal set for "Blink Again"
+        self.first_scan_completed = False  # Skip tracking "new" signals on first scan
 
         # Load selected symbols from config (or use defaults)
         self.pairs_to_scan = self.load_scanner_config()
@@ -1309,10 +1310,18 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         # Combine all NEW keys from this update
         all_new_keys = new_short | new_mid | new_long
 
-        # Only update last_new_opportunity_keys if we actually found NEW opportunities
+        # Only update last_new_opportunity_keys if:
+        # 1. We actually found NEW opportunities
+        # 2. This is NOT the first scan (to avoid marking all initial cards as "new")
         if all_new_keys:
-            self.last_new_opportunity_keys = all_new_keys
-            vprint(f"[Scanner] ✨ Detected {len(all_new_keys)} NEW opportunities - stored for 'Blink Again'")
+            if not self.first_scan_completed:
+                # First scan - don't track as "new" (all cards would be marked new)
+                vprint(f"[Scanner] ℹ️ First scan completed - {len(all_new_keys)} cards loaded (not tracked for 'Blink Again')")
+                self.first_scan_completed = True
+            else:
+                # Subsequent scan - track genuinely NEW opportunities
+                self.last_new_opportunity_keys = all_new_keys
+                vprint(f"[Scanner] ✨ Detected {len(all_new_keys)} NEW opportunities - stored for 'Blink Again'")
 
         vprint(f"[Scanner] Total opportunities: {len(self.opportunities)}, After filters: {len(filtered_opportunities)}")
 
