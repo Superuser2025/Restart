@@ -293,7 +293,10 @@ class TimeframeGroup(QWidget):
         layout.addWidget(scroll)
 
     def update_opportunities(self, opportunities: List[Dict]):
-        """Update opportunities - LIMIT TO 12 CARDS MAX, 3 rows × 4 columns"""
+        """Update opportunities - LIMIT TO 12 CARDS MAX, 3 rows × 4 columns
+
+        Returns the set of NEW opportunity keys detected in this update
+        """
         # CRITICAL: Hard limit to 12 cards per timeframe section
         self.opportunities = opportunities[:12]
 
@@ -349,7 +352,7 @@ class TimeframeGroup(QWidget):
 
             # Add centered message spanning all 4 columns
             self.grid_layout.addWidget(no_opp_widget, 0, 0, 3, 4)  # Span 3 rows, 4 cols
-            return
+            return set()  # No new opportunities
 
         # Add cards in 4-column grid (max 3 rows × 4 cols = 12 cards)
         for idx, opp in enumerate(self.opportunities):
@@ -383,6 +386,8 @@ class TimeframeGroup(QWidget):
             row = idx // 4
             col = idx % 4
             self.grid_layout.addWidget(spacer, row, col)
+
+        return new_opportunity_keys  # Return the NEW keys for parent scanner to track
 
     def show_mini_chart(self, opportunity: Dict):
         """Show mini chart popup for the clicked opportunity"""
@@ -620,6 +625,7 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         self.opportunities = []
         self.mirror_mode_enabled = False  # Direction-neutral mode (show SELLs as BUYs)
+        self.last_new_opportunity_keys = set()  # Track the most recent NEW signal set for "Blink Again"
 
         # Load selected symbols from config (or use defaults)
         self.pairs_to_scan = self.load_scanner_config()
@@ -1295,9 +1301,18 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         vprint(f"[Scanner] Timeframe split: Short={len(short_term)}, Medium={len(medium_term)}, Long={len(long_term)}")
 
         # Update each group (max 12 per group = 3 rows x 4 columns)
-        self.short_group.update_opportunities(short_term[:12])
-        self.mid_group.update_opportunities(medium_term[:12])
-        self.long_group.update_opportunities(long_term[:12])
+        # Collect NEW opportunity keys from all groups
+        new_short = self.short_group.update_opportunities(short_term[:12])
+        new_mid = self.mid_group.update_opportunities(medium_term[:12])
+        new_long = self.long_group.update_opportunities(long_term[:12])
+
+        # Combine all NEW keys from this update
+        all_new_keys = new_short | new_mid | new_long
+
+        # Only update last_new_opportunity_keys if we actually found NEW opportunities
+        if all_new_keys:
+            self.last_new_opportunity_keys = all_new_keys
+            vprint(f"[Scanner] ✨ Detected {len(all_new_keys)} NEW opportunities - stored for 'Blink Again'")
 
         vprint(f"[Scanner] Total opportunities: {len(self.opportunities)}, After filters: {len(filtered_opportunities)}")
 
@@ -1659,7 +1674,11 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.update_display()
 
     def blink_all_cards(self):
-        """Re-blink ONLY the cards that were NEW in the last scan (not all cards)"""
+        """Re-blink ONLY the cards from the most recent NEW signal set
+
+        This will blink cards that were NEW in the last scan that found new opportunities,
+        even if subsequent scans found nothing new.
+        """
         vprint("[Scanner] ✨ Re-blinking cards from last signal set...")
 
         # VISUAL FEEDBACK: Change button appearance immediately
@@ -1676,6 +1695,12 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         """)
         self.blink_btn.setEnabled(False)  # Disable temporarily to prevent spam
 
+        if not self.last_new_opportunity_keys:
+            vprint(f"[Scanner] ⚠️ No signal set to re-blink (wait for first scan to generate new signals)")
+            # RESTORE BUTTON: After 2 seconds, restore original appearance
+            QTimer.singleShot(2000, self.restore_blink_button)
+            return
+
         blinking_count = 0
 
         # Iterate through all three timeframe groups
@@ -1684,8 +1709,15 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             for i in range(group.grid_layout.count()):
                 widget = group.grid_layout.itemAt(i).widget()
                 if widget and isinstance(widget, OpportunityCard):
-                    # ONLY restart blinking if this card was marked as NEW
-                    if widget.is_new:
+                    # Check if this card's opportunity matches the last NEW signal set
+                    card_key = (
+                        widget.opportunity['symbol'],
+                        widget.opportunity['timeframe'],
+                        widget.opportunity['direction']
+                    )
+
+                    # Re-blink if this card was in the last NEW signal set
+                    if card_key in self.last_new_opportunity_keys:
                         # Reset blink counter and restart blinking
                         widget.blink_count = 0
                         if widget.blink_timer:
@@ -1694,9 +1726,9 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                         blinking_count += 1
 
         if blinking_count > 0:
-            vprint(f"[Scanner] ✨ Re-started blinking on {blinking_count} NEW cards from last signal")
+            vprint(f"[Scanner] ✨ Re-started blinking on {blinking_count} cards from last signal set")
         else:
-            vprint(f"[Scanner] ⚠️ No new cards to blink (wait for next scan to generate new signals)")
+            vprint(f"[Scanner] ⚠️ Cards from last signal set are no longer visible (filtered or expired)")
 
         # RESTORE BUTTON: After 2 seconds, restore original appearance
         QTimer.singleShot(2000, self.restore_blink_button)
