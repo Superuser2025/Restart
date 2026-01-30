@@ -662,7 +662,8 @@ class ChartPanel(QWidget):
     def populate_symbol_dropdown(self, filter_text: str = ""):
         """Populate dropdown with favorites, recent, and grouped symbols"""
         self.symbol_combo.blockSignals(True)  # Prevent triggering on_symbol_changed during population
-        current_symbol = self.symbol_combo.currentText()
+        # Use self.current_symbol if combo is empty (initialization), otherwise use combo's current text
+        current_symbol = self.symbol_combo.currentText() if self.symbol_combo.currentText() else self.current_symbol
         self.symbol_combo.clear()
 
         if not self.symbol_manager.symbols:
