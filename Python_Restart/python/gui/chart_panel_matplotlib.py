@@ -94,11 +94,12 @@ class ChartPanel(QWidget):
     symbol_changed = pyqtSignal(str)
     display_mode_changed = pyqtSignal(bool)  # True = max mode, False = small mode
 
-    def __init__(self):
+    def __init__(self, mt5_connector=None):
         super().__init__()
 
         self.current_symbol = settings.app.default_symbol
         self.current_timeframe = settings.app.default_timeframe
+        self.mt5_connector_instance = mt5_connector  # Store connector for connection status updates
 
         # Display mode
         self.is_max_mode = False
@@ -134,6 +135,10 @@ class ChartPanel(QWidget):
         self._load_symbol_preferences()
 
         self.init_ui()
+
+        # Connect to MT5Connector signal for connection status updates
+        if self.mt5_connector_instance:
+            self.mt5_connector_instance.connection_status_changed.connect(self.update_connection_status)
 
         # Update timer
         self.update_timer = QTimer()
@@ -2379,6 +2384,34 @@ class ChartPanel(QWidget):
             weight='bold',
             bbox=dict(boxstyle='round,pad=0.3', facecolor='#0A0E27', edgecolor='#EF4444', alpha=0.8)
         )
+
+    def update_connection_status(self, connected: bool):
+        """Update connection status label when MT5Connector signal fires"""
+        if hasattr(self, 'connection_label'):
+            if connected:
+                self.connection_label.setText("🟢 MT5: Connected")
+                self.connection_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {settings.theme.success};
+                        font-size: {settings.theme.font_size_sm}px;
+                        font-weight: bold;
+                        background-color: {settings.theme.surface};
+                        padding: 5px 10px;
+                        border-radius: 5px;
+                    }}
+                """)
+            else:
+                self.connection_label.setText("🔴 MT5: Disconnected")
+                self.connection_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {settings.theme.danger};
+                        font-size: {settings.theme.font_size_sm}px;
+                        font-weight: bold;
+                        background-color: {settings.theme.surface};
+                        padding: 5px 10px;
+                        border-radius: 5px;
+                    }}
+                """)
 
     def update_chart(self):
         """Update chart - reload data from MT5 to show new candles"""

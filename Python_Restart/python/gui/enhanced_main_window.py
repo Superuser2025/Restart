@@ -142,7 +142,7 @@ class EnhancedMainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # === ORIGINAL EXCELLENT CHART (TradingView-style with zones!) ===
-        self.chart_panel = ChartPanel()  # The original excellent implementation!
+        self.chart_panel = ChartPanel(mt5_connector=self.mt5_connector)  # Pass connector for connection status updates
         self.chart_panel.timeframe_changed.connect(self.on_timeframe_changed)
         self.chart_panel.symbol_changed.connect(self.on_symbol_changed)  # CRITICAL: Connect symbol changes!
         self.chart_panel.display_mode_changed.connect(self.on_display_mode_changed)  # CRITICAL: Connect MAX MODE!
