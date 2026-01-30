@@ -827,8 +827,6 @@ class EnhancedMainWindow(QMainWindow):
         - SELL EURUSD → BUY USDEUR
         - Makes SELLs psychologically comfortable
         """
-        from core.vprint import vprint
-
         if enabled:
             vprint("🔄 Mirror Mode ENABLED - All SELL trades will be shown as BUY opportunities")
             self.statusBar().showMessage("🔄 Mirror Mode ON - SELLs shown as BUYs", 5000)
@@ -853,7 +851,7 @@ class EnhancedMainWindow(QMainWindow):
     def show_direction_comparison(self):
         """Show educational dialog explaining BUY = SELL equivalence"""
         from widgets.direction_neutral_widgets import DirectionComparisonDialog
-        from core.vprint import vprint
+        from PyQt6.QtWidgets import QMessageBox
 
         vprint("📖 Opening Direction Comparison educational dialog...")
 
@@ -863,7 +861,6 @@ class EnhancedMainWindow(QMainWindow):
         if result:
             vprint("✓ User completed Direction Comparison education")
             # User clicked "I Understand" - maybe enable mirror mode?
-            from PyQt6.QtWidgets import QMessageBox
             reply = QMessageBox.question(
                 self,
                 "Enable Mirror Mode?",
