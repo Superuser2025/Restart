@@ -18,6 +18,7 @@ from core.verbose_mode_manager import vprint
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_data
 from core.verbose_mode_manager import vprint
 from core.symbol_manager import symbol_specs_manager
+from core.risk_manager import risk_manager, PositionSizingMode
 
 
 class VolatilityPositionWidget(AIAssistMixin, QWidget):
@@ -43,6 +44,9 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
         # Load real account balance
         self.load_account_balance()
+
+        # Set initial mode state
+        self.on_mode_changed()
 
         # Auto-refresh timer to get live data
         from PyQt6.QtCore import QTimer
@@ -82,7 +86,16 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         account_group = QGroupBox("Account Settings")
         account_layout = QGridLayout()
 
-        account_layout.addWidget(QLabel("Account Balance:"), 0, 0)
+        # Position Sizing Mode
+        account_layout.addWidget(QLabel("Position Sizing Mode:"), 0, 0)
+        self.mode_selector = QComboBox()
+        self.mode_selector.addItem("Fixed Lot Range (Min/Max)", "LOT_SIZE_RANGE")
+        self.mode_selector.addItem("Dynamic Risk % (Account-Based)", "RISK_PERCENTAGE")
+        self.mode_selector.setCurrentIndex(0)  # Default to LOT_SIZE_RANGE
+        self.mode_selector.currentIndexChanged.connect(self.on_mode_changed)
+        account_layout.addWidget(self.mode_selector, 0, 1)
+
+        account_layout.addWidget(QLabel("Account Balance:"), 1, 0)
         self.balance_input = QDoubleSpinBox()
         self.balance_input.setRange(100, 1000000)
         self.balance_input.setValue(10000)
@@ -91,9 +104,33 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.balance_input.setMinimumHeight(35)  # Taller for bigger buttons
         self.balance_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.balance_input.valueChanged.connect(self.on_settings_changed)
-        account_layout.addWidget(self.balance_input, 0, 1)
+        account_layout.addWidget(self.balance_input, 1, 1)
 
-        account_layout.addWidget(QLabel("Base Risk %:"), 1, 0)
+        # LOT_SIZE_RANGE mode parameters
+        account_layout.addWidget(QLabel("Min Lot Size:"), 2, 0)
+        self.min_lot_input = QDoubleSpinBox()
+        self.min_lot_input.setRange(0.01, 10.0)
+        self.min_lot_input.setValue(0.01)
+        self.min_lot_input.setSingleStep(0.01)
+        self.min_lot_input.setDecimals(2)
+        self.min_lot_input.setMinimumHeight(35)
+        self.min_lot_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
+        self.min_lot_input.valueChanged.connect(self.on_settings_changed)
+        account_layout.addWidget(self.min_lot_input, 2, 1)
+
+        account_layout.addWidget(QLabel("Max Lot Size:"), 3, 0)
+        self.max_lot_input = QDoubleSpinBox()
+        self.max_lot_input.setRange(0.01, 100.0)
+        self.max_lot_input.setValue(0.10)
+        self.max_lot_input.setSingleStep(0.01)
+        self.max_lot_input.setDecimals(2)
+        self.max_lot_input.setMinimumHeight(35)
+        self.max_lot_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
+        self.max_lot_input.valueChanged.connect(self.on_settings_changed)
+        account_layout.addWidget(self.max_lot_input, 3, 1)
+
+        # RISK_PERCENTAGE mode parameters
+        account_layout.addWidget(QLabel("Base Risk %:"), 4, 0)
         self.risk_input = QDoubleSpinBox()
         self.risk_input.setRange(0.1, 5.0)  # Increased max to 5%
         self.risk_input.setValue(0.5)
@@ -103,7 +140,12 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         self.risk_input.setMinimumHeight(35)  # Taller for bigger buttons
         self.risk_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         self.risk_input.valueChanged.connect(self.on_settings_changed)
-        account_layout.addWidget(self.risk_input, 1, 1)
+        account_layout.addWidget(self.risk_input, 4, 1)
+
+        # Store labels for enabling/disabling
+        self.min_lot_label = account_layout.itemAtPosition(2, 0).widget()
+        self.max_lot_label = account_layout.itemAtPosition(3, 0).widget()
+        self.risk_label = account_layout.itemAtPosition(4, 0).widget()
 
         account_group.setLayout(account_layout)
         layout.addWidget(account_group)
@@ -672,7 +714,15 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
         # Update sizer settings
         volatility_position_sizer.update_account_balance(self.balance_input.value())
-        volatility_position_sizer.update_base_risk(self.risk_input.value())
+
+        # Update mode-specific settings
+        mode = self.mode_selector.currentData()
+        if mode == "LOT_SIZE_RANGE":
+            # For now, volatility_position_sizer doesn't support LOT_SIZE_RANGE mode
+            # We'll use risk percentage but note this for future enhancement
+            volatility_position_sizer.update_base_risk(self.risk_input.value())
+        elif mode == "RISK_PERCENTAGE":
+            volatility_position_sizer.update_base_risk(self.risk_input.value())
 
         # Calculate
         result = volatility_position_sizer.calculate_position_size(
@@ -707,6 +757,17 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
 
     def on_settings_changed(self):
         """Handle account settings change"""
+        # Update risk manager with current settings
+        mode = self.mode_selector.currentData()
+        if mode == "LOT_SIZE_RANGE":
+            risk_manager.set_position_sizing_mode(PositionSizingMode.LOT_SIZE_RANGE)
+            risk_manager.set_lot_size_range(self.min_lot_input.value(), self.max_lot_input.value())
+        elif mode == "RISK_PERCENTAGE":
+            risk_manager.set_position_sizing_mode(PositionSizingMode.RISK_PERCENTAGE)
+            risk_manager.set_risk_percentage(self.risk_input.value())
+
+        risk_manager.update_account(self.balance_input.value())
+
         # Recalculate if we have data
         if self.current_symbol and self.current_data is not None and not self.current_data.empty:
             self.update_market_conditions()
@@ -715,6 +776,30 @@ class VolatilityPositionWidget(AIAssistMixin, QWidget):
         """Handle trade parameter changes"""
         # Could auto-calculate here if desired
         pass
+
+    def on_mode_changed(self):
+        """Handle position sizing mode change"""
+        mode = self.mode_selector.currentData()
+
+        if mode == "LOT_SIZE_RANGE":
+            # Enable lot size inputs, disable risk %
+            self.min_lot_label.setEnabled(True)
+            self.min_lot_input.setEnabled(True)
+            self.max_lot_label.setEnabled(True)
+            self.max_lot_input.setEnabled(True)
+            self.risk_label.setEnabled(False)
+            self.risk_input.setEnabled(False)
+        elif mode == "RISK_PERCENTAGE":
+            # Disable lot size inputs, enable risk %
+            self.min_lot_label.setEnabled(False)
+            self.min_lot_input.setEnabled(False)
+            self.max_lot_label.setEnabled(False)
+            self.max_lot_input.setEnabled(False)
+            self.risk_label.setEnabled(True)
+            self.risk_input.setEnabled(True)
+
+        # Update calculation
+        self.on_settings_changed()
 
     def set_direction(self, direction: str):
         """Set trade direction and show mini chart"""

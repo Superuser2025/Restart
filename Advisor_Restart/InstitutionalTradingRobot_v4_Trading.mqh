@@ -584,28 +584,51 @@ void CalculateTakeProfits(bool is_buy, double entry, double sl,
 }
 
 //+------------------------------------------------------------------+
-//| CALCULATE LOT SIZE                                               |
+//| CALCULATE LOT SIZE - DUAL MODE SYSTEM                            |
 //+------------------------------------------------------------------+
 double CalculateLotSize(double stop_loss_pips, double risk_percent)
 {
-    double capital_risk = account.Balance() * (risk_percent / 100.0);
-    double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-    double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-
-    double sl_in_price = stop_loss_pips * point;
-    double risk_per_lot = (sl_in_price / tick_size) * tick_value;
-
-    double lot_size = capital_risk / risk_per_lot;
+    double lot_size = 0.0;
     double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-    lot_size = MathFloor(lot_size / lot_step) * lot_step;
+    double broker_min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+    double broker_max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
 
-    double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-    double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+    // MODE 1: LOT_SIZE_RANGE - Fixed lot range with min/max bounds
+    if(PositionSizingMode == LOT_SIZE_RANGE)
+    {
+        // Use the minimum lot size as base, can be scaled up to maximum
+        // For now, start with minimum and can be adjusted based on confluence/conditions
+        lot_size = MinLotSize;
 
-    if(lot_size < MinLotSize) lot_size = MinLotSize;
-    if(lot_size < min_lot) lot_size = min_lot;
-    if(lot_size > max_lot) lot_size = max_lot;
+        // Round to lot step
+        lot_size = MathFloor(lot_size / lot_step) * lot_step;
+
+        // Enforce user-defined range
+        if(lot_size < MinLotSize) lot_size = MinLotSize;
+        if(lot_size > MaxLotSize) lot_size = MaxLotSize;
+
+        // Enforce broker limits
+        if(lot_size < broker_min_lot) lot_size = broker_min_lot;
+        if(lot_size > broker_max_lot) lot_size = broker_max_lot;
+    }
+    // MODE 2: RISK_PERCENTAGE - Dynamic risk-based calculation
+    else if(PositionSizingMode == RISK_PERCENTAGE)
+    {
+        double capital_risk = account.Balance() * (risk_percent / 100.0);
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+
+        double sl_in_price = stop_loss_pips * point;
+        double risk_per_lot = (sl_in_price / tick_size) * tick_value;
+
+        lot_size = capital_risk / risk_per_lot;
+        lot_size = MathFloor(lot_size / lot_step) * lot_step;
+
+        // Enforce broker limits
+        if(lot_size < broker_min_lot) lot_size = broker_min_lot;
+        if(lot_size > broker_max_lot) lot_size = broker_max_lot;
+    }
 
     return lot_size;
 }

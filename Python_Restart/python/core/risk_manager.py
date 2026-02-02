@@ -5,6 +5,13 @@ Symbol position limits, risk calculations, and exposure tracking
 
 from typing import Dict, Tuple, List
 from datetime import datetime
+from enum import Enum
+
+
+class PositionSizingMode(Enum):
+    """Position sizing modes"""
+    LOT_SIZE_RANGE = "lot_size_range"      # Fixed Lot Range (Min/Max Bounds)
+    RISK_PERCENTAGE = "risk_percentage"    # Dynamic Risk % (Account-Based)
 
 
 class SymbolExposure:
@@ -32,6 +39,13 @@ class RiskManager:
     """
 
     def __init__(self):
+        # Position sizing mode (DUAL MODE SYSTEM)
+        self.position_sizing_mode = PositionSizingMode.LOT_SIZE_RANGE  # Default to fixed lot range
+
+        # LOT_SIZE_RANGE mode parameters
+        self.min_lot_size = 0.01  # Minimum lot size for fixed range mode
+        self.max_lot_size = 0.10  # Maximum lot size for fixed range mode
+
         # Symbol position limits (USER EXPLICITLY REQUESTED - CRITICAL!)
         self.max_lots_per_symbol = 0.10  # Maximum lots allowed per symbol
         self.symbol_exposure: Dict[str, SymbolExposure] = {}  # Track current exposure per symbol
@@ -40,7 +54,7 @@ class RiskManager:
         self.daily_loss_limit_percent = 2.0  # 2% daily loss limit
         self.weekly_loss_limit_percent = 5.0  # 5% weekly loss limit
 
-        # Risk settings
+        # RISK_PERCENTAGE mode parameters
         self.base_risk_percent = 0.5  # Base risk per trade
         self.current_risk_percent = 0.5  # Dynamic risk (adjusted based on conditions)
 
@@ -217,7 +231,7 @@ class RiskManager:
 
     def calculate_position_size(self, symbol: str, entry_price: float, sl_price: float) -> Dict[str, float]:
         """
-        Calculate position size based on risk parameters
+        Calculate position size based on risk parameters (DUAL MODE SYSTEM)
 
         Args:
             symbol: Trading symbol
@@ -227,36 +241,80 @@ class RiskManager:
         Returns:
             Dict with lot_size, risk_amount, etc.
         """
-        # Calculate risk amount in account currency
-        risk_amount = self.account_balance * (self.current_risk_percent / 100)
+        lot_size = 0.0
+        risk_amount = 0.0
+        allowed = True
+        message = ""
 
-        # Calculate pip risk
-        pip_size = 0.0001  # For most pairs
+        # MODE 1: LOT_SIZE_RANGE - Fixed lot range with min/max bounds
+        if self.position_sizing_mode == PositionSizingMode.LOT_SIZE_RANGE:
+            # Use minimum lot size as base (can be scaled based on conditions)
+            lot_size = self.min_lot_size
+
+            # Enforce user-defined range
+            if lot_size < self.min_lot_size:
+                lot_size = self.min_lot_size
+            if lot_size > self.max_lot_size:
+                lot_size = self.max_lot_size
+
+            # Round to 0.01
+            lot_size = round(lot_size, 2)
+
+            # Check against symbol limit
+            allowed, message = self.check_symbol_limit(symbol, lot_size)
+
+            if not allowed:
+                # Reduce to fit limit
+                exposure_obj = self.symbol_exposure.get(symbol)
+                current_exposure = exposure_obj.total_lots if exposure_obj else 0.0
+                lot_size = max(self.min_lot_size, self.max_lots_per_symbol - current_exposure)
+                lot_size = min(lot_size, self.max_lot_size)  # Still respect max lot size
+
+            # Calculate risk amount for display (after lot size is determined)
+            pip_size = 0.0001  # For most pairs
+            pips_risk = abs(entry_price - sl_price) / pip_size
+            pip_value_per_lot = 10.0  # $10 per pip for 1 standard lot
+            risk_amount = lot_size * pips_risk * pip_value_per_lot
+
+        # MODE 2: RISK_PERCENTAGE - Dynamic risk-based calculation
+        elif self.position_sizing_mode == PositionSizingMode.RISK_PERCENTAGE:
+            # Calculate risk amount in account currency
+            risk_amount = self.account_balance * (self.current_risk_percent / 100)
+
+            # Calculate pip risk
+            pip_size = 0.0001  # For most pairs
+            pips_risk = abs(entry_price - sl_price) / pip_size
+
+            # Calculate lot size (simplified - would need proper pip value calculation)
+            # For GBPUSD: 1 lot = $10/pip, 0.01 lot = $0.10/pip
+            pip_value_per_lot = 10.0  # $10 per pip for 1 standard lot
+            lot_size = risk_amount / (pips_risk * pip_value_per_lot)
+
+            # Round to 0.01
+            lot_size = round(lot_size, 2)
+
+            # Check against symbol limit
+            allowed, message = self.check_symbol_limit(symbol, lot_size)
+
+            if not allowed:
+                # Reduce to fit limit
+                exposure_obj = self.symbol_exposure.get(symbol)
+                current_exposure = exposure_obj.total_lots if exposure_obj else 0.0
+                lot_size = max(0.01, self.max_lots_per_symbol - current_exposure)
+
+        # Common calculations
+        pip_size = 0.0001
         pips_risk = abs(entry_price - sl_price) / pip_size
-
-        # Calculate lot size (simplified - would need proper pip value calculation)
-        # For GBPUSD: 1 lot = $10/pip, 0.01 lot = $0.10/pip
-        pip_value_per_lot = 10.0  # $10 per pip for 1 standard lot
-        lot_size = risk_amount / (pips_risk * pip_value_per_lot)
-
-        # Round to 0.01
-        lot_size = round(lot_size, 2)
-
-        # Check against symbol limit
-        allowed, message = self.check_symbol_limit(symbol, lot_size)
-
-        if not allowed:
-            # Reduce to fit limit
-            current_exposure = self.symbol_exposure.get(symbol, 0.0)
-            lot_size = max(0.01, self.max_lots_per_symbol - current_exposure)
+        pip_value_per_lot = 10.0
 
         return {
             'lot_size': lot_size,
-            'risk_amount': risk_amount,
+            'risk_amount': risk_amount if self.position_sizing_mode == PositionSizingMode.RISK_PERCENTAGE else lot_size * pips_risk * pip_value_per_lot,
             'pips_risk': pips_risk,
             'pip_value': pip_value_per_lot * lot_size,
             'allowed': allowed,
-            'message': message
+            'message': message,
+            'mode': self.position_sizing_mode.value
         }
 
     def adjust_risk_for_conditions(self, volatility: str, mtf_aligned: bool, confluence_score: int):
@@ -373,6 +431,53 @@ class RiskManager:
                            f"(Long: {exposure.long_lots:.3f}, Short: {exposure.short_lots:.3f})")
 
         return "\n".join(lines) if lines else "No open positions"
+
+    def set_position_sizing_mode(self, mode: PositionSizingMode):
+        """
+        Set the position sizing mode
+
+        Args:
+            mode: PositionSizingMode.LOT_SIZE_RANGE or PositionSizingMode.RISK_PERCENTAGE
+        """
+        self.position_sizing_mode = mode
+
+    def set_lot_size_range(self, min_lot: float, max_lot: float):
+        """
+        Set the lot size range for LOT_SIZE_RANGE mode
+
+        Args:
+            min_lot: Minimum lot size
+            max_lot: Maximum lot size
+        """
+        if min_lot > max_lot:
+            raise ValueError(f"Minimum lot size ({min_lot}) cannot be greater than maximum lot size ({max_lot})")
+
+        self.min_lot_size = min_lot
+        self.max_lot_size = max_lot
+
+    def set_risk_percentage(self, risk_percent: float):
+        """
+        Set the base risk percentage for RISK_PERCENTAGE mode
+
+        Args:
+            risk_percent: Risk percentage (e.g., 0.5 for 0.5%)
+        """
+        if risk_percent <= 0:
+            raise ValueError(f"Risk percentage must be positive, got {risk_percent}")
+
+        self.base_risk_percent = risk_percent
+        self.current_risk_percent = risk_percent
+
+    def get_mode_info(self) -> Dict:
+        """Get current mode and parameters"""
+        return {
+            'mode': self.position_sizing_mode.value,
+            'mode_name': 'Fixed Lot Range (Min/Max)' if self.position_sizing_mode == PositionSizingMode.LOT_SIZE_RANGE else 'Dynamic Risk % (Account-Based)',
+            'min_lot': self.min_lot_size,
+            'max_lot': self.max_lot_size,
+            'base_risk_percent': self.base_risk_percent,
+            'current_risk_percent': self.current_risk_percent
+        }
 
 
 # Global instance

@@ -15,14 +15,27 @@
 #include <AI_Bridge_NamedPipe.mqh>
 
 //+------------------------------------------------------------------+
+//| POSITION SIZING MODE ENUM                                         |
+//+------------------------------------------------------------------+
+enum ENUM_POSITION_SIZING_MODE
+{
+   LOT_SIZE_RANGE,      // Fixed Lot Range (Min/Max Bounds)
+   RISK_PERCENTAGE      // Dynamic Risk % (Account-Based)
+};
+
+//+------------------------------------------------------------------+
 //| INPUT PARAMETERS - INSTITUTIONAL CONFIGURATION                    |
 //+------------------------------------------------------------------+
 input group "═════════ CORE SETTINGS ═════════"
 input bool     EnableTrading = false;                   // Enable Auto Trading (START FALSE!)
 input bool     IndicatorMode = true;                    // Visual Analysis Mode
 input ENUM_TIMEFRAMES PreferredTimeframe = PERIOD_H4;   // Trading Timeframe (H4 Default)
-input double   MinLotSize = 0.01;                       // Minimum Lot Size
 input int      MagicNumber = 123456;                    // Magic Number
+
+input group "═════════ POSITION SIZING MODE ═════════"
+input ENUM_POSITION_SIZING_MODE PositionSizingMode = LOT_SIZE_RANGE;  // Position Sizing Mode
+input double   MinLotSize = 0.01;                       // [LOT_SIZE_RANGE] Minimum Lot Size
+input double   MaxLotSize = 0.10;                       // [LOT_SIZE_RANGE] Maximum Lot Size
 
 input group "═════════ NEW V4: AGGRESSION & ML INTEGRATION ═════════"
 input int      AggressionLevel = 3;                     // Aggression Level (1=Conservative, 5=Maximum)
@@ -69,7 +82,7 @@ input bool     UseRegimeStrategy = true;                // Regime-Specific Strat
 input int      AdaptationPeriod = 20;                   // Learning Period (Trades)
 
 input group "═════════ RISK MANAGEMENT ═════════"
-input double   BaseRiskPercent = 0.5;                   // Base Risk Per Trade (%)
+input double   BaseRiskPercent = 0.5;                   // [RISK_PERCENTAGE] Base Risk Per Trade (%)
 input int      MaxOpenTrades = 3;                       // Max Concurrent Trades
 input double   DailyLossLimit = 2.0;                    // Daily Loss Limit (%)
 input double   WeeklyLossLimit = 5.0;                   // Weekly Loss Limit (%)
