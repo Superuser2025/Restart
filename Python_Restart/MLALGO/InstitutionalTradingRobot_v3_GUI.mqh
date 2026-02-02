@@ -116,7 +116,7 @@ void CreateInteractiveDashboard()
 
     // Title
     CreateBigLabel("GUI_Title", x_start, y_start + row * (button_height + spacing),
-                   "═══ INSTITUTIONAL TRADING ROBOT v4.0 ═══",
+                   "═══ INSTITUTIONAL TRADING ROBOT v3.0 ═══",
                    clrWhite, 14, true);
 
     row++;
