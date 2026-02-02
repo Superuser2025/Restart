@@ -292,13 +292,23 @@ class DataManager:
 
             # Update account (EA sends these directly, not nested)
             if 'account_balance' in data:
-                self.account['balance'] = data['account_balance']
+                old_balance = self.account['balance']
+                new_balance = data['account_balance']
+                self.account['balance'] = new_balance
+                if old_balance != new_balance:
+                    print(f"   💰 BALANCE UPDATED: ${old_balance:,.2f} -> ${new_balance:,.2f}")
             if 'account_equity' in data:
-                self.account['equity'] = data['account_equity']
+                old_equity = self.account['equity']
+                new_equity = data['account_equity']
+                self.account['equity'] = new_equity
+                if old_equity != new_equity:
+                    print(f"   💎 EQUITY UPDATED: ${old_equity:,.2f} -> ${new_equity:,.2f}")
             if 'total_pnl' in data:
                 self.account['profit'] = data['total_pnl']
+                print(f"   📊 FLOATING P&L: ${data['total_pnl']:,.2f}")
             if 'today_pnl' in data:
                 self.account['daily_pnl'] = data['today_pnl']
+                print(f"   📅 TODAY P&L: ${data['today_pnl']:,.2f}")
 
             # Update ML data (EA sends these directly, not nested)
             if 'ml_enabled' in data:

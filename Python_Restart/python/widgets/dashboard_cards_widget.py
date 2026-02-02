@@ -254,6 +254,12 @@ class DashboardCardsWidget(AIAssistMixin, QWidget):
         profit = account.get('profit', 0)
         daily_pnl = account.get('daily_pnl', 0)
 
+        # DIAGNOSTIC: Log what we're displaying
+        print(f"[DASHBOARD] Displaying Balance: ${balance:,.2f}, Equity: ${equity:,.2f}")
+        if abs(balance - equity) > 1:
+            diff = equity - balance
+            print(f"[DASHBOARD] Difference: ${diff:,.2f} (Floating P&L: ${profit:,.2f})")
+
         pnl_pct = (daily_pnl / balance * 100) if balance > 0 else 0
         win_rate = 0  # TODO: Calculate from trade history
 
