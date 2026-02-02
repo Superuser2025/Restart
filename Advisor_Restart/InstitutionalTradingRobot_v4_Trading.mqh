@@ -409,7 +409,7 @@ double CalculateDynamicRisk()
 //| V4 NEW: EXPORT TRADE DATA FOR PYTHON ML ANALYSIS                |
 //+------------------------------------------------------------------+
 void ExportTradeToPython(string direction, double entry, double sl, double tp,
-                         double lot_size, int confluence_score)
+                         double lot_size, double risk_percent, int confluence_score)
 {
     if(!EnablePythonFileExport) return;
 
@@ -524,7 +524,7 @@ void ExecuteTrade(double risk_percent, double slippage)
         AddComment("ADVICE: Monitor for breakeven move after 1R", clrAqua, PRIORITY_IMPORTANT);
 
         // V4 NEW: Export trade data for Python ML analysis
-        ExportTradeToPython(is_buy ? "BUY" : "SELL", entry_price, sl, tp1, lot_size, last_decision.confluence_score);
+        ExportTradeToPython(is_buy ? "BUY" : "SELL", entry_price, sl, tp1, lot_size, risk_percent, last_decision.confluence_score);
 
         has_active_pattern = false;
     }
