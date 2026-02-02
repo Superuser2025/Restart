@@ -47,6 +47,7 @@ class EnhancedMainWindow(QMainWindow):
         super().__init__()
         self.current_symbol = "EURUSD"
         self.current_timeframe = "H4"
+        self.mirror_mode_enabled = False  # Direction-neutral mode (SELL → BUY)
 
         # Initialize MT5 connector
         self.mt5_connector = MT5Connector()
@@ -141,7 +142,7 @@ class EnhancedMainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # === ORIGINAL EXCELLENT CHART (TradingView-style with zones!) ===
-        self.chart_panel = ChartPanel()  # The original excellent implementation!
+        self.chart_panel = ChartPanel(mt5_connector=self.mt5_connector)  # Pass connector for connection status updates
         self.chart_panel.timeframe_changed.connect(self.on_timeframe_changed)
         self.chart_panel.symbol_changed.connect(self.on_symbol_changed)  # CRITICAL: Connect symbol changes!
         self.chart_panel.display_mode_changed.connect(self.on_display_mode_changed)  # CRITICAL: Connect MAX MODE!
@@ -215,6 +216,79 @@ class EnhancedMainWindow(QMainWindow):
         self.wyckoff_chart_widget = WyckoffChartWidget()
         wyckoff_chart_layout.addWidget(self.wyckoff_chart_widget)
         self.analysis_tabs.addTab(wyckoff_chart_tab, "📊 Wyckoff Chart")
+
+        # Tab 8: STATISTICAL ANALYSIS (NEW!)
+        stats_tab = QWidget()
+        stats_layout = QVBoxLayout(stats_tab)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        self.stats_widget = StatisticalAnalysisWidget()
+        stats_layout.addWidget(self.stats_widget)
+        self.analysis_tabs.addTab(stats_tab, "📊 Statistics")
+
+        # Tab 9: PSYCHOLOGY / DIRECTION-NEUTRAL (NEW!)
+        from widgets.direction_neutral_widgets import MirrorModeToggle, DirectionComparisonDialog
+        psychology_tab = QWidget()
+        psychology_layout = QVBoxLayout(psychology_tab)
+        psychology_layout.setContentsMargins(16, 16, 16, 16)
+        psychology_layout.setSpacing(16)
+
+        # Title
+        psych_title = QLabel("🧠 Trading Psychology - Break the Long Bias")
+        psych_title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        psych_title.setStyleSheet("color: #3B82F6;")
+        psychology_layout.addWidget(psych_title)
+
+        # Description
+        psych_desc = QLabel(
+            "Overcome psychological limitations and access 2x opportunities by treating "
+            "BUY and SELL trades equally. Most traders have a 'long bias' - they prefer "
+            "BUY trades and skip SELLs, missing 50% of profitable opportunities!"
+        )
+        psych_desc.setWordWrap(True)
+        psych_desc.setStyleSheet("color: #94A3B8; font-size: 12px;")
+        psychology_layout.addWidget(psych_desc)
+
+        # Mirror Mode Toggle
+        self.mirror_mode_toggle = MirrorModeToggle()
+        self.mirror_mode_toggle.mirror_mode_changed.connect(self.on_mirror_mode_changed)
+        psychology_layout.addWidget(self.mirror_mode_toggle)
+
+        # Learn More button
+        learn_btn = QPushButton("📖 Learn Why BUY = SELL (Watch This!)")
+        learn_btn.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        learn_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3B82F6;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #2563EB;
+            }
+        """)
+        learn_btn.clicked.connect(self.show_direction_comparison)
+        psychology_layout.addWidget(learn_btn)
+
+        # Stats panel (to be populated with bias detection)
+        self.bias_stats_label = QLabel("Load your trading history to see bias analysis...")
+        self.bias_stats_label.setStyleSheet("""
+            QLabel {
+                background-color: #0F172A;
+                border: 2px solid #334155;
+                border-radius: 8px;
+                padding: 16px;
+                color: #94A3B8;
+                font-size: 11px;
+            }
+        """)
+        self.bias_stats_label.setWordWrap(True)
+        psychology_layout.addWidget(self.bias_stats_label)
+
+        psychology_layout.addStretch()
+
+        self.analysis_tabs.addTab(psychology_tab, "🧠 Psychology")
 
         # Connect validator to chart widget
         self.validator_widget.wyckoff_analysis_ready.connect(self.on_wyckoff_analysis_ready)
@@ -653,6 +727,9 @@ class EnhancedMainWindow(QMainWindow):
         if hasattr(self, 'scanner_widget'):
             self.scanner_widget.pairs_to_scan = symbols
             self.scanner_widget.scan_market()
+        # Update chart panel symbol dropdown
+        if hasattr(self, 'chart_panel'):
+            self.chart_panel.refresh_symbol_list()
 
     def on_toggle_mode(self, checked: bool):
         """Toggle between Demo and Live mode"""
@@ -753,6 +830,60 @@ class EnhancedMainWindow(QMainWindow):
                 "\n".join(status_lines)
             )
 
+    def on_mirror_mode_changed(self, enabled: bool):
+        """Handle Mirror Mode toggle
+
+        When enabled:
+        - SELL trades shown as BUY opportunities (inverted pairs)
+        - SELL EURUSD → BUY USDEUR
+        - Makes SELLs psychologically comfortable
+        """
+        if enabled:
+            vprint("🔄 Mirror Mode ENABLED - All SELL trades will be shown as BUY opportunities")
+            self.statusBar().showMessage("🔄 Mirror Mode ON - SELLs shown as BUYs", 5000)
+        else:
+            vprint("🔄 Mirror Mode DISABLED - Trades shown in original direction")
+            self.statusBar().showMessage("🔄 Mirror Mode OFF - Original directions", 5000)
+
+        # Store state for opportunity scanner to use
+        self.mirror_mode_enabled = enabled
+
+        # Refresh opportunities if scanner exists
+        if hasattr(self, 'scanner_widget'):
+            try:
+                self.scanner_widget.mirror_mode_enabled = enabled
+                vprint(f"[MirrorMode] Updated scanner widget, refreshing opportunities...")
+                # Trigger refresh to apply mirror mode
+                if hasattr(self.scanner_widget, 'refresh_opportunities'):
+                    self.scanner_widget.refresh_opportunities()
+            except Exception as e:
+                vprint(f"[MirrorMode] Could not update scanner: {e}")
+
+    def show_direction_comparison(self):
+        """Show educational dialog explaining BUY = SELL equivalence"""
+        from widgets.direction_neutral_widgets import DirectionComparisonDialog
+        from PyQt6.QtWidgets import QMessageBox
+
+        vprint("📖 Opening Direction Comparison educational dialog...")
+
+        dialog = DirectionComparisonDialog(self)
+        result = dialog.exec()
+
+        if result:
+            vprint("✓ User completed Direction Comparison education")
+            # User clicked "I Understand" - maybe enable mirror mode?
+            reply = QMessageBox.question(
+                self,
+                "Enable Mirror Mode?",
+                "Would you like to enable Mirror Mode now to see all SELL trades as BUY opportunities?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                self.mirror_mode_toggle.toggle_btn.setChecked(True)
+                self.mirror_mode_toggle.on_toggle()
+
     def apply_dark_theme(self):
         """Apply dark theme to main window"""
         self.setStyleSheet("""
@@ -811,7 +942,7 @@ class EnhancedMainWindow(QMainWindow):
             "Confirm Exit",
             "Are you sure you want to exit AppleTrader Pro?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes  # Default to Yes for quick exit
         )
 
         if reply == QMessageBox.StandardButton.Yes:

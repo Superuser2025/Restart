@@ -22,6 +22,7 @@ from core.demo_mode_manager import demo_mode_manager, is_demo_mode, get_demo_dat
 from core.ml_integration import ml_integration, get_ml_prediction  # ML INTEGRATION ADDED
 from core.verbose_mode_manager import vprint
 from core.symbol_manager import symbol_specs_manager
+from core.statistical_analysis_manager import StatisticalAnalysisManager
 
 
 class OpportunityCard(QFrame):
@@ -292,7 +293,10 @@ class TimeframeGroup(QWidget):
         layout.addWidget(scroll)
 
     def update_opportunities(self, opportunities: List[Dict]):
-        """Update opportunities - LIMIT TO 12 CARDS MAX, 3 rows × 4 columns"""
+        """Update opportunities - LIMIT TO 12 CARDS MAX, 3 rows × 4 columns
+
+        Returns the set of NEW opportunity keys detected in this update
+        """
         # CRITICAL: Hard limit to 12 cards per timeframe section
         self.opportunities = opportunities[:12]
 
@@ -348,7 +352,7 @@ class TimeframeGroup(QWidget):
 
             # Add centered message spanning all 4 columns
             self.grid_layout.addWidget(no_opp_widget, 0, 0, 3, 4)  # Span 3 rows, 4 cols
-            return
+            return set()  # No new opportunities
 
         # Add cards in 4-column grid (max 3 rows × 4 cols = 12 cards)
         for idx, opp in enumerate(self.opportunities):
@@ -382,6 +386,8 @@ class TimeframeGroup(QWidget):
             row = idx // 4
             col = idx % 4
             self.grid_layout.addWidget(spacer, row, col)
+
+        return new_opportunity_keys  # Return the NEW keys for parent scanner to track
 
     def show_mini_chart(self, opportunity: Dict):
         """Show mini chart popup for the clicked opportunity"""
@@ -618,6 +624,9 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         self.setObjectName("OpportunityScannerWidget")
 
         self.opportunities = []
+        self.mirror_mode_enabled = False  # Direction-neutral mode (show SELLs as BUYs)
+        self.last_new_opportunity_keys = set()  # Track the most recent NEW signal set for "Blink Again"
+        self.first_scan_completed = False  # Skip tracking "new" signals on first scan
 
         # Load selected symbols from config (or use defaults)
         self.pairs_to_scan = self.load_scanner_config()
@@ -732,6 +741,25 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         settings_btn.clicked.connect(self.open_symbol_selector)
         header_layout.addWidget(settings_btn)
 
+        # Blink Again button
+        self.blink_btn = QPushButton("✨ Blink Again")
+        self.blink_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+            }
+        """)
+        self.blink_btn.setToolTip("Make all opportunity cards blink again to see which ones are active")
+        self.blink_btn.clicked.connect(self.blink_all_cards)
+        header_layout.addWidget(self.blink_btn)
+
         # Symbol count label
         self.symbol_count_label = QLabel(f"Scanning {len(self.pairs_to_scan)} symbols")
         self.symbol_count_label.setStyleSheet("color: #94A3B8; font-size: 9pt; padding: 0 10px;")
@@ -825,6 +853,10 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         for opp in new_opportunities:
             if 'timestamp' not in opp:
                 opp['timestamp'] = current_time
+
+        # STATISTICAL ANALYSIS INTEGRATION (Requirement #5)
+        # Enhance opportunities with probability/EV/Kelly calculations
+        self.enhance_opportunities_with_statistics(new_opportunities)
 
         # Merge
         existing_keys = {(o['symbol'], o['timeframe']) for o in self.opportunities}
@@ -1250,6 +1282,10 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
 
         vprint(f"\n[Scanner] update_display() called with {len(self.opportunities)} opportunities")
 
+        # Apply Mirror Mode if enabled (reframe SELLs as BUYs)
+        if self.mirror_mode_enabled:
+            self.apply_mirror_mode(self.opportunities)
+
         # Apply institutional filters to all opportunities
         filtered_opportunities = [
             opp for opp in self.opportunities
@@ -1266,9 +1302,26 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         vprint(f"[Scanner] Timeframe split: Short={len(short_term)}, Medium={len(medium_term)}, Long={len(long_term)}")
 
         # Update each group (max 12 per group = 3 rows x 4 columns)
-        self.short_group.update_opportunities(short_term[:12])
-        self.mid_group.update_opportunities(medium_term[:12])
-        self.long_group.update_opportunities(long_term[:12])
+        # Collect NEW opportunity keys from all groups
+        new_short = self.short_group.update_opportunities(short_term[:12])
+        new_mid = self.mid_group.update_opportunities(medium_term[:12])
+        new_long = self.long_group.update_opportunities(long_term[:12])
+
+        # Combine all NEW keys from this update
+        all_new_keys = new_short | new_mid | new_long
+
+        # Only update last_new_opportunity_keys if:
+        # 1. We actually found NEW opportunities
+        # 2. This is NOT the first scan (to avoid marking all initial cards as "new")
+        if all_new_keys:
+            if not self.first_scan_completed:
+                # First scan - don't track as "new" (all cards would be marked new)
+                vprint(f"[Scanner] ℹ️ First scan completed - {len(all_new_keys)} cards loaded (not tracked for 'Blink Again')")
+                self.first_scan_completed = True
+            else:
+                # Subsequent scan - track genuinely NEW opportunities
+                self.last_new_opportunity_keys = all_new_keys
+                vprint(f"[Scanner] ✨ Detected {len(all_new_keys)} NEW opportunities - stored for 'Blink Again'")
 
         vprint(f"[Scanner] Total opportunities: {len(self.opportunities)}, After filters: {len(filtered_opportunities)}")
 
@@ -1434,6 +1487,279 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
             color="orange"
         )
 
+    def enhance_opportunities_with_statistics(self, opportunities: List[Dict]):
+        """
+        Enhance opportunities with statistical analysis data
+
+        Adds:
+        - Win probability (Bayesian)
+        - Expected Value
+        - Kelly Criterion sizing
+        - Confidence intervals
+        - Statistical recommendation
+
+        This implements Requirement #5: Integration with existing functionality
+        """
+        try:
+            stats_manager = StatisticalAnalysisManager.get_instance()
+
+            # Only enhance if statistics is globally enabled
+            if not stats_manager.is_enabled():
+                vprint("[Scanner] Statistics disabled - skipping statistical enhancement")
+                return
+
+            vprint(f"[Scanner] Enhancing {len(opportunities)} opportunities with statistical analysis...")
+
+            for opp in opportunities:
+                try:
+                    timeframe = opp.get('timeframe', 'H1')
+                    pattern = opp.get('pattern', 'Unknown')
+
+                    # Get calculators for this timeframe
+                    bayesian_calc = stats_manager.get_calculator(timeframe, 'bayesian')
+                    ev_calc = stats_manager.get_calculator(timeframe, 'expected_value')
+                    kelly_calc = stats_manager.get_calculator(timeframe, 'kelly')
+
+                    # Get Bayesian win probability
+                    try:
+                        bayesian_data = bayesian_calc.get_pattern_probability(pattern)
+                        opp['statistical_win_prob'] = bayesian_data['posterior_mean']
+                        opp['statistical_ci_lower'] = bayesian_data['credible_interval'][0]
+                        opp['statistical_ci_upper'] = bayesian_data['credible_interval'][1]
+                        opp['statistical_sample_size'] = bayesian_data['sample_size']
+                        opp['statistical_confidence'] = bayesian_data['confidence']
+                    except Exception as e:
+                        vprint(f"[Scanner] Bayesian calc error for {pattern}: {e}")
+                        opp['statistical_win_prob'] = 0.50
+                        opp['statistical_ci_lower'] = 0.40
+                        opp['statistical_ci_upper'] = 0.60
+                        opp['statistical_sample_size'] = 0
+                        opp['statistical_confidence'] = 'No data'
+
+                    # Get Expected Value
+                    try:
+                        ev_data = ev_calc.get_detailed_analysis(opp)
+                        opp['statistical_ev'] = ev_data['adjusted_ev']
+                        opp['statistical_ev_confidence'] = ev_data['confidence']
+                    except Exception as e:
+                        vprint(f"[Scanner] EV calc error for {pattern}: {e}")
+                        opp['statistical_ev'] = 0.0
+                        opp['statistical_ev_confidence'] = 'No data'
+
+                    # Get Kelly sizing
+                    try:
+                        kelly_data = kelly_calc.calculate_kelly_fraction(opp)
+                        opp['statistical_kelly_half'] = kelly_data['kelly_half']
+                        opp['statistical_kelly_quarter'] = kelly_data['kelly_quarter']
+                    except Exception as e:
+                        vprint(f"[Scanner] Kelly calc error for {pattern}: {e}")
+                        opp['statistical_kelly_half'] = 0.0
+                        opp['statistical_kelly_quarter'] = 0.0
+
+                    # Generate recommendation
+                    win_prob = opp.get('statistical_win_prob', 0.50)
+                    ev = opp.get('statistical_ev', 0.0)
+
+                    if ev > 0.5 and win_prob >= 0.60:
+                        opp['statistical_recommendation'] = '✓✓ STRONG'
+                        opp['statistical_rec_color'] = '#10B981'
+                    elif ev > 0 and win_prob >= 0.55:
+                        opp['statistical_recommendation'] = '✓ Good'
+                        opp['statistical_rec_color'] = '#F59E0B'
+                    elif ev > 0:
+                        opp['statistical_recommendation'] = '⚠ Marginal'
+                        opp['statistical_rec_color'] = '#F59E0B'
+                    else:
+                        opp['statistical_recommendation'] = '✗ Skip'
+                        opp['statistical_rec_color'] = '#EF4444'
+
+                    # Enhance quality score with statistical data
+                    # Blend original quality score with statistical recommendation
+                    if win_prob >= 0.60 and ev > 0.5:
+                        # Strong statistical edge - boost quality score
+                        opp['quality_score'] = min(95, opp.get('quality_score', 70) + 10)
+                    elif win_prob >= 0.55 and ev > 0:
+                        # Positive statistical edge - slightly boost
+                        opp['quality_score'] = min(90, opp.get('quality_score', 70) + 5)
+                    elif ev < 0:
+                        # Negative EV - reduce quality score
+                        opp['quality_score'] = max(50, opp.get('quality_score', 70) - 10)
+
+                    vprint(f"[Scanner]   {opp['symbol']} {timeframe}: WinProb={win_prob*100:.1f}%, EV={ev:+.2f}R, Rec={opp['statistical_recommendation']}")
+
+                except Exception as e:
+                    vprint(f"[Scanner] Error enhancing opportunity {opp.get('symbol', 'Unknown')}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+
+            vprint(f"[Scanner] ✓ Enhanced {len(opportunities)} opportunities with statistical data")
+
+        except Exception as e:
+            vprint(f"[Scanner] Error in enhance_opportunities_with_statistics: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def apply_mirror_mode(self, opportunities: List[Dict]):
+        """
+        Apply Mirror Mode to SELL opportunities
+
+        Reframes SELL trades as BUY opportunities (inverted pairs)
+        SELL EURUSD → BUY USDEUR
+
+        When disabled, restores original symbols and directions.
+
+        This helps traders overcome long bias by making SELLs psychologically comfortable.
+        """
+        if not self.mirror_mode_enabled:
+            # Mirror mode disabled - RESTORE original values
+            restored_count = 0
+            for opp in opportunities:
+                if opp.get('mirror_mode_active', False):
+                    # Restore original symbol and direction
+                    if 'original_symbol' in opp and 'original_direction' in opp:
+                        opp['symbol'] = opp['original_symbol']
+                        opp['direction'] = opp['original_direction']
+                        opp['mirror_mode_active'] = False
+                        restored_count += 1
+
+                    # Clean up mirror mode fields
+                    opp.pop('original_symbol', None)
+                    opp.pop('original_direction', None)
+                    opp.pop('reframed_narrative', None)
+
+            if restored_count > 0:
+                vprint(f"[Scanner] ↩️ Restored {restored_count} opportunities to original directions")
+            return
+
+        # Mirror mode enabled - REFRAME SELLs as BUYs
+        from core.direction_neutral_system import direction_neutralizer
+
+        mirrored_count = 0
+        for opp in opportunities:
+            # Skip if already mirrored
+            if opp.get('mirror_mode_active', False):
+                continue
+
+            # Check original direction (not current, in case it's already been modified)
+            original_direction = opp.get('original_direction', opp.get('direction'))
+
+            if original_direction == 'SELL':
+                # Reframe SELL as BUY
+                # Need to temporarily restore for reframing if already modified
+                if 'original_symbol' in opp:
+                    temp_symbol = opp['original_symbol']
+                    temp_direction = opp['original_direction']
+                else:
+                    temp_symbol = opp['symbol']
+                    temp_direction = opp['direction']
+
+                # Create temp opp for reframing
+                temp_opp = {'symbol': temp_symbol, 'direction': temp_direction}
+                neutral_view = direction_neutralizer.reframe_as_buy(temp_opp)
+
+                # Store original values (if not already stored)
+                if 'original_symbol' not in opp:
+                    opp['original_symbol'] = opp['symbol']
+                    opp['original_direction'] = opp['direction']
+
+                # Apply mirrored values
+                opp['symbol'] = neutral_view.reframed_symbol
+                opp['direction'] = 'BUY'
+                opp['mirror_mode_active'] = True
+                opp['reframed_narrative'] = neutral_view.reframed_narrative
+
+                mirrored_count += 1
+            else:
+                opp['mirror_mode_active'] = False
+
+        if mirrored_count > 0:
+            vprint(f"[Scanner] 🔄 Mirrored {mirrored_count} SELL opportunities to BUY")
+
+
+    def refresh_opportunities(self):
+        """Refresh opportunity display (e.g., after enabling/disabling Mirror Mode)"""
+        vprint("[Scanner] Refreshing opportunities display...")
+        self.update_display()
+
+    def blink_all_cards(self):
+        """Re-blink ONLY the cards from the most recent NEW signal set
+
+        This will blink cards that were NEW in the last scan that found new opportunities,
+        even if subsequent scans found nothing new.
+        """
+        vprint("[Scanner] ✨ Re-blinking cards from last signal set...")
+
+        # VISUAL FEEDBACK: Change button appearance immediately
+        self.blink_btn.setText("✓ BLINKING!")
+        self.blink_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F59E0B;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+        """)
+        self.blink_btn.setEnabled(False)  # Disable temporarily to prevent spam
+
+        if not self.last_new_opportunity_keys:
+            vprint(f"[Scanner] ⚠️ No signal set to re-blink (wait for first scan to generate new signals)")
+            # RESTORE BUTTON: After 2 seconds, restore original appearance
+            QTimer.singleShot(2000, self.restore_blink_button)
+            return
+
+        blinking_count = 0
+
+        # Iterate through all three timeframe groups
+        for group in [self.short_group, self.mid_group, self.long_group]:
+            # Get all cards from the grid layout
+            for i in range(group.grid_layout.count()):
+                widget = group.grid_layout.itemAt(i).widget()
+                if widget and isinstance(widget, OpportunityCard):
+                    # Check if this card's opportunity matches the last NEW signal set
+                    card_key = (
+                        widget.opportunity['symbol'],
+                        widget.opportunity['timeframe'],
+                        widget.opportunity['direction']
+                    )
+
+                    # Re-blink if this card was in the last NEW signal set
+                    if card_key in self.last_new_opportunity_keys:
+                        # Reset blink counter and restart blinking
+                        widget.blink_count = 0
+                        if widget.blink_timer:
+                            widget.blink_timer.stop()
+                        widget.start_blinking()
+                        blinking_count += 1
+
+        if blinking_count > 0:
+            vprint(f"[Scanner] ✨ Re-started blinking on {blinking_count} cards from last signal set")
+        else:
+            vprint(f"[Scanner] ⚠️ Cards from last signal set are no longer visible (filtered or expired)")
+
+        # RESTORE BUTTON: After 2 seconds, restore original appearance
+        QTimer.singleShot(2000, self.restore_blink_button)
+
+    def restore_blink_button(self):
+        """Restore Blink Again button to original state"""
+        self.blink_btn.setText("✨ Blink Again")
+        self.blink_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+            }
+        """)
+        self.blink_btn.setEnabled(True)  # Re-enable button
+
 
 class MiniChartPopup(QDialog):
     """
@@ -1582,3 +1908,4 @@ class MiniChartPopup(QDialog):
         layout.addWidget(container)
 
     # REMOVED showEvent - it was repositioning the popup after we set its position!
+

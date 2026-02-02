@@ -5,7 +5,7 @@ Professional candlestick charts without WebEngine dependencies
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QFrame
+    QPushButton, QFrame, QLineEdit
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
@@ -36,7 +36,8 @@ logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 from core.data_manager import data_manager
 from core.verbose_mode_manager import vprint
 from core.visual_controls import visual_controls
-from core.verbose_mode_manager import vprint
+from core.symbol_manager import SymbolManager
+from core.statistical_analysis_manager import StatisticalAnalysisManager
 
 
 # Simple theme and settings (inline replacement for config module)
@@ -93,11 +94,12 @@ class ChartPanel(QWidget):
     symbol_changed = pyqtSignal(str)
     display_mode_changed = pyqtSignal(bool)  # True = max mode, False = small mode
 
-    def __init__(self):
+    def __init__(self, mt5_connector=None):
         super().__init__()
 
         self.current_symbol = settings.app.default_symbol
         self.current_timeframe = settings.app.default_timeframe
+        self.mt5_connector_instance = mt5_connector  # Store connector for connection status updates
 
         # Display mode
         self.is_max_mode = False
@@ -114,17 +116,101 @@ class ChartPanel(QWidget):
         # Overlay visibility flags (user can toggle these) - OFF BY DEFAULT
         self.show_overlays = False  # FVG, OB, Liquidity zones - user turns ON when needed
         self.show_levels = False    # S/R, Pivots, PDH/PDL/PDC - user turns ON when needed
+        self.show_statistics = False  # Statistical analysis overlays - user turns ON when needed
 
         # MT5 connection status
         self.mt5_initialized = False
         self.init_mt5_connection()
 
+        # Initialize symbol manager to get available symbols
+        self.symbol_manager = SymbolManager()
+
+        # Initialize statistical analysis manager (singleton)
+        self.stats_manager = StatisticalAnalysisManager.get_instance()
+
+        # Symbol favorites and recent history
+        self.favorite_symbols = []  # Pinned symbols
+        self.recent_symbols = []    # Last 5 viewed symbols
+        self.max_recent = 5
+        self._load_symbol_preferences()
+
         self.init_ui()
+
+        # Connect to MT5Connector signal for connection status updates
+        if self.mt5_connector_instance:
+            self.mt5_connector_instance.connection_status_changed.connect(self.update_connection_status)
+            # Check and display initial connection status (don't wait for signal)
+            QTimer.singleShot(200, lambda: self.update_connection_status(self.mt5_connector_instance.is_connected))
 
         # Update timer
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_chart)
         self.update_timer.start(settings.app.chart_refresh_interval)
+
+    def _load_symbol_preferences(self):
+        """Load favorite and recent symbols from config file"""
+        try:
+            from pathlib import Path
+            import json
+            config_file = Path(__file__).parent.parent / "config" / "symbol_preferences.json"
+
+            if config_file.exists():
+                with open(config_file, 'r') as f:
+                    data = json.load(f)
+                    self.favorite_symbols = data.get('favorites', [])
+                    self.recent_symbols = data.get('recent', [])
+                    vprint(f"[Chart] Loaded {len(self.favorite_symbols)} favorites, {len(self.recent_symbols)} recent")
+        except Exception as e:
+            vprint(f"[Chart] Could not load symbol preferences: {e}")
+            self.favorite_symbols = []
+            self.recent_symbols = []
+
+    def _save_symbol_preferences(self):
+        """Save favorite and recent symbols to config file"""
+        try:
+            from pathlib import Path
+            import json
+            config_file = Path(__file__).parent.parent / "config" / "symbol_preferences.json"
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+
+            data = {
+                'favorites': self.favorite_symbols,
+                'recent': self.recent_symbols
+            }
+
+            with open(config_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            vprint(f"[Chart] Saved symbol preferences")
+        except Exception as e:
+            vprint(f"[Chart] Could not save symbol preferences: {e}")
+
+    def toggle_favorite(self, symbol: str):
+        """Add or remove symbol from favorites"""
+        if symbol in self.favorite_symbols:
+            self.favorite_symbols.remove(symbol)
+            vprint(f"[Chart] Removed {symbol} from favorites")
+        else:
+            self.favorite_symbols.append(symbol)
+            vprint(f"[Chart] Added {symbol} to favorites")
+
+        self._save_symbol_preferences()
+        # Repopulate with current search filter
+        search_text = self.symbol_search.text() if hasattr(self, 'symbol_search') else ""
+        self.populate_symbol_dropdown(filter_text=search_text)
+
+    def add_to_recent(self, symbol: str):
+        """Add symbol to recent history"""
+        # Remove if already in list
+        if symbol in self.recent_symbols:
+            self.recent_symbols.remove(symbol)
+
+        # Add to front
+        self.recent_symbols.insert(0, symbol)
+
+        # Keep only last N symbols
+        self.recent_symbols = self.recent_symbols[:self.max_recent]
+
+        self._save_symbol_preferences()
 
     def init_ui(self):
         """Initialize UI components"""
@@ -166,6 +252,32 @@ class ChartPanel(QWidget):
         layout = QHBoxLayout(toolbar)
         layout.setContentsMargins(16, 8, 16, 8)
 
+        # Search box for filtering symbols
+        search_label = QLabel("🔍")
+        search_label.setStyleSheet(f"color: {settings.theme.text_secondary}; font-size: 18px;")
+        layout.addWidget(search_label)
+
+        self.symbol_search = QLineEdit()
+        self.symbol_search.setPlaceholderText("Search symbols...")
+        self.symbol_search.textChanged.connect(self.on_search_changed)
+        self.symbol_search.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {settings.theme.surface_light};
+                color: {settings.theme.text_primary};
+                border: 1px solid {settings.theme.border_color};
+                border-radius: 6px;
+                padding: 8px 12px;
+                min-width: 150px;
+                font-size: {settings.theme.font_size_sm}px;
+            }}
+            QLineEdit:focus {{
+                border-color: {settings.theme.accent};
+            }}
+        """)
+        layout.addWidget(self.symbol_search)
+
+        layout.addSpacing(10)
+
         # Symbol selector (allow user to view any symbol)
         symbol_label_text = QLabel("Symbol:")
         symbol_label_text.setStyleSheet(f"""
@@ -180,9 +292,8 @@ class ChartPanel(QWidget):
 
         # Symbol dropdown
         self.symbol_combo = QComboBox()
-        self.symbol_combo.addItems(['GBPUSD', 'EURUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-                                     'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'])
-        self.symbol_combo.setCurrentText(self.current_symbol)
+        self.symbol_combo.setEditable(False)
+        self.populate_symbol_dropdown()
         self.symbol_combo.currentTextChanged.connect(self.on_symbol_changed)
         self.symbol_combo.setStyleSheet(f"""
             QComboBox {{
@@ -219,6 +330,26 @@ class ChartPanel(QWidget):
             }}
         """)
         layout.addWidget(self.symbol_combo)
+
+        # Favorite button
+        self.favorite_btn = QPushButton("☆")
+        self.favorite_btn.setFixedSize(36, 36)
+        self.favorite_btn.clicked.connect(self.on_favorite_clicked)
+        self.favorite_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {settings.theme.surface_light};
+                color: {settings.theme.warning};
+                border: 1px solid {settings.theme.border_color};
+                border-radius: 6px;
+                font-size: 18px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {settings.theme.accent};
+                color: #FFFFFF;
+            }}
+        """)
+        layout.addWidget(self.favorite_btn)
 
         layout.addSpacing(20)
 
@@ -493,6 +624,30 @@ class ChartPanel(QWidget):
         """)
         layout.addWidget(self.levels_toggle_btn)
 
+        layout.addSpacing(10)
+
+        # Statistics toggle button - OFF/RED by default
+        self.statistics_toggle_btn = QPushButton("📊 Statistics: OFF")
+        self.statistics_toggle_btn.clicked.connect(self.toggle_statistics)
+        self.statistics_toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #EF4444;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: {settings.theme.font_size_sm}px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #DC2626;
+            }}
+            QPushButton:pressed {{
+                background-color: #B91C1C;
+            }}
+        """)
+        layout.addWidget(self.statistics_toggle_btn)
+
         layout.addSpacing(20)
 
         # MT5 Connection status (moved from top toolbar)
@@ -510,6 +665,140 @@ class ChartPanel(QWidget):
         layout.addWidget(self.connection_label)
 
         return toolbar
+
+    def populate_symbol_dropdown(self, filter_text: str = ""):
+        """Populate dropdown with favorites, recent, and grouped symbols"""
+        self.symbol_combo.blockSignals(True)  # Prevent triggering on_symbol_changed during population
+        # Use self.current_symbol if combo is empty (initialization), otherwise use combo's current text
+        current_symbol = self.symbol_combo.currentText() if self.symbol_combo.currentText() else self.current_symbol
+        self.symbol_combo.clear()
+
+        if not self.symbol_manager.symbols:
+            self.symbol_combo.addItems(['EURUSD'])
+            self.symbol_combo.blockSignals(False)
+            return
+
+        from collections import defaultdict
+
+        # Collect all symbols
+        all_symbols = []
+
+        # Filter by search text if provided
+        filtered_symbols = {}
+        for symbol, specs in self.symbol_manager.symbols.items():
+            if not filter_text or filter_text.upper() in symbol.upper():
+                filtered_symbols[symbol] = specs
+
+        # SECTION 1: FAVORITES
+        favorites_in_list = [s for s in self.favorite_symbols if s in filtered_symbols]
+        if favorites_in_list:
+            self.symbol_combo.addItem("★ FAVORITES")
+            model = self.symbol_combo.model()
+            item = model.item(self.symbol_combo.count() - 1)
+            item.setEnabled(False)
+
+            for symbol in favorites_in_list:
+                self.symbol_combo.addItem(f"  ★ {symbol}")
+                all_symbols.append(symbol)
+
+        # SECTION 2: RECENT
+        recent_in_list = [s for s in self.recent_symbols if s in filtered_symbols and s not in favorites_in_list]
+        if recent_in_list:
+            self.symbol_combo.addItem("🕐 RECENT")
+            model = self.symbol_combo.model()
+            item = model.item(self.symbol_combo.count() - 1)
+            item.setEnabled(False)
+
+            for symbol in recent_in_list:
+                self.symbol_combo.addItem(f"  {symbol}")
+                all_symbols.append(symbol)
+
+        # SECTION 3: GROUPED BY ASSET CLASS
+        grouped_symbols = defaultdict(list)
+        for symbol, specs in filtered_symbols.items():
+            # Skip if already in favorites or recent
+            if symbol not in favorites_in_list and symbol not in recent_in_list:
+                grouped_symbols[specs.asset_class].append(symbol)
+
+        group_order = [
+            ('forex', '═══ FOREX ═══'),
+            ('index', '═══ INDICES ═══'),
+            ('stock', '═══ STOCKS ═══'),
+            ('commodity', '═══ COMMODITIES ═══'),
+            ('crypto', '═══ CRYPTO ═══')
+        ]
+
+        for asset_class, group_label in group_order:
+            if asset_class in grouped_symbols and grouped_symbols[asset_class]:
+                self.symbol_combo.addItem(group_label)
+                model = self.symbol_combo.model()
+                item = model.item(self.symbol_combo.count() - 1)
+                item.setEnabled(False)
+
+                symbols_in_group = sorted(grouped_symbols[asset_class])
+                for symbol in symbols_in_group:
+                    self.symbol_combo.addItem(symbol)
+                    all_symbols.append(symbol)
+
+        # Restore selection or set first available
+        if current_symbol in all_symbols:
+            # Find the display text (might have prefix like "★ ")
+            for i in range(self.symbol_combo.count()):
+                item_text = self.symbol_combo.itemText(i)
+                if current_symbol in item_text:
+                    self.symbol_combo.setCurrentIndex(i)
+                    break
+        elif all_symbols:
+            self.symbol_combo.setCurrentIndex(self.symbol_combo.findText(all_symbols[0], Qt.MatchFlag.MatchContains))
+
+        self.symbol_combo.blockSignals(False)
+        vprint(f"[Chart] Populated dropdown: {len(all_symbols)} symbols")
+
+    def on_search_changed(self, text: str):
+        """Filter symbol dropdown based on search text"""
+        self.populate_symbol_dropdown(filter_text=text)
+
+    def on_favorite_clicked(self):
+        """Toggle favorite status of current symbol"""
+        symbol = self.current_symbol
+        if symbol:
+            self.toggle_favorite(symbol)
+            self.update_favorite_button()
+
+    def update_favorite_button(self):
+        """Update favorite button appearance based on current symbol"""
+        if self.current_symbol in self.favorite_symbols:
+            self.favorite_btn.setText("★")  # Filled star
+            self.favorite_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {settings.theme.warning};
+                    color: #FFFFFF;
+                    border: 1px solid {settings.theme.warning};
+                    border-radius: 6px;
+                    font-size: 18px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {settings.theme.surface_light};
+                    color: {settings.theme.warning};
+                }}
+            """)
+        else:
+            self.favorite_btn.setText("☆")  # Empty star
+            self.favorite_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {settings.theme.surface_light};
+                    color: {settings.theme.warning};
+                    border: 1px solid {settings.theme.border_color};
+                    border-radius: 6px;
+                    font-size: 18px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {settings.theme.accent};
+                    color: #FFFFFF;
+                }}
+            """)
 
     def init_mt5_connection(self):
         """Initialize connection to MetaTrader5"""
@@ -773,6 +1062,10 @@ class ChartPanel(QWidget):
             self.draw_pivot_points()
             self.draw_previous_day_levels()
             self.draw_session_markers()
+
+        if self.show_statistics:
+            # Draw statistical analysis overlays
+            self.draw_statistics_overlay()
 
         # Adjust layout with proper margins
         try:
@@ -2094,6 +2387,34 @@ class ChartPanel(QWidget):
             bbox=dict(boxstyle='round,pad=0.3', facecolor='#0A0E27', edgecolor='#EF4444', alpha=0.8)
         )
 
+    def update_connection_status(self, connected: bool):
+        """Update connection status label when MT5Connector signal fires"""
+        if hasattr(self, 'connection_label'):
+            if connected:
+                self.connection_label.setText("🟢 MT5: Connected")
+                self.connection_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {settings.theme.success};
+                        font-size: {settings.theme.font_size_sm}px;
+                        font-weight: bold;
+                        background-color: {settings.theme.surface};
+                        padding: 5px 10px;
+                        border-radius: 5px;
+                    }}
+                """)
+            else:
+                self.connection_label.setText("🔴 MT5: Disconnected")
+                self.connection_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {settings.theme.danger};
+                        font-size: {settings.theme.font_size_sm}px;
+                        font-weight: bold;
+                        background-color: {settings.theme.surface};
+                        padding: 5px 10px;
+                        border-radius: 5px;
+                    }}
+                """)
+
     def update_chart(self):
         """Update chart - reload data from MT5 to show new candles"""
 
@@ -2102,32 +2423,9 @@ class ChartPanel(QWidget):
             if hasattr(self, 'time_label'):
                 self.time_label.setText(datetime.now().strftime("%H:%M:%S"))
 
-            # Update MT5 connection status
-            if hasattr(self, 'connection_label'):
-                if self.mt5_initialized and mt5.terminal_info() is not None:
-                    self.connection_label.setText("🟢 MT5: Connected")
-                    self.connection_label.setStyleSheet(f"""
-                        QLabel {{
-                            color: {settings.theme.success};
-                            font-size: {settings.theme.font_size_sm}px;
-                            font-weight: bold;
-                            background-color: {settings.theme.surface};
-                            padding: 5px 10px;
-                            border-radius: 5px;
-                        }}
-                    """)
-                else:
-                    self.connection_label.setText("🔴 MT5: Disconnected")
-                    self.connection_label.setStyleSheet(f"""
-                        QLabel {{
-                            color: {settings.theme.danger};
-                            font-size: {settings.theme.font_size_sm}px;
-                            font-weight: bold;
-                            background-color: {settings.theme.surface};
-                            padding: 5px 10px;
-                            border-radius: 5px;
-                        }}
-                    """)
+            # NOTE: MT5 connection status removed from here
+            # Connection status is now managed by MT5Connector with proper debouncing
+            # to prevent flapping. Status updates via connection_status_changed signal.
 
             # Skip update if we're currently loading new data (symbol/timeframe change)
             if self.is_loading:
@@ -2196,19 +2494,28 @@ class ChartPanel(QWidget):
         # Set loading flag to prevent update_chart from interfering
         self.is_loading = True
 
-        self.current_symbol = symbol
+        # Clean symbol name (remove prefixes like "★ " or "  ")
+        clean_symbol = symbol.replace("★", "").strip()
+
+        self.current_symbol = clean_symbol
         vprint(f"[Chart] current_symbol set to: {self.current_symbol}")
 
-        # Emit signal to notify main window
-        self.symbol_changed.emit(symbol)
+        # Add to recent history
+        self.add_to_recent(clean_symbol)
+
+        # Update favorite button
+        self.update_favorite_button()
+
+        # Emit signal to notify main window (use clean_symbol for consistency)
+        self.symbol_changed.emit(clean_symbol)
 
         # Reload historical data for new symbol
         if self.mt5_initialized:
-            success = self.load_historical_data(symbol=symbol)
+            success = self.load_historical_data(symbol=clean_symbol)  # Use clean_symbol, not raw symbol
             if success:
-                vprint(f"[Chart] ✓ Loaded {len(self.candle_data)} candles for {symbol} from MT5")
+                vprint(f"[Chart] ✓ Loaded {len(self.candle_data)} candles for {clean_symbol} from MT5")
             else:
-                vprint(f"[Chart] ✗ Failed to load {symbol} from MT5, trying fallback...")
+                vprint(f"[Chart] ✗ Failed to load {clean_symbol} from MT5, trying fallback...")
                 # Fallback to live data if historical load fails
                 self.candle_data = []
                 self.get_live_mt5_data()
@@ -2216,17 +2523,17 @@ class ChartPanel(QWidget):
                 # CRITICAL: Even in fallback, update data_manager with current symbol!
                 # This ensures widgets know we're on a different symbol even with no data
                 import pandas as pd
-                data_manager.candle_buffer.symbol = symbol
+                data_manager.candle_buffer.symbol = clean_symbol
                 data_manager.candle_buffer.timeframe = self.current_timeframe
-                vprint(f"[Chart] Updated data_manager to {symbol} (fallback mode)")
+                vprint(f"[Chart] Updated data_manager to {clean_symbol} (fallback mode)")
         else:
-            vprint(f"[Chart] MT5 not initialized, using live data for {symbol}")
+            vprint(f"[Chart] MT5 not initialized, using live data for {clean_symbol}")
             # MT5 not available, use live data
             self.candle_data = []
             self.get_live_mt5_data()
 
             # CRITICAL: Update data_manager symbol even without MT5
-            data_manager.candle_buffer.symbol = symbol
+            data_manager.candle_buffer.symbol = clean_symbol
             data_manager.candle_buffer.timeframe = self.current_timeframe
             vprint(f"[Chart] Updated data_manager to {symbol} (no MT5 mode)")
 
@@ -2234,6 +2541,21 @@ class ChartPanel(QWidget):
 
         # Clear loading flag - updates can resume
         self.is_loading = False
+
+    def refresh_symbol_list(self):
+        """Refresh symbol dropdown from Symbol Manager (called when symbols are updated)"""
+        vprint("[Chart] Refreshing symbol dropdown from Symbol Manager...")
+
+        # Refresh symbols from MT5
+        self.symbol_manager.refresh_symbols()
+
+        # Repopulate using the standard method (includes favorites, recent, and groups)
+        self.populate_symbol_dropdown()
+
+        # Update favorite button for current symbol
+        self.update_favorite_button()
+
+        vprint("[Chart] ✓ Symbol dropdown refreshed")
 
     def toggle_display_mode(self):
         """Toggle between small and max display modes"""
@@ -2373,3 +2695,314 @@ class ChartPanel(QWidget):
         # Redraw chart
         self.plot_candlesticks()
 
+    def toggle_statistics(self):
+        """Toggle statistical analysis overlays on/off"""
+        # Check if statistical analysis is globally enabled
+        if not self.stats_manager.is_enabled():
+            vprint("[Chart] Statistics system is globally disabled. Enable it in the Statistics tab.")
+            # You could add a QMessageBox here to notify the user
+            return
+
+        self.show_statistics = not self.show_statistics
+
+        if self.show_statistics:
+            self.statistics_toggle_btn.setText("📊 Statistics: ON")
+            self.statistics_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #10B981;
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-size: {settings.theme.font_size_sm}px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #059669;
+                }}
+                QPushButton:pressed {{
+                    background-color: #047857;
+                }}
+            """)
+        else:
+            self.statistics_toggle_btn.setText("📊 Statistics: OFF")
+            self.statistics_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #EF4444;
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-size: {settings.theme.font_size_sm}px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #DC2626;
+                }}
+                QPushButton:pressed {{
+                    background-color: #B91C1C;
+                }}
+            """)
+
+        # Redraw chart
+        self.plot_candlesticks()
+
+    def get_latest_pattern(self) -> str:
+        """
+        Detect the most recent candlestick pattern on the chart
+        Returns pattern name or None if no pattern detected
+        """
+        if not self.candle_data or len(self.candle_data) < 3:
+            return None
+
+        # Check last 10 candles for patterns (most recent first)
+        for i in range(len(self.candle_data) - 1, max(2, len(self.candle_data) - 11), -1):
+            pattern = self.detect_pattern_at_index(i)
+            if pattern:
+                # Normalize pattern names to match Bayesian learner format
+                # "BULLISH ENGULF" -> "Bullish_Engulfing"
+                # "BEARISH ENGULF" -> "Bearish_Engulfing"
+                # "HAMMER" -> "Hammer"
+                # "SHOOT STAR" -> "Shooting_Star"
+                # "DOJI" -> "Doji"
+                pattern_map = {
+                    "BULLISH ENGULF": "Bullish_Engulfing",
+                    "BEARISH ENGULF": "Bearish_Engulfing",
+                    "HAMMER": "Hammer",
+                    "SHOOT STAR": "Shooting_Star",
+                    "DOJI": "Doji"
+                }
+                normalized = pattern_map.get(pattern, pattern)
+                vprint(f"[Chart] Detected pattern: {normalized} at index {i}")
+                return normalized
+
+        # No pattern detected in recent candles
+        return None
+
+    def draw_statistics_overlay(self):
+        """Draw statistical analysis information as overlay on chart"""
+        if not self.stats_manager.is_enabled():
+            return
+
+        try:
+            # DETECT REAL PATTERN from chart data
+            current_pattern = self.get_latest_pattern()
+
+            # If no pattern detected, show message and return
+            if not current_pattern:
+                self.draw_no_pattern_message()
+                return
+
+            # Get calculators for current timeframe
+            ev_calc = self.stats_manager.get_calculator(self.current_timeframe, 'expected_value')
+            kelly_calc = self.stats_manager.get_calculator(self.current_timeframe, 'kelly')
+            bayesian_calc = self.stats_manager.get_calculator(self.current_timeframe, 'bayesian')
+            ci_calc = self.stats_manager.get_calculator(self.current_timeframe, 'confidence_interval')
+
+            # Create overlay panel (top-right corner of chart)
+            ax = self.canvas.axes
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+
+            # Panel dimensions
+            panel_width = (xlim[1] - xlim[0]) * 0.25  # 25% of chart width
+            panel_height = (ylim[1] - ylim[0]) * 0.35  # 35% of chart height
+            panel_x = xlim[1] - panel_width - 2  # 2 units from right edge
+            panel_y = ylim[1] - panel_height - (ylim[1] - ylim[0]) * 0.02  # Small margin from top
+
+            # Draw panel background
+            from matplotlib.patches import FancyBboxPatch
+            panel_bg = FancyBboxPatch(
+                (panel_x, panel_y),
+                panel_width,
+                panel_height,
+                boxstyle="round,pad=0.05",
+                facecolor='#1E293B',
+                edgecolor='#3B82F6',
+                alpha=0.95,
+                linewidth=2,
+                zorder=1000
+            )
+            ax.add_patch(panel_bg)
+
+            # Get Bayesian probability for current pattern
+            try:
+                bayesian_data = bayesian_calc.get_pattern_probability(current_pattern)
+                win_prob = bayesian_data['posterior_mean']
+                ci_lower = bayesian_data['credible_interval'][0]
+                ci_upper = bayesian_data['credible_interval'][1]
+                sample_size = bayesian_data['sample_size']
+            except:
+                win_prob = 0.50
+                ci_lower = 0.40
+                ci_upper = 0.60
+                sample_size = 0
+
+            # Get Expected Value
+            try:
+                # Create a mock opportunity for EV calculation
+                mock_opportunity = {
+                    'pattern': current_pattern,
+                    'timeframe': self.current_timeframe
+                }
+                ev_data = ev_calc.get_detailed_analysis(mock_opportunity)
+                expected_value = ev_data['adjusted_ev']
+                confidence = ev_data['confidence']
+            except:
+                expected_value = 0.0
+                confidence = 'No data'
+
+            # Get Kelly fraction
+            try:
+                kelly_data = kelly_calc.calculate_kelly_fraction(mock_opportunity)
+                kelly_half = kelly_data['kelly_half']
+                kelly_quarter = kelly_data['kelly_quarter']
+            except:
+                kelly_half = 0.0
+                kelly_quarter = 0.0
+
+            # Text positioning
+            text_x = panel_x + panel_width * 0.05
+            text_y_start = panel_y + panel_height * 0.90
+            line_height = panel_height * 0.12
+
+            # Title
+            ax.text(
+                text_x, text_y_start,
+                f'📊 STATISTICS - {self.current_timeframe}',
+                fontsize=10,
+                fontweight='bold',
+                color='#3B82F6',
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Win Probability
+            prob_color = '#10B981' if win_prob >= 0.55 else '#EF4444'
+            ax.text(
+                text_x, text_y_start - line_height * 1,
+                f'Win Rate: {win_prob*100:.1f}%',
+                fontsize=9,
+                fontweight='bold',
+                color=prob_color,
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Credible Interval
+            ax.text(
+                text_x, text_y_start - line_height * 1.8,
+                f'95% CI: [{ci_lower*100:.1f}%-{ci_upper*100:.1f}%]',
+                fontsize=8,
+                color='#94A3B8',
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Expected Value
+            ev_color = '#10B981' if expected_value > 0 else '#EF4444'
+            ax.text(
+                text_x, text_y_start - line_height * 2.8,
+                f'Expected Value: {expected_value:+.2f}R',
+                fontsize=9,
+                fontweight='bold',
+                color=ev_color,
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Kelly sizing
+            ax.text(
+                text_x, text_y_start - line_height * 3.8,
+                f'Kelly: {kelly_half*100:.1f}% (½) / {kelly_quarter*100:.1f}% (¼)',
+                fontsize=8,
+                color='#94A3B8',
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Sample size
+            ax.text(
+                text_x, text_y_start - line_height * 4.6,
+                f'Data: {sample_size} trades | {confidence}',
+                fontsize=7,
+                color='#64748B',
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            # Recommendation
+            if expected_value > 0.5 and win_prob >= 0.60:
+                recommendation = "✓ STRONG SETUP"
+                rec_color = '#10B981'
+            elif expected_value > 0 and win_prob >= 0.55:
+                recommendation = "✓ Good Setup"
+                rec_color = '#F59E0B'
+            elif expected_value > 0:
+                recommendation = "⚠ Marginal"
+                rec_color = '#F59E0B'
+            else:
+                recommendation = "✗ Skip"
+                rec_color = '#EF4444'
+
+            ax.text(
+                text_x, text_y_start - line_height * 5.8,
+                recommendation,
+                fontsize=9,
+                fontweight='bold',
+                color=rec_color,
+                verticalalignment='top',
+                zorder=1001
+            )
+
+            vprint(f"[Chart] Drew statistics overlay for {self.current_timeframe}")
+
+        except Exception as e:
+            vprint(f"[Chart] Error drawing statistics overlay: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def draw_no_pattern_message(self):
+        """Draw message when no pattern is detected"""
+        try:
+            ax = self.canvas.axes
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+
+            # Small panel in top-right
+            panel_width = (xlim[1] - xlim[0]) * 0.20
+            panel_height = (ylim[1] - ylim[0]) * 0.15
+            panel_x = xlim[1] - panel_width - 2
+            panel_y = ylim[1] - panel_height - (ylim[1] - ylim[0]) * 0.02
+
+            # Panel background
+            from matplotlib.patches import FancyBboxPatch
+            panel_bg = FancyBboxPatch(
+                (panel_x, panel_y),
+                panel_width,
+                panel_height,
+                boxstyle="round,pad=0.05",
+                facecolor='#1E293B',
+                edgecolor='#64748B',
+                alpha=0.90,
+                linewidth=1,
+                zorder=1000
+            )
+            ax.add_patch(panel_bg)
+
+            # Message
+            text_x = panel_x + panel_width * 0.5
+            text_y = panel_y + panel_height * 0.5
+
+            ax.text(
+                text_x, text_y,
+                '📊 STATISTICS\n\nNo Pattern\nDetected',
+                fontsize=9,
+                color='#94A3B8',
+                ha='center',
+                va='center',
+                zorder=1001
+            )
+
+        except Exception as e:
+            vprint(f"[Chart] Error drawing no pattern message: {e}")
