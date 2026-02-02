@@ -187,8 +187,9 @@ public:
     {
         m_content += "\n}\n";
 
-        // Write to file
-        m_file_handle = FileOpen(m_filename, FILE_WRITE|FILE_TXT|FILE_ANSI);
+        // Write to file using FILE_COMMON to save to Common/Files folder
+        // This allows Python app to read from %APPDATA%\MetaQuotes\Terminal\Common\Files\
+        m_file_handle = FileOpen(m_filename, FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
 
         if(m_file_handle == INVALID_HANDLE)
         {

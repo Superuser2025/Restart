@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
-//|                                InstitutionalTradingRobot_v3.mq5  |
-//|                         Institutional-Grade Trading System v3.0   |
+//|                                InstitutionalTradingRobot_v4.mq5  |
+//|                         Institutional-Grade Trading System v4.0   |
 //|                      Complete Rewrite - Pure MQL5 Implementation  |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Institutional Grade Trading"
 #property link      "https://www.mql5.com"
-#property version   "3.00"
+#property version   "4.00"
 #property description "Citadel-Level Trading Robot - 20 Professional Fixes"
 #property strict
 
@@ -730,7 +730,7 @@ CMLPredictionReader ml_reader;
 int OnInit()
 {
     Print("╔═══════════════════════════════════════════════════════════╗");
-    Print("║  INSTITUTIONAL TRADING ROBOT v3.0                        ║");
+    Print("║  INSTITUTIONAL TRADING ROBOT v4.0                        ║");
     Print("║  Complete MQL5 Rewrite - 20 Professional Fixes           ║");
     Print("╚═══════════════════════════════════════════════════════════╝");
 
@@ -859,14 +859,14 @@ int OnInit()
         Print("ML System disabled (ML_Enabled = false)");
     }
 
-    // Initialize JSON Exporter
-    if(!jsonExporter.Init("ML_Data\\market_data.json"))
+    // Initialize JSON Exporter - saves to Common/Files/AppleTrader for Python app sync
+    if(!jsonExporter.Init("AppleTrader\\market_data.json"))
     {
         Print("WARNING: JSON Exporter initialization failed");
     }
     else
     {
-        Print("✓ JSON Exporter initialized successfully");
+        Print("✓ JSON Exporter initialized - saving to Common/Files/AppleTrader/market_data.json");
     }
 
     // Set timer for data export (every 10 seconds)

@@ -39,7 +39,7 @@ from core.verbose_mode_manager import verbose_mode_manager, is_verbose, vprint
 
 class EnhancedMainWindow(QMainWindow):
     """
-    Enhanced Main Window with Institutional Trading Robot v3.0 features
+    Enhanced Main Window with Institutional Trading Robot v4.0 features
     """
 
     def __init__(self):

@@ -38,7 +38,7 @@ class InstitutionalPanel(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
 
         # Title
-        title = QLabel("INSTITUTIONAL TRADING ROBOT v3.0")
+        title = QLabel("INSTITUTIONAL TRADING ROBOT v4.0")
         title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color: #00ff00; background-color: #1a1a1a; padding: 10px; border-radius: 5px;")

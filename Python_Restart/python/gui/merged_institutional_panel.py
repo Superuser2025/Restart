@@ -42,7 +42,7 @@ class MergedInstitutionalPanel(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
 
         # === TITLE ===
-        title = QLabel("INSTITUTIONAL TRADING ROBOT v3.0")
+        title = QLabel("INSTITUTIONAL TRADING ROBOT v4.0")
         title.setFont(QFont("Arial", 15, QFont.Weight.Bold))  # Increased from 11 to 15
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color: #00ff00; background-color: #1a1a1a; padding: 8px; border-radius: 5px;")
