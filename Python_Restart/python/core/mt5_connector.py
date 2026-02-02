@@ -263,6 +263,47 @@ class MT5Connector(QObject):
         """Get MT5 data directory path"""
         return self.data_dir
 
+    def check_connection_sync(self) -> tuple[bool, str]:
+        """
+        Synchronous connection check for diagnostic purposes
+        (doesn't rely on Qt event loop)
+
+        Returns:
+            (is_connected, message): Connection status and diagnostic message
+        """
+        if not self.market_data_file:
+            return False, "Market data file path not configured"
+
+        if not self.market_data_file.exists():
+            return False, "Market data file does not exist"
+
+        try:
+            # Check file age (should be fresh if EA is running)
+            import time
+            file_age = time.time() - self.market_data_file.stat().st_mtime
+
+            # Read the file
+            with open(self.market_data_file, 'r') as f:
+                data = json.load(f)
+
+            # Check if data has essential fields
+            if not data:
+                return False, "Market data file is empty"
+
+            if 'account_balance' not in data and 'symbol' not in data:
+                return False, "Market data file missing essential fields"
+
+            # Check freshness (warn if stale)
+            if file_age > 60:  # More than 1 minute old
+                return True, f"Connected but data is stale ({file_age:.0f}s old - EA may not be running)"
+
+            return True, f"Connected - data fresh ({file_age:.0f}s old)"
+
+        except json.JSONDecodeError as e:
+            return False, f"JSON parse error: {str(e)}"
+        except Exception as e:
+            return False, f"Error reading file: {str(e)}"
+
 
 # Global instance
 mt5_connector = MT5Connector()

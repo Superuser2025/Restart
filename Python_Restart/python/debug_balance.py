@@ -14,9 +14,22 @@ from core.demo_mode_manager import demo_mode_manager, is_demo_mode
 from core.mt5_connector import mt5_connector
 import time
 
+# Manually trigger data update (diagnostic script doesn't have Qt event loop)
+mt5_connector.update_data()
+
+# Also manually update data_manager if we got data
+if mt5_connector.last_data:
+    data_manager.update_from_mt5_data(mt5_connector.last_data)
+
 print("=" * 80)
 print("BALANCE DIAGNOSTIC TOOL")
 print("=" * 80)
+
+# Run synchronous connection check for detailed diagnostics
+sync_connected, sync_message = mt5_connector.check_connection_sync()
+print(f"\nSynchronous Connection Check:")
+print(f"   Status: {'✓ CONNECTED' if sync_connected else '✗ DISCONNECTED'}")
+print(f"   Message: {sync_message}\n")
 
 # Check demo mode status
 print(f"\n1. Demo Mode Status: {'DEMO' if is_demo_mode() else 'LIVE'}")
