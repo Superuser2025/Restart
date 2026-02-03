@@ -13,6 +13,7 @@
 #include <Trade\PositionInfo.mqh>
 #include <Trade\AccountInfo.mqh>
 #include <AI_Bridge_NamedPipe.mqh>
+#include "..\Include_Restart\JSONExporter.mqh"
 
 //+------------------------------------------------------------------+
 //| POSITION SIZING MODE ENUM                                         |
@@ -108,6 +109,7 @@ input int      FontSize = 9;                            // Font Size
 CTrade         trade;
 CPositionInfo  position;
 CAccountInfo   account;
+CJSONExporter  jsonExporter;
 
 //+------------------------------------------------------------------+
 //| RUNTIME MODIFIABLE SETTINGS (Shadow Variables for GUI)           |
@@ -773,6 +775,20 @@ int OnInit()
 
     Print("✓ Interactive GUI created - Click buttons to toggle settings!");
 
+    // Initialize JSON Exporter for Python GUI sync
+    if(!jsonExporter.Init("AppleTrader\\market_data.json"))
+    {
+        Print("WARNING: JSON Exporter initialization failed - Python sync disabled");
+    }
+    else
+    {
+        Print("✓ JSON Exporter initialized - saving to Common/Files/AppleTrader/market_data.json");
+    }
+
+    // Set timer for JSON export (every 1 second)
+    EventSetTimer(1);
+    Print("✓ Timer set for 1-second JSON export to Python GUI");
+
     return INIT_SUCCEEDED;
 }
 
@@ -781,6 +797,9 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+    // Kill timer
+    EventKillTimer();
+
     // Release indicators
     if(h_EMA_200 != INVALID_HANDLE) IndicatorRelease(h_EMA_200);
     if(h_EMA_Higher != INVALID_HANDLE) IndicatorRelease(h_EMA_Higher);
@@ -797,6 +816,62 @@ void OnDeinit(const int reason)
     Print("═══════════════════════════════════════════════════");
     Print("  Institutional Trading Robot v4.0 Stopped");
     Print("═══════════════════════════════════════════════════");
+}
+
+//+------------------------------------------------------------------+
+//| Timer function - Export data to Python GUI                        |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+    ExportMarketDataToJSON();
+}
+
+//+------------------------------------------------------------------+
+//| Export Market Data to JSON for Python GUI                         |
+//+------------------------------------------------------------------+
+void ExportMarketDataToJSON()
+{
+    jsonExporter.BeginExport();
+
+    // Basic market info
+    jsonExporter.AddString("symbol", Symbol());
+    jsonExporter.AddString("timeframe", EnumToString(Period()));
+    jsonExporter.AddLong("timestamp", TimeCurrent());
+    jsonExporter.AddDouble("bid", SymbolInfoDouble(Symbol(), SYMBOL_BID), 5);
+    jsonExporter.AddDouble("ask", SymbolInfoDouble(Symbol(), SYMBOL_ASK), 5);
+
+    double spread = (SymbolInfoDouble(Symbol(), SYMBOL_ASK) - SymbolInfoDouble(Symbol(), SYMBOL_BID)) / _Point;
+    jsonExporter.AddDouble("spread", spread, 2);
+
+    // Account info - CRITICAL FOR PYTHON BALANCE SYNC
+    jsonExporter.AddDouble("account_balance", AccountInfoDouble(ACCOUNT_BALANCE), 2);
+    jsonExporter.AddDouble("account_equity", AccountInfoDouble(ACCOUNT_EQUITY), 2);
+    jsonExporter.AddDouble("account_margin", AccountInfoDouble(ACCOUNT_MARGIN), 2);
+    jsonExporter.AddDouble("account_free_margin", AccountInfoDouble(ACCOUNT_FREEMARGIN), 2);
+
+    // Trading status
+    jsonExporter.AddBool("auto_trading", g_EnableTrading);
+    jsonExporter.AddInt("positions_total", PositionsTotal());
+    jsonExporter.AddInt("orders_total", OrdersTotal());
+
+    // Calculate total P&L
+    double total_pnl = 0.0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        if(PositionSelectByTicket(PositionGetTicket(i)))
+        {
+            total_pnl += PositionGetDouble(POSITION_PROFIT);
+        }
+    }
+    jsonExporter.AddDouble("total_pnl", total_pnl, 2);
+
+    // V4 specific: Aggression level
+    jsonExporter.AddInt("aggression_level", AggressionLevel);
+
+    // Position sizing mode
+    jsonExporter.AddString("position_sizing_mode", PositionSizingMode == LOT_SIZE_RANGE ? "LOT_SIZE_RANGE" : "RISK_PERCENTAGE");
+
+    jsonExporter.EndExport();
 }
 
 //+------------------------------------------------------------------+
