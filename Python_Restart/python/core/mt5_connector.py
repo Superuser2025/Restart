@@ -41,10 +41,15 @@ class MT5Connector(QObject):
         self.last_file_modified = None
         self.is_connected = False
 
-        # Auto-update timer
+        # Connection stability - grace period to avoid flickering
+        self.consecutive_failures = 0
+        self.max_failures_before_disconnect = 3  # Need 3 failures before marking disconnected
+        self.last_successful_read = None
+
+        # Auto-update timer (default 2 seconds - NORMAL speed)
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_data)
-        self.update_timer.start(1000)  # Check every 1 second
+        self.update_timer.start(2000)  # Default to NORMAL speed (2 seconds)
 
     def _find_mt5_data_dir(self) -> Optional[Path]:
         """Find MT5 data directory"""
@@ -70,9 +75,7 @@ class MT5Connector(QObject):
     def update_data(self):
         """Check for and load new data from MT5"""
         if not self.market_data_file or not self.market_data_file.exists():
-            if self.is_connected:
-                self.is_connected = False
-                self.connection_status_changed.emit(False)
+            self._handle_read_failure("File not found")
             return
 
         try:
@@ -80,15 +83,30 @@ class MT5Connector(QObject):
             modified = self.market_data_file.stat().st_mtime
 
             if modified == self.last_file_modified:
-                return  # No changes
+                return  # No changes, keep current state
 
             self.last_file_modified = modified
 
-            # Read JSON data
-            with open(self.market_data_file, 'r') as f:
-                data = json.load(f)
+            # Read JSON data with retry for file-in-use errors
+            data = None
+            for attempt in range(3):
+                try:
+                    with open(self.market_data_file, 'r') as f:
+                        data = json.load(f)
+                    break
+                except (json.JSONDecodeError, PermissionError):
+                    if attempt < 2:
+                        import time
+                        time.sleep(0.05)  # Brief pause before retry
+                    continue
+
+            if data is None:
+                self._handle_read_failure("Could not parse JSON")
+                return
 
             self.last_data = data
+            self.last_successful_read = datetime.now()
+            self.consecutive_failures = 0  # Reset failure counter
 
             # Update connection status
             if not self.is_connected:
@@ -99,11 +117,24 @@ class MT5Connector(QObject):
             self.data_updated.emit(data)
 
         except Exception as e:
-            self.error_occurred.emit(f"Error reading MT5 data: {str(e)}")
+            self._handle_read_failure(str(e))
 
+    def _handle_read_failure(self, reason: str):
+        """Handle read failure with grace period to avoid flickering"""
+        self.consecutive_failures += 1
+
+        # Only mark as disconnected after multiple consecutive failures
+        if self.consecutive_failures >= self.max_failures_before_disconnect:
             if self.is_connected:
                 self.is_connected = False
                 self.connection_status_changed.emit(False)
+                self.error_occurred.emit(f"MT5 disconnected: {reason}")
+
+    def set_update_interval(self, interval_ms: int):
+        """Set the update interval in milliseconds"""
+        self.update_timer.stop()
+        self.update_timer.setInterval(interval_ms)
+        self.update_timer.start()
 
     def get_candles(self, symbol: str, timeframe: str, count: int = 200) -> Optional[pd.DataFrame]:
         """
