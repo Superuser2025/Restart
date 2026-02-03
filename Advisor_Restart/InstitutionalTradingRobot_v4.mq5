@@ -1520,7 +1520,32 @@ void OnChartEvent(const int id,
     // Handle button clicks - OBJ_BUTTON generates CHARTEVENT_OBJECT_CLICK
     if(id == CHARTEVENT_OBJECT_CLICK)
     {
-        // Check if clicked object is one of our buttons
+        // ═══════════════════════════════════════════════════════════════
+        // ACTION BUTTONS (Close trades) - Handle these first
+        // ═══════════════════════════════════════════════════════════════
+        if(sparam == prefix + "BTN_CLOSE_SYMBOL")
+        {
+            Print("═══ CLOSE SYMBOL BUTTON CLICKED ═══");
+            CloseSymbolTrades();
+            // Reset button state
+            ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+            ChartRedraw();
+            return;
+        }
+
+        if(sparam == prefix + "BTN_CLOSE_ALL")
+        {
+            Print("═══ CLOSE ALL BUTTON CLICKED ═══");
+            CloseAllTrades();
+            // Reset button state
+            ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+            ChartRedraw();
+            return;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // TOGGLE BUTTONS - Check if clicked object is one of our buttons
+        // ═══════════════════════════════════════════════════════════════
         for(int i = 0; i < button_count; i++)
         {
             if(sparam == gui_buttons[i].name)
