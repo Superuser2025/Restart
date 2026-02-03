@@ -847,7 +847,7 @@ void ExportMarketDataToJSON()
     jsonExporter.AddDouble("account_balance", AccountInfoDouble(ACCOUNT_BALANCE), 2);
     jsonExporter.AddDouble("account_equity", AccountInfoDouble(ACCOUNT_EQUITY), 2);
     jsonExporter.AddDouble("account_margin", AccountInfoDouble(ACCOUNT_MARGIN), 2);
-    jsonExporter.AddDouble("account_free_margin", AccountInfoDouble(ACCOUNT_FREEMARGIN), 2);
+    jsonExporter.AddDouble("account_free_margin", AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2);
 
     // Trading status
     jsonExporter.AddBool("auto_trading", g_EnableTrading);
@@ -1506,6 +1506,86 @@ ENUM_TIMEFRAMES GetHigherTimeframe(ENUM_TIMEFRAMES current)
         case PERIOD_D1:  return PERIOD_W1;
         case PERIOD_W1:  return PERIOD_MN1;
         default:         return PERIOD_D1;
+    }
+}
+
+//+------------------------------------------------------------------+
+//| CLOSE TRADES ON CURRENT SYMBOL                                   |
+//+------------------------------------------------------------------+
+void CloseSymbolTrades()
+{
+    int closed = 0;
+    int failed = 0;
+
+    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket > 0)
+        {
+            if(PositionGetString(POSITION_SYMBOL) == _Symbol)
+            {
+                if(trade.PositionClose(ticket))
+                {
+                    closed++;
+                    Print("✓ Closed position #", ticket, " on ", _Symbol);
+                }
+                else
+                {
+                    failed++;
+                    Print("✗ Failed to close position #", ticket, " Error: ", GetLastError());
+                }
+            }
+        }
+    }
+
+    if(closed > 0 || failed > 0)
+    {
+        AddComment("Closed " + IntegerToString(closed) + " " + _Symbol + " trades" +
+                  (failed > 0 ? " (" + IntegerToString(failed) + " failed)" : ""),
+                  failed > 0 ? clrOrange : clrLime, PRIORITY_CRITICAL);
+    }
+    else
+    {
+        AddComment("No " + _Symbol + " trades to close", clrYellow, PRIORITY_IMPORTANT);
+    }
+}
+
+//+------------------------------------------------------------------+
+//| CLOSE ALL TRADES ON ALL SYMBOLS                                  |
+//+------------------------------------------------------------------+
+void CloseAllTrades()
+{
+    int closed = 0;
+    int failed = 0;
+
+    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket > 0)
+        {
+            string symbol = PositionGetString(POSITION_SYMBOL);
+            if(trade.PositionClose(ticket))
+            {
+                closed++;
+                Print("✓ Closed position #", ticket, " on ", symbol);
+            }
+            else
+            {
+                failed++;
+                Print("✗ Failed to close position #", ticket, " Error: ", GetLastError());
+            }
+        }
+    }
+
+    if(closed > 0 || failed > 0)
+    {
+        AddComment("Closed ALL " + IntegerToString(closed) + " trades" +
+                  (failed > 0 ? " (" + IntegerToString(failed) + " failed)" : ""),
+                  failed > 0 ? clrOrange : clrLime, PRIORITY_CRITICAL);
+    }
+    else
+    {
+        AddComment("No trades to close", clrYellow, PRIORITY_IMPORTANT);
     }
 }
 
