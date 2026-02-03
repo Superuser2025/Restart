@@ -94,6 +94,13 @@ input double   TP1_RiskReward = 2.0;                    // Take Profit 1 (R:R)
 input double   TP2_RiskReward = 3.0;                    // Take Profit 2 (R:R)
 input double   TP3_RiskReward = 5.0;                    // Take Profit 3 (R:R)
 
+input group "═════════ PROFIT PROTECTION ═════════"
+input bool     UseProfitLock = true;                    // Enable Profit Lock
+input double   ProfitLockTrigger = 1.5;                 // Lock Trigger (R multiple, e.g. 1.5R)
+input double   ProfitLockPercent = 50.0;                // Lock % of Profit (e.g. 50%)
+input bool     UsePartialClose = false;                 // Enable Partial Close at TP1
+input double   PartialClosePercent = 50.0;              // % to Close at TP1
+
 input group "═════════ VISUAL DASHBOARD ═════════"
 input bool     ShowDashboard = true;                    // Show Dashboard
 input bool     ShowCommentary = true;                   // Show Real-Time Commentary
@@ -450,8 +457,10 @@ int                 news_count = 0;
 // Risk Management
 double              daily_start_balance;
 double              weekly_start_balance;
+double              hourly_start_balance;
 datetime            last_daily_reset;
 datetime            last_weekly_reset;
+datetime            last_hourly_reset;
 int                 consecutive_losses = 0;
 int                 consecutive_wins = 0;
 double              peak_balance = 0;
@@ -879,6 +888,36 @@ void ExportMarketDataToJSON()
 //+------------------------------------------------------------------+
 void OnTick()
 {
+    // ═══════════════════════════════════════════════════════════════
+    // DAILY & HOURLY P&L RESET CHECK
+    // ═══════════════════════════════════════════════════════════════
+    MqlDateTime current_time, last_daily, last_hourly;
+    TimeToStruct(TimeCurrent(), current_time);
+    TimeToStruct(last_daily_reset, last_daily);
+    TimeToStruct(last_hourly_reset, last_hourly);
+
+    // Reset daily P&L at midnight
+    if(current_time.day != last_daily.day)
+    {
+        Print("═══ NEW DAY: Resetting Daily P&L ═══");
+        Print("Yesterday's P&L: ", DoubleToString(account.Balance() - daily_start_balance, 2));
+        daily_start_balance = account.Balance();
+        last_daily_reset = TimeCurrent();
+    }
+
+    // Reset hourly P&L at each hour
+    if(current_time.hour != last_hourly.hour)
+    {
+        double hourly_pnl = account.Balance() - hourly_start_balance;
+        if(MathAbs(hourly_pnl) > 0.01)
+        {
+            Print("═══ HOURLY P&L UPDATE ═══");
+            Print("Hour ", last_hourly.hour, ":00 P&L: ", DoubleToString(hourly_pnl, 2), " ", AccountInfoString(ACCOUNT_CURRENCY));
+        }
+        hourly_start_balance = account.Balance();
+        last_hourly_reset = TimeCurrent();
+    }
+
     // Check for new bar on preferred timeframe
     static datetime last_bar_time = 0;
     datetime current_bar_time = iTime(_Symbol, PreferredTimeframe, 0);
@@ -1483,9 +1522,11 @@ void InitializeRiskManagement()
 {
     daily_start_balance = account.Balance();
     weekly_start_balance = account.Balance();
+    hourly_start_balance = account.Balance();
     peak_balance = account.Balance();
     last_daily_reset = TimeCurrent();
     last_weekly_reset = TimeCurrent();
+    last_hourly_reset = TimeCurrent();
 
     AddComment("Risk: " + DoubleToString(dynamic_risk_percent, 2) + "% per trade, Max " +
               IntegerToString(active_aggression.max_trades) + " positions", clrAqua, PRIORITY_INFO);

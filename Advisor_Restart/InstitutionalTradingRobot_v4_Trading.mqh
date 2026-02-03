@@ -720,6 +720,30 @@ void ManageOpenTrades()
             }
         }
 
+        // PROFIT LOCK: Lock in percentage of profit when trigger reached
+        if(UseProfitLock && r_profit >= ProfitLockTrigger)
+        {
+            // Calculate locked profit level
+            double profit_to_lock = current_profit * (ProfitLockPercent / 100.0);
+            double locked_sl;
+
+            if(is_buy)
+                locked_sl = entry + profit_to_lock;
+            else
+                locked_sl = entry - profit_to_lock;
+
+            // Only update if new SL is better than current SL
+            if((is_buy && locked_sl > sl) || (!is_buy && locked_sl < sl))
+            {
+                if(trade.PositionModify(ticket, locked_sl, tp))
+                {
+                    double locked_profit = MathAbs(locked_sl - entry) / _Point * SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+                    AddComment("🔒 PROFIT LOCKED: " + DoubleToString(ProfitLockPercent, 0) + "% secured", clrGold, PRIORITY_CRITICAL);
+                    AddComment("Min profit: " + AccountInfoString(ACCOUNT_CURRENCY) + " " + DoubleToString(locked_profit, 2), clrGold, PRIORITY_IMPORTANT);
+                }
+            }
+        }
+
         // Trailing stop using structure
         if(r_profit >= 1.5)
         {

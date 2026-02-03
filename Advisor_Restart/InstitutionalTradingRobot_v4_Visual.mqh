@@ -223,6 +223,14 @@ void DrawDashboard()
                dashboard.daily_pnl >= 0 ? clrLime : clrRed, FontSize);
     row++;
 
+    // Hourly P&L
+    double hourly_pnl = account.Balance() - hourly_start_balance;
+    string hourly_text = "Hourly P/L: " + DoubleToString(hourly_pnl, 2) + " " +
+                        AccountInfoString(ACCOUNT_CURRENCY);
+    CreateLabel("HourlyPNL", x+10, y+40+row*line_height, hourly_text,
+               hourly_pnl >= 0 ? clrLime : clrRed, FontSize);
+    row++;
+
     // Pattern Section
     if(has_active_pattern)
     {
