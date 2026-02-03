@@ -1,416 +1,212 @@
 //+------------------------------------------------------------------+
 //|                                                 JSONExporter.mqh |
-//|                                    AppleTrader Pro Institutional |
-//|                                                                  |
-//| JSON Export System for Python GUI Communication                  |
-//| Exports market data, filter states, and trading info to JSON    |
+//|                      Exports market data and features to JSON    |
 //+------------------------------------------------------------------+
 #property copyright "AppleTrader Pro"
-#property version   "1.00"
+#property link      ""
 #property strict
 
 //+------------------------------------------------------------------+
-//| CJSONExporter Class                                              |
-//| Handles exporting MT5 data to JSON files for Python GUI          |
+//| JSON Exporter Class - Simple and Reliable                        |
 //+------------------------------------------------------------------+
 class CJSONExporter
 {
 private:
-   string            m_filePath;                  // Export file path
-   string            m_jsonContent;               // Current JSON being built
-   int               m_fileHandle;                // File handle
-   bool              m_isArrayOpen;               // Track if array is open
-   bool              m_isObjectOpen;              // Track if object is open
-   int               m_arrayDepth;                // Nesting depth
-   bool              m_firstElement;              // Track first element for comma placement
+    string m_filename;
+    string m_content;
+    int m_file_handle;
+    bool m_in_object;
+    bool m_in_array;
+    int m_field_count;
 
 public:
-                     CJSONExporter();
-                    ~CJSONExporter();
+    //+------------------------------------------------------------------+
+    //| Constructor                                                       |
+    //+------------------------------------------------------------------+
+    CJSONExporter()
+    {
+        m_filename = "";
+        m_content = "";
+        m_file_handle = INVALID_HANDLE;
+        m_in_object = false;
+        m_in_array = false;
+        m_field_count = 0;
+    }
 
-   //--- Initialization
-   bool              Init(string filePath);
+    //+------------------------------------------------------------------+
+    //| Destructor                                                        |
+    //+------------------------------------------------------------------+
+    ~CJSONExporter()
+    {
+        if(m_file_handle != INVALID_HANDLE)
+        {
+            FileClose(m_file_handle);
+        }
+    }
 
-   //--- Export control
-   void              BeginExport();
-   bool              EndExport();
+    //+------------------------------------------------------------------+
+    //| Initialize exporter with filename                                 |
+    //+------------------------------------------------------------------+
+    bool Init(string filename)
+    {
+        m_filename = filename;
+        return true;
+    }
 
-   //--- Data addition methods
-   void              AddString(string key, string value);
-   void              AddInt(string key, int value);
-   void              AddLong(string key, long value);
-   void              AddDouble(string key, double value, int digits);
-   void              AddBool(string key, bool value);
+    //+------------------------------------------------------------------+
+    //| Begin JSON export                                                 |
+    //+------------------------------------------------------------------+
+    void BeginExport()
+    {
+        m_content = "{\n";
+        m_field_count = 0;
+        m_in_object = true;
+    }
 
-   //--- Array methods
-   void              BeginArray(string key);
-   void              EndArray();
-   void              AddArrayString(string value);
-   void              AddArrayInt(int value);
-   void              AddArrayDouble(double value, int digits);
-   void              AddArrayBool(bool value);
+    //+------------------------------------------------------------------+
+    //| Add string field                                                  |
+    //+------------------------------------------------------------------+
+    void AddString(string key, string value)
+    {
+        if(m_field_count > 0) m_content += ",\n";
 
-   //--- Object methods
-   void              BeginObject(string key);
-   void              BeginArrayObject();      // For anonymous objects in arrays
-   void              EndObject();
+        // Escape quotes in value
+        string escaped_value = value;
+        StringReplace(escaped_value, "\"", "\\\"");
 
-   //--- Utility
-   string            EscapeString(string str);
-   string            GetLastError();
-};
+        m_content += "  \"" + key + "\": \"" + escaped_value + "\"";
+        m_field_count++;
+    }
 
-//+------------------------------------------------------------------+
-//| Constructor                                                       |
-//+------------------------------------------------------------------+
-CJSONExporter::CJSONExporter()
-{
-   m_filePath = "";
-   m_jsonContent = "";
-   m_fileHandle = INVALID_HANDLE;
-   m_isArrayOpen = false;
-   m_isObjectOpen = false;
-   m_arrayDepth = 0;
-   m_firstElement = true;
-}
+    //+------------------------------------------------------------------+
+    //| Add double field                                                  |
+    //+------------------------------------------------------------------+
+    void AddDouble(string key, double value, int digits = 5)
+    {
+        if(m_field_count > 0) m_content += ",\n";
+        m_content += "  \"" + key + "\": " + DoubleToString(value, digits);
+        m_field_count++;
+    }
 
-//+------------------------------------------------------------------+
-//| Destructor                                                        |
-//+------------------------------------------------------------------+
-CJSONExporter::~CJSONExporter()
-{
-   if(m_fileHandle != INVALID_HANDLE)
-   {
-      FileClose(m_fileHandle);
-   }
-}
+    //+------------------------------------------------------------------+
+    //| Add integer field                                                 |
+    //+------------------------------------------------------------------+
+    void AddInt(string key, int value)
+    {
+        if(m_field_count > 0) m_content += ",\n";
+        m_content += "  \"" + key + "\": " + IntegerToString(value);
+        m_field_count++;
+    }
 
-//+------------------------------------------------------------------+
-//| Initialize exporter                                              |
-//+------------------------------------------------------------------+
-bool CJSONExporter::Init(string filePath)
-{
-   m_filePath = filePath;
+    //+------------------------------------------------------------------+
+    //| Add long field                                                    |
+    //+------------------------------------------------------------------+
+    void AddLong(string key, long value)
+    {
+        if(m_field_count > 0) m_content += ",\n";
+        m_content += "  \"" + key + "\": " + IntegerToString(value);
+        m_field_count++;
+    }
 
-   //--- Ensure directory exists
-   string directory = "";
-   int lastSlash = StringFind(filePath, "/", 0);
-   if(lastSlash > 0)
-   {
-      directory = StringSubstr(filePath, 0, lastSlash);
+    //+------------------------------------------------------------------+
+    //| Add boolean field                                                 |
+    //+------------------------------------------------------------------+
+    void AddBool(string key, bool value)
+    {
+        if(m_field_count > 0) m_content += ",\n";
+        m_content += "  \"" + key + "\": " + (value ? "true" : "false");
+        m_field_count++;
+    }
 
-      //--- Create directory if it doesn't exist
-      if(!FolderCreate(directory, FILE_COMMON))
-      {
-         int errorCode = ::GetLastError();
-         if(errorCode != 5019)  // 5019 = folder already exists (not an error)
-         {
-            Print("Failed to create directory: ", directory, " Error: ", errorCode);
+    //+------------------------------------------------------------------+
+    //| Begin array                                                       |
+    //+------------------------------------------------------------------+
+    void BeginArray(string key)
+    {
+        if(m_field_count > 0) m_content += ",\n";
+        m_content += "  \"" + key + "\": [\n";
+        m_in_array = true;
+        m_field_count++;
+    }
+
+    //+------------------------------------------------------------------+
+    //| Add array boolean                                                 |
+    //+------------------------------------------------------------------+
+    void AddArrayBool(bool value)
+    {
+        static int array_item_count = 0;
+
+        if(array_item_count > 0) m_content += ", ";
+        m_content += (value ? "true" : "false");
+        array_item_count++;
+    }
+
+    //+------------------------------------------------------------------+
+    //| Add array double                                                  |
+    //+------------------------------------------------------------------+
+    void AddArrayDouble(double value, int digits = 5)
+    {
+        static int array_item_count = 0;
+
+        if(array_item_count > 0) m_content += ", ";
+        m_content += DoubleToString(value, digits);
+        array_item_count++;
+    }
+
+    //+------------------------------------------------------------------+
+    //| End array                                                         |
+    //+------------------------------------------------------------------+
+    void EndArray()
+    {
+        m_content += "\n  ]";
+        m_in_array = false;
+    }
+
+    //+------------------------------------------------------------------+
+    //| Begin nested object                                               |
+    //+------------------------------------------------------------------+
+    void BeginObject(string key)
+    {
+        if(m_field_count > 0) m_content += ",\n";
+        m_content += "  \"" + key + "\": {\n";
+        m_field_count++;
+    }
+
+    //+------------------------------------------------------------------+
+    //| End nested object                                                 |
+    //+------------------------------------------------------------------+
+    void EndObject()
+    {
+        m_content += "\n  }";
+    }
+
+    //+------------------------------------------------------------------+
+    //| End export and write to file                                      |
+    //+------------------------------------------------------------------+
+    bool EndExport()
+    {
+        m_content += "\n}\n";
+
+        // Write to file using FILE_COMMON to save to Common/Files folder
+        // This allows Python app to read from %APPDATA%\MetaQuotes\Terminal\Common\Files\
+        m_file_handle = FileOpen(m_filename, FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
+
+        if(m_file_handle == INVALID_HANDLE)
+        {
+            Print("ERROR: Failed to create file: ", m_filename);
+            Print("Error code: ", GetLastError());
             return false;
-         }
-      }
-   }
+        }
 
-   Print("JSONExporter initialized: ", filePath);
-   return true;
-}
+        FileWriteString(m_file_handle, m_content);
+        FileClose(m_file_handle);
+        m_file_handle = INVALID_HANDLE;
 
-//+------------------------------------------------------------------+
-//| Begin JSON export                                                |
-//+------------------------------------------------------------------+
-void CJSONExporter::BeginExport()
-{
-   m_jsonContent = "{\n";
-   m_firstElement = true;
-   m_arrayDepth = 0;
-   m_isArrayOpen = false;
-   m_isObjectOpen = false;
-}
+        // Reset state
+        m_content = "";
+        m_field_count = 0;
+        m_in_object = false;
 
-//+------------------------------------------------------------------+
-//| End JSON export and write to file                                |
-//+------------------------------------------------------------------+
-bool CJSONExporter::EndExport()
-{
-   //--- Close JSON
-   m_jsonContent += "\n}";
-
-   Print("[JSON] Attempting to write to: ", m_filePath);
-   Print("[JSON] Content size: ", StringLen(m_jsonContent), " characters");
-
-   //--- Write to file
-   m_fileHandle = FileOpen(m_filePath, FILE_WRITE | FILE_COMMON | FILE_TXT | FILE_ANSI);
-
-   if(m_fileHandle == INVALID_HANDLE)
-   {
-      int errorCode = ::GetLastError();
-      Print("[JSON] ✗ Failed to open file for writing: ", m_filePath);
-      Print("[JSON] Error code: ", errorCode);
-      return false;
-   }
-
-   Print("[JSON] File opened successfully, handle: ", m_fileHandle);
-
-   //--- Write content
-   uint bytesWritten = FileWriteString(m_fileHandle, m_jsonContent);
-
-   Print("[JSON] Bytes written: ", bytesWritten);
-
-   //--- Close file
-   FileClose(m_fileHandle);
-   m_fileHandle = INVALID_HANDLE;
-
-   if(bytesWritten == 0)
-   {
-      Print("[JSON] ✗ Failed to write JSON content (0 bytes written)");
-      return false;
-   }
-
-   Print("[JSON] ✓ File closed successfully");
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| Add string value                                                 |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddString(string key, string value)
-{
-   if(!m_firstElement)
-      m_jsonContent += ",\n";
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   m_jsonContent += indent + "\"" + key + "\": \"" + EscapeString(value) + "\"";
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Add integer value                                                |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddInt(string key, int value)
-{
-   if(!m_firstElement)
-      m_jsonContent += ",\n";
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   m_jsonContent += indent + "\"" + key + "\": " + IntegerToString(value);
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Add long value                                                   |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddLong(string key, long value)
-{
-   if(!m_firstElement)
-      m_jsonContent += ",\n";
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   m_jsonContent += indent + "\"" + key + "\": " + IntegerToString(value);
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Add double value                                                 |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddDouble(string key, double value, int digits)
-{
-   if(!m_firstElement)
-      m_jsonContent += ",\n";
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   m_jsonContent += indent + "\"" + key + "\": " + DoubleToString(value, digits);
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Add boolean value                                                |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddBool(string key, bool value)
-{
-   if(!m_firstElement)
-      m_jsonContent += ",\n";
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   string boolStr = value ? "true" : "false";
-   m_jsonContent += indent + "\"" + key + "\": " + boolStr;
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Begin array                                                       |
-//+------------------------------------------------------------------+
-void CJSONExporter::BeginArray(string key)
-{
-   if(!m_firstElement)
-      m_jsonContent += ",\n";
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   m_jsonContent += indent + "\"" + key + "\": [";
-   m_isArrayOpen = true;
-   m_arrayDepth++;
-   m_firstElement = true;
-}
-
-//+------------------------------------------------------------------+
-//| End array                                                         |
-//+------------------------------------------------------------------+
-void CJSONExporter::EndArray()
-{
-   m_arrayDepth--;
-   m_jsonContent += "]";
-   m_isArrayOpen = false;
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Add string to array                                              |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddArrayString(string value)
-{
-   if(!m_firstElement)
-      m_jsonContent += ", ";
-
-   m_jsonContent += "\"" + EscapeString(value) + "\"";
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Add integer to array                                             |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddArrayInt(int value)
-{
-   if(!m_firstElement)
-      m_jsonContent += ", ";
-
-   m_jsonContent += IntegerToString(value);
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Add double to array                                              |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddArrayDouble(double value, int digits)
-{
-   if(!m_firstElement)
-      m_jsonContent += ", ";
-
-   m_jsonContent += DoubleToString(value, digits);
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Add boolean to array                                             |
-//+------------------------------------------------------------------+
-void CJSONExporter::AddArrayBool(bool value)
-{
-   if(!m_firstElement)
-      m_jsonContent += ", ";
-
-   string boolStr = value ? "true" : "false";
-   m_jsonContent += boolStr;
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Begin object                                                      |
-//+------------------------------------------------------------------+
-void CJSONExporter::BeginObject(string key)
-{
-   if(!m_firstElement)
-      m_jsonContent += ",\n";
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   m_jsonContent += indent + "\"" + key + "\": {\n";
-   m_isObjectOpen = true;
-   m_arrayDepth++;
-   m_firstElement = true;
-}
-
-//+------------------------------------------------------------------+
-//| Begin array object (anonymous object in array)                   |
-//+------------------------------------------------------------------+
-void CJSONExporter::BeginArrayObject()
-{
-   if(!m_firstElement)
-      m_jsonContent += ",\n";
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   m_jsonContent += indent + "{\n";
-   m_isObjectOpen = true;
-   m_arrayDepth++;
-   m_firstElement = true;
-}
-
-//+------------------------------------------------------------------+
-//| End object                                                        |
-//+------------------------------------------------------------------+
-void CJSONExporter::EndObject()
-{
-   m_arrayDepth--;
-
-   string indent = "  ";
-   for(int i = 0; i < m_arrayDepth; i++)
-      indent += "  ";
-
-   m_jsonContent += "\n" + indent + "}";
-   m_isObjectOpen = false;
-   m_firstElement = false;
-}
-
-//+------------------------------------------------------------------+
-//| Escape special characters in strings                             |
-//+------------------------------------------------------------------+
-string CJSONExporter::EscapeString(string str)
-{
-   string output = str;
-
-   //--- Replace backslash first
-   StringReplace(output, "\\", "\\\\");
-
-   //--- Replace double quotes
-   StringReplace(output, "\"", "\\\"");
-
-   //--- Replace newlines
-   StringReplace(output, "\n", "\\n");
-
-   //--- Replace tabs
-   StringReplace(output, "\t", "\\t");
-
-   //--- Replace carriage returns
-   StringReplace(output, "\r", "\\r");
-
-   return output;
-}
-
-//+------------------------------------------------------------------+
-//| Get last error message                                           |
-//+------------------------------------------------------------------+
-string CJSONExporter::GetLastError()
-{
-   int errorCode = ::GetLastError();
-   return "Error " + IntegerToString(errorCode);
-}
+        return true;
+    }
+};
