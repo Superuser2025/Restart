@@ -720,8 +720,13 @@ void ManageOpenTrades()
             }
         }
 
-        // PROFIT LOCK: Lock in percentage of profit when trigger reached
-        if(UseProfitLock && r_profit >= ProfitLockTrigger)
+        // PROFIT LOCK: Lock in percentage of profit when EITHER trigger reached
+        // Option C: R-based OR Fixed Amount (whichever comes first)
+        double position_profit = position.Profit();  // Current profit in account currency
+        bool r_trigger_hit = (r_profit >= ProfitLockTrigger);
+        bool fixed_trigger_hit = (position_profit >= ProfitLockFixedAmount);
+
+        if(UseProfitLock && (r_trigger_hit || fixed_trigger_hit))
         {
             // Calculate locked profit level
             double profit_to_lock = current_profit * (ProfitLockPercent / 100.0);
@@ -737,9 +742,12 @@ void ManageOpenTrades()
             {
                 if(trade.PositionModify(ticket, locked_sl, tp))
                 {
-                    double locked_profit = MathAbs(locked_sl - entry) / _Point * SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-                    AddComment("🔒 PROFIT LOCKED: " + DoubleToString(ProfitLockPercent, 0) + "% secured", clrGold, PRIORITY_CRITICAL);
-                    AddComment("Min profit: " + AccountInfoString(ACCOUNT_CURRENCY) + " " + DoubleToString(locked_profit, 2), clrGold, PRIORITY_IMPORTANT);
+                    double locked_profit_value = position_profit * (ProfitLockPercent / 100.0);
+                    string trigger_reason = r_trigger_hit ? DoubleToString(ProfitLockTrigger, 1) + "R" :
+                                           AccountInfoString(ACCOUNT_CURRENCY) + DoubleToString(ProfitLockFixedAmount, 0);
+                    AddComment("🔒 PROFIT LOCKED at " + trigger_reason + "!", clrGold, PRIORITY_CRITICAL);
+                    AddComment("Secured: " + AccountInfoString(ACCOUNT_CURRENCY) + DoubleToString(locked_profit_value, 2) +
+                              " (" + DoubleToString(ProfitLockPercent, 0) + "%)", clrGold, PRIORITY_IMPORTANT);
                 }
             }
         }

@@ -97,6 +97,7 @@ input double   TP3_RiskReward = 5.0;                    // Take Profit 3 (R:R)
 input group "═════════ PROFIT PROTECTION ═════════"
 input bool     UseProfitLock = true;                    // Enable Profit Lock
 input double   ProfitLockTrigger = 1.5;                 // Lock Trigger (R multiple, e.g. 1.5R)
+input double   ProfitLockFixedAmount = 100.0;           // OR Lock at Fixed Profit (e.g. 100 = £100)
 input double   ProfitLockPercent = 50.0;                // Lock % of Profit (e.g. 50%)
 input bool     UsePartialClose = false;                 // Enable Partial Close at TP1
 input double   PartialClosePercent = 50.0;              // % to Close at TP1
