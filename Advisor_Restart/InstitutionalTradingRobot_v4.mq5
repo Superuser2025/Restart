@@ -13,7 +13,7 @@
 #include <Trade\PositionInfo.mqh>
 #include <Trade\AccountInfo.mqh>
 #include <AI_Bridge_NamedPipe.mqh>
-#include "..\Include_Restart\JSONExporter.mqh"
+#include "JSONExporter.mqh"
 
 //+------------------------------------------------------------------+
 //| POSITION SIZING MODE ENUM                                         |
