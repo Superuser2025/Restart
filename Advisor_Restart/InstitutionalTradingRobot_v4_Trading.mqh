@@ -584,6 +584,79 @@ void CalculateTakeProfits(bool is_buy, double entry, double sl,
 }
 
 //+------------------------------------------------------------------+
+//| NORMALIZE LOT SIZE TO SYMBOL CONSTRAINTS                         |
+//+------------------------------------------------------------------+
+double NormalizeLotSize(double calculated_lot, double &actual_risk_percent, double intended_risk_percent, double stop_loss_pips)
+{
+    // Get symbol's lot constraints
+    double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+    double broker_min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+    double broker_max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+
+    // Round to lot step first
+    double normalized_lot = MathFloor(calculated_lot / lot_step) * lot_step;
+
+    // Track if we had to adjust
+    bool adjusted_to_min = false;
+    bool adjusted_to_max = false;
+
+    // Clamp to broker minimum
+    if(normalized_lot < broker_min_lot)
+    {
+        normalized_lot = broker_min_lot;
+        adjusted_to_min = true;
+    }
+
+    // Clamp to broker maximum
+    if(normalized_lot > broker_max_lot)
+    {
+        normalized_lot = broker_max_lot;
+        adjusted_to_max = true;
+    }
+
+    // Calculate actual risk with the normalized lot
+    double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+    double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+
+    if(tick_size > 0 && account.Balance() > 0)
+    {
+        double sl_in_price = stop_loss_pips * point;
+        double risk_per_lot = (sl_in_price / tick_size) * tick_value;
+        double actual_risk_amount = normalized_lot * risk_per_lot;
+        actual_risk_percent = (actual_risk_amount / account.Balance()) * 100.0;
+    }
+    else
+    {
+        actual_risk_percent = intended_risk_percent;
+    }
+
+    // Log adjustments
+    if(adjusted_to_min)
+    {
+        Print("⚠ LOT SIZE ADJUSTED: Symbol ", _Symbol, " minimum lot = ", DoubleToString(broker_min_lot, 2));
+        Print("  Calculated: ", DoubleToString(calculated_lot, 4), " → Adjusted: ", DoubleToString(normalized_lot, 2));
+        Print("  Intended Risk: ", DoubleToString(intended_risk_percent, 2), "% → Actual Risk: ", DoubleToString(actual_risk_percent, 2), "%");
+
+        AddComment("⚠ Lot adjusted to symbol minimum: " + DoubleToString(broker_min_lot, 2), clrOrange, PRIORITY_IMPORTANT);
+
+        if(actual_risk_percent > intended_risk_percent * 2)
+        {
+            AddComment("⚠ RISK WARNING: Actual " + DoubleToString(actual_risk_percent, 2) +
+                      "% > Intended " + DoubleToString(intended_risk_percent, 2) + "%", clrRed, PRIORITY_CRITICAL);
+        }
+    }
+
+    if(adjusted_to_max)
+    {
+        Print("⚠ LOT SIZE CAPPED: Symbol ", _Symbol, " maximum lot = ", DoubleToString(broker_max_lot, 2));
+        AddComment("⚠ Lot capped to symbol maximum: " + DoubleToString(broker_max_lot, 2), clrOrange, PRIORITY_IMPORTANT);
+    }
+
+    return normalized_lot;
+}
+
+//+------------------------------------------------------------------+
 //| CALCULATE LOT SIZE - DUAL MODE SYSTEM                            |
 //+------------------------------------------------------------------+
 double CalculateLotSize(double stop_loss_pips, double risk_percent)
@@ -592,24 +665,49 @@ double CalculateLotSize(double stop_loss_pips, double risk_percent)
     double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
     double broker_min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
     double broker_max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+    double actual_risk = risk_percent;
+
+    // Log symbol lot constraints on first calculation
+    static string last_symbol = "";
+    if(last_symbol != _Symbol)
+    {
+        Print("═══ ", _Symbol, " LOT CONSTRAINTS ═══");
+        Print("  Min Lot: ", DoubleToString(broker_min_lot, 2));
+        Print("  Max Lot: ", DoubleToString(broker_max_lot, 2));
+        Print("  Lot Step: ", DoubleToString(lot_step, 4));
+        last_symbol = _Symbol;
+    }
 
     // MODE 1: LOT_SIZE_RANGE - Fixed lot range with min/max bounds
     if(PositionSizingMode == LOT_SIZE_RANGE)
     {
-        // Use the minimum lot size as base, can be scaled up to maximum
-        // For now, start with minimum and can be adjusted based on confluence/conditions
+        // Start with user-defined minimum
         lot_size = MinLotSize;
 
-        // Round to lot step
-        lot_size = MathFloor(lot_size / lot_step) * lot_step;
+        // Ensure user's min is at least broker's min
+        if(MinLotSize < broker_min_lot)
+        {
+            lot_size = broker_min_lot;
+            Print("⚠ User MinLotSize (", DoubleToString(MinLotSize, 2),
+                  ") < Broker minimum (", DoubleToString(broker_min_lot, 2), ") - Using broker minimum");
+        }
 
-        // Enforce user-defined range
-        if(lot_size < MinLotSize) lot_size = MinLotSize;
-        if(lot_size > MaxLotSize) lot_size = MaxLotSize;
+        // Check if user's max is less than broker's min (invalid configuration)
+        if(MaxLotSize < broker_min_lot)
+        {
+            AddComment("⛔ MaxLotSize < Broker minimum! Using broker min", clrRed, PRIORITY_CRITICAL);
+            lot_size = broker_min_lot;
+        }
 
-        // Enforce broker limits
-        if(lot_size < broker_min_lot) lot_size = broker_min_lot;
-        if(lot_size > broker_max_lot) lot_size = broker_max_lot;
+        // Round to lot step and normalize
+        lot_size = NormalizeLotSize(lot_size, actual_risk, risk_percent, stop_loss_pips);
+
+        // Final clamp to user's max (unless broker min is higher)
+        if(lot_size > MaxLotSize && MaxLotSize >= broker_min_lot)
+        {
+            lot_size = MathFloor(MaxLotSize / lot_step) * lot_step;
+            if(lot_size < broker_min_lot) lot_size = broker_min_lot;
+        }
     }
     // MODE 2: RISK_PERCENTAGE - Dynamic risk-based calculation
     else if(PositionSizingMode == RISK_PERCENTAGE)
@@ -619,15 +717,35 @@ double CalculateLotSize(double stop_loss_pips, double risk_percent)
         double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
         double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
 
+        // Validate tick values
+        if(tick_size <= 0 || tick_value <= 0)
+        {
+            Print("ERROR: Invalid tick size/value for ", _Symbol);
+            return broker_min_lot;
+        }
+
         double sl_in_price = stop_loss_pips * point;
         double risk_per_lot = (sl_in_price / tick_size) * tick_value;
 
-        lot_size = capital_risk / risk_per_lot;
-        lot_size = MathFloor(lot_size / lot_step) * lot_step;
+        if(risk_per_lot > 0)
+        {
+            lot_size = capital_risk / risk_per_lot;
+        }
+        else
+        {
+            lot_size = broker_min_lot;
+        }
 
-        // Enforce broker limits
-        if(lot_size < broker_min_lot) lot_size = broker_min_lot;
-        if(lot_size > broker_max_lot) lot_size = broker_max_lot;
+        // Normalize to symbol constraints
+        lot_size = NormalizeLotSize(lot_size, actual_risk, risk_percent, stop_loss_pips);
+    }
+
+    // Final validation
+    if(lot_size < broker_min_lot)
+    {
+        Print("CRITICAL: Final lot size (", DoubleToString(lot_size, 4),
+              ") still below broker minimum (", DoubleToString(broker_min_lot, 2), ")");
+        lot_size = broker_min_lot;
     }
 
     return lot_size;
