@@ -434,7 +434,7 @@ class EnhancedMainWindow(QMainWindow):
                 'REALTIME': 500    # 0.5 seconds
             }
 
-            interval = speed_intervals.get(value, 1000)
+            interval = speed_intervals.get(value, 2000)
 
             # Update chart refresh timer
             if hasattr(self, 'chart_panel') and hasattr(self.chart_panel, 'update_timer'):
@@ -457,6 +457,11 @@ class EnhancedMainWindow(QMainWindow):
                 self.data_timer.setInterval(interval)
                 self.data_timer.start()
                 vprint(f"[Main Window] Data update rate changed to {interval}ms ({value})")
+
+            # Update MT5 connector timer to match update speed
+            from core.mt5_connector import mt5_connector
+            mt5_connector.set_update_interval(interval)
+            vprint(f"[Main Window] MT5 connector update rate changed to {interval}ms ({value})")
 
         # Handle filter changes
         elif setting_name in ['use_fvg_filter', 'use_ob_filter', 'use_liquidity_filter']:
