@@ -94,13 +94,18 @@ input double   TP1_RiskReward = 2.0;                    // Take Profit 1 (R:R)
 input double   TP2_RiskReward = 3.0;                    // Take Profit 2 (R:R)
 input double   TP3_RiskReward = 5.0;                    // Take Profit 3 (R:R)
 
-input group "═════════ PROFIT PROTECTION ═════════"
-input bool     UseProfitLock = true;                    // Enable Profit Lock
+input group "═════════ PROFIT PROTECTION (Per Position) ═════════"
+input bool     UseProfitLock = true;                    // Enable Profit Lock (per position)
 input double   ProfitLockTrigger = 1.5;                 // Lock Trigger (R multiple, e.g. 1.5R)
 input double   ProfitLockFixedAmount = 100.0;           // OR Lock at Fixed Profit (e.g. 100 = £100)
 input double   ProfitLockPercent = 50.0;                // Lock % of Profit (e.g. 50%)
 input bool     UsePartialClose = false;                 // Enable Partial Close at TP1
 input double   PartialClosePercent = 50.0;              // % to Close at TP1
+
+input group "═════════ ACCOUNT PROFIT LOCK (All Positions) ═════════"
+input bool     UseAccountProfitLock = true;             // Enable Account-Level Profit Lock
+input double   AccountProfitLockAmount = 1000.0;        // Close ALL when profit hits (e.g. 1000 = £1000)
+input double   AccountProfitLockPercent = 5.0;          // OR Close ALL at % of Balance (e.g. 5%)
 
 input group "═════════ VISUAL DASHBOARD ═════════"
 input bool     ShowDashboard = true;                    // Show Dashboard
@@ -919,6 +924,14 @@ void OnTick()
         last_hourly_reset = TimeCurrent();
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // ACCOUNT-LEVEL PROFIT LOCK - Runs EVERY TICK for fast execution
+    // ═══════════════════════════════════════════════════════════════
+    if(UseAccountProfitLock)
+    {
+        CheckAccountProfitLock();
+    }
+
     // Check for new bar on preferred timeframe
     static datetime last_bar_time = 0;
     datetime current_bar_time = iTime(_Symbol, PreferredTimeframe, 0);
@@ -1628,6 +1641,73 @@ void CloseAllTrades()
     else
     {
         AddComment("No trades to close", clrYellow, PRIORITY_IMPORTANT);
+    }
+}
+
+//+------------------------------------------------------------------+
+//| ACCOUNT-LEVEL PROFIT LOCK - Close ALL when target hit            |
+//+------------------------------------------------------------------+
+void CheckAccountProfitLock()
+{
+    // Get total floating profit across ALL positions
+    double total_profit = AccountInfoDouble(ACCOUNT_PROFIT);
+
+    // Skip if no profit (or in loss)
+    if(total_profit <= 0)
+        return;
+
+    // Get current account balance for percentage calculation
+    double current_balance = AccountInfoDouble(ACCOUNT_BALANCE);
+
+    // Calculate profit as percentage of balance
+    double profit_percent = (total_profit / current_balance) * 100.0;
+
+    // Check if either trigger is hit (whichever comes first)
+    bool amount_trigger_hit = (total_profit >= AccountProfitLockAmount);
+    bool percent_trigger_hit = (profit_percent >= AccountProfitLockPercent);
+
+    if(amount_trigger_hit || percent_trigger_hit)
+    {
+        // Determine which trigger was hit
+        string trigger_reason = "";
+        if(amount_trigger_hit && percent_trigger_hit)
+            trigger_reason = "BOTH " + DoubleToString(AccountProfitLockAmount, 0) + " AND " +
+                           DoubleToString(AccountProfitLockPercent, 1) + "% targets";
+        else if(amount_trigger_hit)
+            trigger_reason = DoubleToString(AccountProfitLockAmount, 0) + " " + AccountInfoString(ACCOUNT_CURRENCY) + " target";
+        else
+            trigger_reason = DoubleToString(AccountProfitLockPercent, 1) + "% of balance target";
+
+        // Log the trigger
+        Print("═══════════════════════════════════════════════════════════════");
+        Print("  🔒 ACCOUNT PROFIT LOCK TRIGGERED!");
+        Print("  Total Floating Profit: ", DoubleToString(total_profit, 2), " ", AccountInfoString(ACCOUNT_CURRENCY));
+        Print("  Profit %: ", DoubleToString(profit_percent, 2), "% of balance");
+        Print("  Trigger: ", trigger_reason);
+        Print("═══════════════════════════════════════════════════════════════");
+
+        // Add to commentary
+        AddComment("🔒 ACCOUNT PROFIT LOCK TRIGGERED!", clrLime, PRIORITY_CRITICAL);
+        AddComment("Profit: " + DoubleToString(total_profit, 2) + " (" +
+                  DoubleToString(profit_percent, 2) + "%) - Closing ALL positions",
+                  clrLime, PRIORITY_CRITICAL);
+
+        // Close ALL positions to lock in profit
+        CloseAllTrades();
+
+        // Send alert notifications
+        if(EnablePopupAlerts)
+        {
+            Alert("ACCOUNT PROFIT LOCK: Closed all positions at ",
+                  DoubleToString(total_profit, 2), " ", AccountInfoString(ACCOUNT_CURRENCY),
+                  " profit (", DoubleToString(profit_percent, 2), "%)");
+        }
+
+        if(EnableMobileNotifications)
+        {
+            SendNotification("PROFIT LOCKED! " + DoubleToString(total_profit, 2) + " " +
+                           AccountInfoString(ACCOUNT_CURRENCY) + " - All positions closed");
+        }
     }
 }
 
