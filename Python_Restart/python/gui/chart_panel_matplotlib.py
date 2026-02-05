@@ -2183,6 +2183,9 @@ class ChartPanel(QWidget):
 
         self.plot_candlesticks()
 
+        # Update performance data for this symbol
+        self.update_performance_data()
+
         # Clear loading flag - updates can resume
         self.is_loading = False
 
@@ -2232,8 +2235,98 @@ class ChartPanel(QWidget):
 
         self.plot_candlesticks()
 
+        # Update performance data for new symbol
+        self.update_performance_data()
+
         # Clear loading flag - updates can resume
         self.is_loading = False
+
+    def update_performance_data(self):
+        """Fetch and display actual performance data for current symbol"""
+        if not self.mt5_initialized or not mt5:
+            return
+
+        symbol = self.current_symbol
+        try:
+            # Fetch candles for different timeframes to calculate performance
+            # Day performance - need D1 candles
+            day_rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 2)
+            if day_rates is not None and len(day_rates) >= 2:
+                day_open = day_rates[-1]['open']
+                day_current = day_rates[-1]['close']
+                day_pct = ((day_current - day_open) / day_open) * 100
+                day_color = '#10B981' if day_pct >= 0 else '#EF4444'
+                self.perf_today_label.setText(f"Day: {day_pct:+.2f}%")
+                self.perf_today_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {day_color};
+                        font-size: 11px;
+                        font-weight: bold;
+                        background: transparent;
+                        padding: 3px 8px;
+                        border-radius: 3px;
+                    }}
+                """)
+
+            # H1 performance - compare current to 1 hour ago
+            h1_rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 2)
+            if h1_rates is not None and len(h1_rates) >= 2:
+                h1_open = h1_rates[-2]['close']  # Previous hour's close
+                h1_current = h1_rates[-1]['close']
+                h1_pct = ((h1_current - h1_open) / h1_open) * 100
+                h1_color = '#10B981' if h1_pct >= 0 else '#EF4444'
+                self.perf_h1_label.setText(f"H1: {h1_pct:+.2f}%")
+                self.perf_h1_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {h1_color};
+                        font-size: 11px;
+                        font-weight: bold;
+                        background: transparent;
+                        padding: 3px 8px;
+                        border-radius: 3px;
+                    }}
+                """)
+
+            # H4 performance - compare current to 4 hours ago
+            h4_rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H4, 0, 2)
+            if h4_rates is not None and len(h4_rates) >= 2:
+                h4_open = h4_rates[-2]['close']  # Previous H4 close
+                h4_current = h4_rates[-1]['close']
+                h4_pct = ((h4_current - h4_open) / h4_open) * 100
+                h4_color = '#10B981' if h4_pct >= 0 else '#EF4444'
+                self.perf_h4_label.setText(f"H4: {h4_pct:+.2f}%")
+                self.perf_h4_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {h4_color};
+                        font-size: 11px;
+                        font-weight: bold;
+                        background: transparent;
+                        padding: 3px 8px;
+                        border-radius: 3px;
+                    }}
+                """)
+
+            # Week performance - compare to 5 days ago
+            week_rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 6)
+            if week_rates is not None and len(week_rates) >= 6:
+                week_open = week_rates[0]['open']  # 5 days ago open
+                week_current = week_rates[-1]['close']
+                week_pct = ((week_current - week_open) / week_open) * 100
+                week_color = '#10B981' if week_pct >= 0 else '#EF4444'
+                self.perf_week_label.setText(f"Week: {week_pct:+.2f}%")
+                self.perf_week_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {week_color};
+                        font-size: 11px;
+                        font-weight: bold;
+                        background: transparent;
+                        padding: 3px 8px;
+                        border-radius: 3px;
+                    }}
+                """)
+
+        except Exception as e:
+            vprint(f"[Chart] Error updating performance data: {e}")
 
     def toggle_display_mode(self):
         """Toggle between small and max display modes"""

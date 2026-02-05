@@ -30,6 +30,7 @@ from widgets.trade_journal_widget import TradeJournalWidget
 from widgets.dashboard_cards_widget import DashboardCardsWidget
 from widgets.trade_validator_widget import TradeValidatorWidget
 from widgets.wyckoff_chart_widget import WyckoffChartWidget
+from widgets.statistical_analysis_widget import StatisticalAnalysisWidget
 
 from core.mt5_connector import MT5Connector
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode
@@ -199,7 +200,15 @@ class EnhancedMainWindow(QMainWindow):
         news_layout.addWidget(self.news_widget)
         self.analysis_tabs.addTab(news_tab, "📰 News")
 
-        # Tab 7: WYCKOFF CHART
+        # Tab 7: STATISTICAL ANALYSIS
+        stats_tab = QWidget()
+        stats_layout = QVBoxLayout(stats_tab)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        self.stats_widget = StatisticalAnalysisWidget()
+        stats_layout.addWidget(self.stats_widget)
+        self.analysis_tabs.addTab(stats_tab, "📊 Statistics")
+
+        # Tab 8: WYCKOFF CHART
         wyckoff_chart_tab = QWidget()
         wyckoff_chart_layout = QVBoxLayout(wyckoff_chart_tab)
         wyckoff_chart_layout.setContentsMargins(0, 0, 0, 0)

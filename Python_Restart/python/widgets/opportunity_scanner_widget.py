@@ -701,6 +701,14 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 # Rescan market with new symbols
                 self.scan_market()
 
+    def trigger_blink_all(self):
+        """Trigger blinking animation on all visible opportunity cards"""
+        # Iterate through all timeframe groups and their cards
+        for group in [self.short_group, self.mid_group, self.long_group]:
+            # Find all OpportunityCard widgets in this group
+            for card in group.findChildren(OpportunityCard):
+                card.start_blinking()
+
     def init_ui(self):
         """Initialize the user interface - NO HEADER"""
         self.setMinimumHeight(310)  # Optimized to fit 3 rows without cutoff
@@ -731,6 +739,24 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         """)
         settings_btn.clicked.connect(self.open_symbol_selector)
         header_layout.addWidget(settings_btn)
+
+        # Blink Again button - replays blinking animation on all cards
+        blink_btn = QPushButton("🔔 Blink Again")
+        blink_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F59E0B;
+                color: white;
+                font-weight: bold;
+                padding: 5px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #D97706;
+            }
+        """)
+        blink_btn.clicked.connect(self.trigger_blink_all)
+        header_layout.addWidget(blink_btn)
 
         # Symbol count label
         self.symbol_count_label = QLabel(f"Scanning {len(self.pairs_to_scan)} symbols")
@@ -1500,7 +1526,7 @@ class MiniChartPopup(QDialog):
         # ACTUAL MATPLOTLIB MINI CHART
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
         from matplotlib.figure import Figure
-        from core.data_manager import data_manager
+        import MetaTrader5 as mt5
 
         # Create matplotlib figure for mini chart - LARGER for clarity
         fig = Figure(figsize=(8.5, 5.0), dpi=100, facecolor='#1E293B')
@@ -1515,9 +1541,37 @@ class MiniChartPopup(QDialog):
         ax = fig.add_subplot(111)
         ax.set_facecolor('#1E293B')
 
-        # Get candle data from data_manager for this symbol
-        # Note: data_manager should already have this symbol's data loaded
-        candles = data_manager.get_candles(count=50)
+        # FIXED: Fetch candles directly from MT5 for THIS opportunity's symbol/timeframe
+        opp_symbol = self.opportunity['symbol']
+        opp_timeframe = self.opportunity['timeframe']
+
+        # Convert timeframe string to MT5 constant
+        tf_map = {
+            'M1': mt5.TIMEFRAME_M1, '1M': mt5.TIMEFRAME_M1,
+            'M5': mt5.TIMEFRAME_M5, '5M': mt5.TIMEFRAME_M5,
+            'M15': mt5.TIMEFRAME_M15, '15M': mt5.TIMEFRAME_M15,
+            'M30': mt5.TIMEFRAME_M30, '30M': mt5.TIMEFRAME_M30,
+            'H1': mt5.TIMEFRAME_H1, '1H': mt5.TIMEFRAME_H1,
+            'H4': mt5.TIMEFRAME_H4, '4H': mt5.TIMEFRAME_H4,
+            'D1': mt5.TIMEFRAME_D1, '1D': mt5.TIMEFRAME_D1,
+            'W1': mt5.TIMEFRAME_W1, '1W': mt5.TIMEFRAME_W1,
+        }
+        tf_constant = tf_map.get(opp_timeframe, mt5.TIMEFRAME_H1)
+
+        # Fetch candles from MT5 for this specific symbol and timeframe
+        rates = mt5.copy_rates_from_pos(opp_symbol, tf_constant, 0, 50)
+
+        # Convert to list of dicts format
+        candles = []
+        if rates is not None and len(rates) > 0:
+            for rate in rates:
+                candles.append({
+                    'open': rate['open'],
+                    'high': rate['high'],
+                    'low': rate['low'],
+                    'close': rate['close'],
+                    'time': rate['time']
+                })
 
         if candles and len(candles) > 0:
             # Plot candlesticks
