@@ -400,26 +400,25 @@ class TimeframeGroup(QWidget):
             popup_width = self.current_popup.width()  # 900px
             popup_height = self.current_popup.height()  # 650px
 
-            # UPDATED RULE:
-            # Column 0 (leftmost) → RIGHT
-            # Column 1 (third from right) → LEFT
-            # Column 2 (third from left) → RIGHT
-            # Column 3 (rightmost) → LEFT
-            column = sender.column_index
+            # Get screen geometry
+            from PyQt6.QtWidgets import QApplication
+            screen = QApplication.primaryScreen().geometry()
+            screen_center_x = screen.width() // 2
 
-            if column in [0, 2]:
-                # Columns 0 and 2 - show popup on RIGHT of card
+            # SIMPLE RULE: Use card's actual screen position
+            # If card is on LEFT half of screen → open popup to the RIGHT
+            # If card is on RIGHT half of screen → open popup to the LEFT
+            card_center_x = card_global_pos.x() + (sender.width() // 2)
+
+            if card_center_x < screen_center_x:
+                # Card is on LEFT side of screen - show popup on RIGHT
                 popup_x = card_global_pos.x() + sender.width() + 5
-            else:  # column in [1, 3]
-                # Columns 1 and 3 - show popup on LEFT of card
+            else:
+                # Card is on RIGHT side of screen - show popup on LEFT
                 popup_x = card_global_pos.x() - popup_width - 5
 
             # CRITICAL: Align popup TOP with card TOP - no offset
             popup_y = card_global_pos.y()
-
-            # Ensure popup doesn't go off screen vertically
-            from PyQt6.QtWidgets import QApplication
-            screen = QApplication.primaryScreen().geometry()
 
             # Check if popup goes off bottom of screen
             if popup_y + popup_height > screen.height():
@@ -430,11 +429,18 @@ class TimeframeGroup(QWidget):
             if popup_y < 10:
                 popup_y = 10
 
+            # Ensure popup doesn't go off screen horizontally
+            if popup_x + popup_width > screen.width():
+                popup_x = card_global_pos.x() - popup_width - 5
+            if popup_x < 0:
+                popup_x = card_global_pos.x() + sender.width() + 5
+
             # CRITICAL: Set position THEN show (not the other way around)
             self.current_popup.move(popup_x, popup_y)
             self.current_popup.show()
 
-            vprint(f"[MiniChart] Card at Y:{card_global_pos.y()}, Column:{column}, Popup {'RIGHT' if column in [0,2] else 'LEFT'} at X:{popup_x} Y:{popup_y}")
+            side = 'RIGHT' if card_center_x < screen_center_x else 'LEFT'
+            vprint(f"[MiniChart] Card center X:{card_center_x}, Screen center:{screen_center_x}, Popup {side} at X:{popup_x} Y:{popup_y}")
         else:
             # Fallback if sender not found
             self.current_popup = MiniChartPopup(opportunity, parent=None)
