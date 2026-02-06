@@ -5,8 +5,8 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Institutional Grade Trading"
 #property link      "https://www.mql5.com"
-#property version   "4.10"
-#property description "MQL4 Robot - All Dropdowns - Level 5 Aggression Ready"
+#property version   "4.20"
+#property description "MQL4 Robot - All Dropdowns - Chart Display - Fixed Aggression"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -25,6 +25,12 @@ enum ENUM_SIZING
 {
    SIZE_FIXED,    // Fixed Lot Range
    SIZE_RISK      // Risk % of Account
+};
+
+enum ENUM_SL_MODE
+{
+   SL_MODE_ATR,    // ATR-Based
+   SL_MODE_PIPS    // Fixed Pips
 };
 
 enum ENUM_LOT
@@ -54,11 +60,29 @@ enum ENUM_RISK
 
 enum ENUM_ATR
 {
+   ATR_05 = 5,   // 0.5x ATR
    ATR_10 = 10,  // 1.0x ATR
    ATR_15 = 15,  // 1.5x ATR
    ATR_20 = 20,  // 2.0x ATR
    ATR_25 = 25,  // 2.5x ATR
-   ATR_30 = 30   // 3.0x ATR
+   ATR_30 = 30,  // 3.0x ATR
+   ATR_40 = 40,  // 4.0x ATR
+   ATR_50 = 50   // 5.0x ATR
+};
+
+enum ENUM_SL_PIPS
+{
+   SLP_10 = 10,    // 10 pips
+   SLP_15 = 15,    // 15 pips
+   SLP_20 = 20,    // 20 pips
+   SLP_25 = 25,    // 25 pips
+   SLP_30 = 30,    // 30 pips
+   SLP_40 = 40,    // 40 pips
+   SLP_50 = 50,    // 50 pips
+   SLP_75 = 75,    // 75 pips
+   SLP_100 = 100,  // 100 pips
+   SLP_150 = 150,  // 150 pips
+   SLP_200 = 200   // 200 pips
 };
 
 enum ENUM_RR
@@ -95,6 +119,8 @@ enum ENUM_LOSS_LIM
 
 enum ENUM_VOL
 {
+   VOL_05 = 5,   // 0.5x Avg
+   VOL_08 = 8,   // 0.8x Avg
    VOL_10 = 10,  // 1.0x Avg
    VOL_12 = 12,  // 1.2x Avg
    VOL_15 = 15,  // 1.5x Avg
@@ -177,7 +203,7 @@ enum ENUM_GMT
 input string           _1 = "═══════ CORE ═══════";
 input bool             EnableTrading = true;                    // Enable Trading
 input ENUM_TIMEFRAMES  Timeframe = PERIOD_H4;                   // Timeframe
-input ENUM_AGGRESSION  AggressionLevel = AGG_5;                 // Aggression
+input ENUM_AGGRESSION  AggressionLevel = AGG_5;                 // Aggression Level
 input int              MagicNumber = 123456;                    // Magic Number
 
 input string           _2 = "═══════ LOT SIZE ═══════";
@@ -185,20 +211,24 @@ input ENUM_SIZING      SizingMode = SIZE_FIXED;                 // Sizing Method
 input ENUM_LOT         MinLot = LOT_010;                        // Min Lot
 input ENUM_LOT         MaxLot = LOT_100;                        // Max Lot
 
-input string           _3 = "═══════ RISK ═══════";
+input string           _3 = "═══════ STOP LOSS ═══════";
+input ENUM_SL_MODE     SL_Mode = SL_MODE_ATR;                   // Stop Loss Mode
+input ENUM_ATR         SL_ATR_Mult = ATR_20;                    // SL ATR Multiplier
+input ENUM_SL_PIPS     SL_Fixed_Pips = SLP_50;                  // SL Fixed Pips
+
+input string           _4 = "═══════ RISK ═══════";
 input ENUM_RISK        RiskPercent = RISK_100;                  // Risk %
 input ENUM_MAX_TRADES  MaxTrades = MT_10;                       // Max Total Trades
 input ENUM_MAX_TRADES  MaxPerSymbol = MT_3;                     // Max Per Symbol
 input ENUM_LOSS_LIM    DailyLoss = LL_5;                        // Daily Loss Limit
 input ENUM_LOSS_LIM    WeeklyLoss = LL_10;                      // Weekly Loss Limit
-input ENUM_ATR         SL_ATR = ATR_20;                         // Stop Loss ATR
 
-input string           _4 = "═══════ TARGETS ═══════";
+input string           _5 = "═══════ TARGETS ═══════";
 input ENUM_RR          TP1 = RR_20;                             // Take Profit 1
 input ENUM_RR          TP2 = RR_30;                             // Take Profit 2
 input ENUM_RR          TP3 = RR_50;                             // Take Profit 3
 
-input string           _5 = "═══════ FILTERS ═══════";
+input string           _6 = "═══════ FILTERS ═══════";
 input bool             UseVolumeFilter = true;                  // Volume Filter
 input ENUM_VOL         VolumeThreshold = VOL_12;                // Volume Threshold
 input bool             UseSpreadFilter = true;                  // Spread Filter
@@ -207,14 +237,14 @@ input bool             UseMTF = true;                           // MTF Confirmat
 input bool             UseCorrelation = true;                   // Correlation Filter
 input ENUM_CORR        CorrLimit = CORR_07;                     // Correlation Limit
 
-input string           _6 = "═══════ SESSION ═══════";
+input string           _7 = "═══════ SESSION ═══════";
 input bool             UseSessionFilter = true;                 // Session Filter
 input ENUM_GMT         BrokerGMT = GMT_P2;                      // Broker GMT Offset
 input bool             TradeAsian = true;                       // Trade Asian
 input bool             TradeLondon = true;                      // Trade London
 input bool             TradeNY = true;                          // Trade NY
 
-input string           _7 = "═══════ ADVANCED ═══════";
+input string           _8 = "═══════ ADVANCED ═══════";
 input bool             UseRegimeStrategy = true;                // Regime Strategy
 input bool             UseVolatilityAdapt = true;               // Volatility Adapt
 input bool             UseDynamicRisk = true;                   // Dynamic Risk
@@ -224,7 +254,7 @@ input bool             UseLiquiditySweep = true;                // Liquidity Swe
 input bool             UseRetailTrap = true;                    // Retail Trap
 input bool             UseMarketStructure = true;               // Market Structure
 
-input string           _8 = "═══════ PROFIT LOCK ═══════";
+input string           _9 = "═══════ PROFIT LOCK ═══════";
 input bool             UseProfitLock = true;                    // Per-Trade Lock
 input ENUM_LOCK_R      LockTriggerR = LR_15;                    // Lock at R
 input ENUM_PROFIT      LockFixedAmt = PR_100;                   // Lock at $
@@ -232,12 +262,17 @@ input ENUM_PCT         LockPct = PC_50;                         // Lock %
 input bool             UsePartialClose = false;                 // Partial Close
 input ENUM_PCT         PartialPct = PC_50;                      // Partial %
 
-input string           _9 = "═══════ ACCOUNT LOCK ═══════";
+input string           _10 = "═══════ ACCOUNT LOCK ═══════";
 input bool             UseAccountLock = true;                   // Account Lock
 input ENUM_PROFIT      AcctLockAmt = PR_1000;                   // Lock at $
 input ENUM_ACCT_PCT    AcctLockPct = AP_5;                      // Lock at %
 
-input string           _10 = "═══════ ALERTS ═══════";
+input string           _11 = "═══════ DISPLAY ═══════";
+input bool             ShowTradeReasons = true;                 // Show Trade Reasons
+input bool             ShowPatternHistory = true;               // Show Pattern History
+input bool             ShowAggressionInfo = true;               // Show Aggression Info
+
+input string           _12 = "═══════ ALERTS ═══════";
 input bool             AlertPopup = false;                      // Popup Alerts
 input bool             AlertMobile = false;                     // Mobile Alerts
 
@@ -267,11 +302,29 @@ struct Pattern
    datetime time;
 };
 
+struct TradeReason
+{
+   datetime time;
+   string   symbol;
+   string   direction;
+   string   pattern;
+   int      confluence;
+   string   reasons;
+};
+
+struct PatternHistory
+{
+   datetime time;
+   string   name;
+   bool     is_bull;
+   int      strength;
+};
+
 //+------------------------------------------------------------------+
 //| GLOBALS                                                           |
 //+------------------------------------------------------------------+
 // Converted input values
-double g_risk, g_min_lot, g_max_lot, g_sl_atr, g_tp1, g_tp2, g_tp3;
+double g_risk, g_min_lot, g_max_lot, g_sl_atr, g_sl_pips, g_tp1, g_tp2, g_tp3;
 double g_vol_thresh, g_spread_lim, g_corr_lim;
 double g_lock_r, g_lock_amt, g_lock_pct, g_partial_pct;
 double g_daily_lim, g_weekly_lim, g_acct_lock_amt, g_acct_lock_pct;
@@ -304,21 +357,33 @@ bool g_vol_ok = false;
 bool g_spread_ok = true;
 bool g_session_ok = true;
 
+// Trade reason history (last 10)
+TradeReason g_trade_reasons[10];
+int g_trade_reason_count = 0;
+
+// Pattern history (last 5)
+PatternHistory g_pattern_history[5];
+int g_pattern_history_count = 0;
+
+// Current trade conditions for display
+string g_current_conditions = "";
+
 //+------------------------------------------------------------------+
 //| INIT                                                              |
 //+------------------------------------------------------------------+
 int OnInit()
 {
    Print("═══════════════════════════════════════════════════════════");
-   Print("  INSTITUTIONAL TRADING ROBOT v4.10 MQL4");
-   Print("  ALL DROPDOWN INPUTS - TESTER READY");
+   Print("  INSTITUTIONAL TRADING ROBOT v4.20 MQL4");
+   Print("  ALL DROPDOWN INPUTS - CHART DISPLAY - FIXED AGGRESSION");
    Print("═══════════════════════════════════════════════════════════");
 
    // Convert enum inputs to usable values
    g_risk = (double)RiskPercent / 100.0;
    g_min_lot = (double)MinLot / 100.0;
    g_max_lot = (double)MaxLot / 100.0;
-   g_sl_atr = (double)SL_ATR / 10.0;
+   g_sl_atr = (double)SL_ATR_Mult / 10.0;
+   g_sl_pips = (double)SL_Fixed_Pips;
    g_tp1 = (double)TP1 / 10.0;
    g_tp2 = (double)TP2 / 10.0;
    g_tp3 = (double)TP3 / 10.0;
@@ -350,34 +415,52 @@ int OnInit()
    double bmin = MarketInfo(Symbol(), MODE_MINLOT);
    double bmax = MarketInfo(Symbol(), MODE_MAXLOT);
    Print("Symbol: ", Symbol(), " MinLot: ", bmin, " MaxLot: ", bmax);
-   Print("Aggression: ", AggressionLevel, " | Confluence: ", g_agg.confluence);
-   Print("Risk: ", g_risk*100, "% | SL: ", g_sl_atr, "x ATR | TP1: ", g_tp1, "R");
+   Print("═══ AGGRESSION LEVEL ", AggressionLevel, " ═══");
+   Print("  Confluence Required: ", g_agg.confluence);
+   Print("  Min Pattern Strength: ", g_agg.min_strength);
+   Print("  MTF Required: ", g_agg.need_mtf ? "YES" : "NO");
+   Print("  Volume Required: ", g_agg.need_vol ? "YES" : "NO");
+   Print("  Risk Multiplier: ", g_agg.risk_mult, "x");
+   Print("  Max Trades: ", g_agg.max_trades);
+   Print("═══════════════════════════════════════");
+
+   if(SL_Mode == SL_MODE_ATR)
+      Print("Stop Loss: ", g_sl_atr, "x ATR");
+   else
+      Print("Stop Loss: ", g_sl_pips, " pips (fixed)");
+
+   Print("TP1: ", g_tp1, "R | TP2: ", g_tp2, "R | TP3: ", g_tp3, "R");
 
    if(!EnableTrading)
       Print("*** WARNING: TRADING DISABLED ***");
    else
       Print("*** TRADING ENABLED - READY ***");
 
+   // Create chart objects
+   CreateChartDisplay();
+
    return(INIT_SUCCEEDED);
 }
 
 void OnDeinit(const int reason)
 {
+   // Clean up chart objects
+   ObjectsDeleteAll(0, "IGTR_");
    Print("EA Stopped");
 }
 
 //+------------------------------------------------------------------+
-//| PRESETS                                                           |
+//| PRESETS - AGGRESSION LEVELS                                       |
 //+------------------------------------------------------------------+
 void InitPresets()
 {
-   // Level 1 - Ultra Conservative
-   g_presets[0].confluence = 6;
-   g_presets[0].risk_mult = 0.5;
-   g_presets[0].min_strength = 4;
-   g_presets[0].need_mtf = true;
-   g_presets[0].need_vol = true;
-   g_presets[0].max_trades = 1;
+   // Level 1 - Ultra Conservative: Needs everything perfect
+   g_presets[0].confluence = 6;      // Need 6 out of 10 confluence points
+   g_presets[0].risk_mult = 0.5;     // Half risk
+   g_presets[0].min_strength = 4;    // Only strong patterns (4-5 stars)
+   g_presets[0].need_mtf = true;     // MUST have MTF alignment
+   g_presets[0].need_vol = true;     // MUST have volume confirmation
+   g_presets[0].max_trades = 1;      // Only 1 trade at a time
 
    // Level 2 - Conservative
    g_presets[1].confluence = 5;
@@ -392,24 +475,24 @@ void InitPresets()
    g_presets[2].risk_mult = 1.0;
    g_presets[2].min_strength = 2;
    g_presets[2].need_mtf = true;
-   g_presets[2].need_vol = false;
+   g_presets[2].need_vol = false;    // Volume not required
    g_presets[2].max_trades = 3;
 
    // Level 4 - Aggressive
    g_presets[3].confluence = 3;
    g_presets[3].risk_mult = 1.25;
    g_presets[3].min_strength = 2;
-   g_presets[3].need_mtf = false;
+   g_presets[3].need_mtf = false;    // MTF not required
    g_presets[3].need_vol = false;
    g_presets[3].max_trades = 5;
 
-   // Level 5 - MAXIMUM
-   g_presets[4].confluence = 2;
-   g_presets[4].risk_mult = 1.5;
-   g_presets[4].min_strength = 1;
-   g_presets[4].need_mtf = false;
-   g_presets[4].need_vol = false;
-   g_presets[4].max_trades = 10;
+   // Level 5 - MAXIMUM: Trade almost any setup
+   g_presets[4].confluence = 2;      // Only need 2 confluence points
+   g_presets[4].risk_mult = 1.5;     // 1.5x risk
+   g_presets[4].min_strength = 1;    // Accept ANY pattern (even 1 star)
+   g_presets[4].need_mtf = false;    // MTF not required
+   g_presets[4].need_vol = false;    // Volume not required
+   g_presets[4].max_trades = 10;     // Up to 10 trades
 }
 
 void ApplyAggression()
@@ -419,7 +502,11 @@ void ApplyAggression()
    g_dyn_confluence = g_agg.confluence;
    g_dyn_risk = g_risk * g_agg.risk_mult;
    g_dyn_tp = g_tp1;
-   Print("Applied Level ", lv, ": Confluence=", g_agg.confluence, " Risk=", g_dyn_risk*100, "%");
+
+   Print("═══ AGGRESSION APPLIED: LEVEL ", lv, " ═══");
+   Print("  → Confluence threshold: ", g_agg.confluence, " (lower = more trades)");
+   Print("  → Pattern strength min: ", g_agg.min_strength, " (lower = more patterns accepted)");
+   Print("  → Effective risk: ", DoubleToString(g_dyn_risk * 100, 2), "%");
 }
 
 //+------------------------------------------------------------------+
@@ -433,17 +520,22 @@ void OnTick()
    // Manage existing trades
    ManageTrades();
 
+   // Update chart display every tick
+   UpdateChartDisplay();
+
    // New bar check
    static datetime last_bar = 0;
    datetime cur_bar = iTime(Symbol(), Timeframe, 0);
    if(cur_bar == last_bar) return;
    last_bar = cur_bar;
 
+   // Reset conditions string for this bar
+   g_current_conditions = "";
+
    // Pre-flight checks
    if(!EnableTrading)
    {
-      static bool warned = false;
-      if(!warned) { Print("Trading disabled"); warned = true; }
+      g_current_conditions = "TRADING DISABLED";
       return;
    }
 
@@ -453,7 +545,7 @@ void OnTick()
       CheckSpread();
       if(!g_spread_ok)
       {
-         Print("Spread too wide");
+         g_current_conditions = "Spread too wide";
          return;
       }
    }
@@ -462,28 +554,48 @@ void OnTick()
    if(UseSessionFilter)
    {
       CheckSession();
-      if(!g_session_ok) return;
+      if(!g_session_ok)
+      {
+         g_current_conditions = "Session closed";
+         return;
+      }
    }
 
    // Market analysis
    DetectRegime();
    DetectBias();
 
-   // Pattern detection
+   // Pattern detection - scan ALL patterns
    ScanPatterns();
-   if(!g_has_pattern) return;
 
-   // Pattern strength gate
+   if(!g_has_pattern)
+   {
+      g_current_conditions = "No pattern detected";
+      return;
+   }
+
+   // Add pattern to history
+   AddPatternToHistory(g_pattern.name, g_pattern.is_bull, g_pattern.strength);
+
+   // Pattern strength gate - CONTROLLED BY AGGRESSION
    if(g_pattern.strength < g_agg.min_strength)
    {
-      Print("Pattern strength ", g_pattern.strength, " < ", g_agg.min_strength);
+      g_current_conditions = "Pattern " + g_pattern.name + " strength " +
+                            IntegerToString(g_pattern.strength) + " < required " +
+                            IntegerToString(g_agg.min_strength) + " (Level " +
+                            IntegerToString((int)AggressionLevel) + ")";
+      Print(g_current_conditions);
       g_has_pattern = false;
       return;
    }
 
    // Regime strategy
    if(UseRegimeStrategy) ApplyRegimeStrategy();
-   if(!g_has_pattern) return;
+   if(!g_has_pattern)
+   {
+      g_current_conditions = "Regime strategy rejected trade";
+      return;
+   }
 
    // Pattern decay
    if(UsePatternDecay)
@@ -491,21 +603,32 @@ void OnTick()
       int bars = iBarShift(Symbol(), Timeframe, g_pattern.time, false);
       if(bars > g_pattern_expiry)
       {
-         Print("Pattern expired");
+         g_current_conditions = "Pattern expired (" + IntegerToString(bars) + " bars old)";
          g_has_pattern = false;
          return;
       }
    }
 
+   // Build conditions string
+   string conditions = "";
+   conditions += "Pattern: " + g_pattern.name + " [" + IntegerToString(g_pattern.strength) + "*] ";
+   conditions += (g_pattern.is_bull ? "BUY" : "SELL") + " | ";
+   conditions += "Regime: " + (g_regime == TREND ? "TREND" : (g_regime == RANGE ? "RANGE" : "TRANS")) + " | ";
+   conditions += "Bias: " + (g_bias == BULL ? "BULL" : (g_bias == BEAR ? "BEAR" : "NEUTRAL")) + " | ";
+
    Print("PATTERN: ", g_pattern.name, " [", g_pattern.strength, "*] ", g_pattern.is_bull ? "BUY" : "SELL");
 
-   // Filter checks
+   // Filter checks - CONTROLLED BY AGGRESSION
    if(UseVolumeFilter)
    {
       CheckVolume();
+      conditions += "Vol:" + (g_vol_ok ? "OK" : "LOW") + " ";
+
+      // Only block if aggression level REQUIRES volume
       if(!g_vol_ok && g_agg.need_vol)
       {
-         Print("Volume too low");
+         g_current_conditions = "Volume too low (required at Level " + IntegerToString((int)AggressionLevel) + ")";
+         Print(g_current_conditions);
          g_has_pattern = false;
          return;
       }
@@ -514,9 +637,13 @@ void OnTick()
    if(UseMTF)
    {
       g_mtf_ok = CheckMTF();
+      conditions += "MTF:" + (g_mtf_ok ? "OK" : "NO") + " ";
+
+      // Only block if aggression level REQUIRES MTF
       if(!g_mtf_ok && g_agg.need_mtf)
       {
-         Print("MTF not aligned");
+         g_current_conditions = "MTF not aligned (required at Level " + IntegerToString((int)AggressionLevel) + ")";
+         Print(g_current_conditions);
          g_has_pattern = false;
          return;
       }
@@ -525,41 +652,65 @@ void OnTick()
    if(UseCorrelation)
    {
       g_corr_ok = CheckCorrelation();
-      if(!g_corr_ok && g_agg.confluence > 2)
+      conditions += "Corr:" + (g_corr_ok ? "OK" : "HIGH") + " ";
+
+      // Only strict at lower aggression levels
+      if(!g_corr_ok && g_agg.confluence > 3)
       {
-         Print("Correlation too high");
+         g_current_conditions = "Correlation too high";
+         Print(g_current_conditions);
          return;
       }
    }
 
-   // Confluence check
+   // Confluence check - CONTROLLED BY AGGRESSION
    int conf = CalcConfluence();
-   Print("CONFLUENCE: ", conf, "/", g_dyn_confluence);
+   conditions += "| Confluence: " + IntegerToString(conf) + "/" + IntegerToString(g_dyn_confluence);
+
+   Print("CONFLUENCE: ", conf, "/", g_dyn_confluence, " (Level ", AggressionLevel, " requires ", g_dyn_confluence, ")");
 
    if(conf < g_dyn_confluence)
    {
-      Print("Insufficient confluence");
+      g_current_conditions = "Confluence " + IntegerToString(conf) + " < " +
+                            IntegerToString(g_dyn_confluence) + " (Level " +
+                            IntegerToString((int)AggressionLevel) + ")";
+      Print("Insufficient confluence: ", g_current_conditions);
       return;
    }
 
+   g_current_conditions = conditions;
+
    // Risk limits
-   if(!CheckRiskLimits()) return;
+   if(!CheckRiskLimits())
+   {
+      g_current_conditions = "Risk limit reached";
+      return;
+   }
 
    // Per-symbol limit
    int sym_trades = CountSymbolTrades();
    if(sym_trades >= g_max_per_sym)
    {
-      Print("Max per symbol: ", sym_trades, "/", g_max_per_sym);
+      g_current_conditions = "Max per symbol: " + IntegerToString(sym_trades) + "/" + IntegerToString(g_max_per_sym);
+      Print(g_current_conditions);
       return;
    }
 
    // EXECUTE
    double risk = UseDynamicRisk ? CalcDynamicRisk() : g_dyn_risk;
-   ExecuteTrade(risk);
+
+   // Store trade reason before executing
+   string reason_details = conditions;
+
+   if(ExecuteTrade(risk))
+   {
+      // Add to trade reason history
+      AddTradeReason(g_pattern.is_bull ? "BUY" : "SELL", g_pattern.name, conf, reason_details);
+   }
 }
 
 //+------------------------------------------------------------------+
-//| SPREAD CHECK (FIXED)                                              |
+//| SPREAD CHECK                                                      |
 //+------------------------------------------------------------------+
 void CheckSpread()
 {
@@ -654,7 +805,7 @@ void DetectBias()
 }
 
 //+------------------------------------------------------------------+
-//| REGIME STRATEGY (FIXED - RESPECTS AGGRESSION)                     |
+//| REGIME STRATEGY (CONTROLLED BY AGGRESSION)                        |
 //+------------------------------------------------------------------+
 void ApplyRegimeStrategy()
 {
@@ -666,24 +817,26 @@ void ApplyRegimeStrategy()
    {
       case TREND:
          g_dyn_confluence = base;
-         // At Level 5, allow counter-trend
-         if(base > 2)
+         // Only reject counter-trend at conservative levels (1-3)
+         // Levels 4-5 allow counter-trend trades
+         if(base > 3)  // Levels 1, 2, 3 have confluence 4, 5, 6
          {
             if((g_bias == BULL && !g_pattern.is_bull) ||
                (g_bias == BEAR && g_pattern.is_bull))
             {
-               Print("Counter-trend rejected");
+               Print("Counter-trend rejected at Level ", AggressionLevel);
                g_has_pattern = false;
             }
          }
          break;
 
       case RANGE:
-         g_dyn_confluence = MathMin(base + 1, 5);
+         // In range, require slightly more confluence
+         g_dyn_confluence = MathMin(base + 1, 6);
          break;
 
       case TRANSITION:
-         g_dyn_confluence = MathMin(base + 1, 5);
+         g_dyn_confluence = MathMin(base + 1, 6);
          break;
    }
 }
@@ -706,6 +859,8 @@ void ScanPatterns()
    double c2 = iClose(Symbol(), Timeframe, 2);
 
    double o3 = iOpen(Symbol(), Timeframe, 3);
+   double h3 = iHigh(Symbol(), Timeframe, 3);
+   double l3 = iLow(Symbol(), Timeframe, 3);
    double c3 = iClose(Symbol(), Timeframe, 3);
 
    double body1 = MathAbs(c1 - o1);
@@ -719,23 +874,19 @@ void ScanPatterns()
    double lw1 = MathMin(o1, c1) - l1;
    double br = body1 / range1;
 
-   // HAMMER
-   if(lw1 > body1*2.0 && uw1 < body1*0.3 && body1 > 0 && br < 0.4)
-   { SetPattern("HAMMER", true, (lw1>body1*3)?5:4, l1); return; }
+   // ═══════════════════════════════════════════════════════════════
+   // PRIORITY 1: STRONGEST PATTERNS (5 STARS)
+   // ═══════════════════════════════════════════════════════════════
 
-   // SHOOTING STAR
-   if(uw1 > body1*2.0 && lw1 < body1*0.3 && body1 > 0 && br < 0.4)
-   { SetPattern("SHOOTING STAR", false, (uw1>body1*3)?5:4, h1); return; }
-
-   // BULLISH ENGULFING
-   if(o2 > c2 && c1 > o1 && c1 > o2 && o1 < c2)
+   // BULLISH ENGULFING - Very strong reversal
+   if(o2 > c2 && c1 > o1 && c1 > o2 && o1 < c2 && body1 > body2)
    { SetPattern("BULL ENGULF", true, 5, c1); return; }
 
    // BEARISH ENGULFING
-   if(c2 > o2 && o1 > c1 && o1 > c2 && c1 < o2)
+   if(c2 > o2 && o1 > c1 && o1 > c2 && c1 < o2 && body1 > body2)
    { SetPattern("BEAR ENGULF", false, 5, c1); return; }
 
-   // MORNING STAR
+   // MORNING STAR - 3 candle reversal
    if(o3 > c3 && body2 < body3*0.5 && c1 > o1 && c1 > (o3+c3)/2)
    { SetPattern("MORNING STAR", true, 5, c1); return; }
 
@@ -744,20 +895,32 @@ void ScanPatterns()
    { SetPattern("EVENING STAR", false, 5, c1); return; }
 
    // THREE WHITE SOLDIERS
-   if(c3>o3 && c2>o2 && c1>o1 && c2>c3 && c1>c2)
+   if(c3>o3 && c2>o2 && c1>o1 && c2>c3 && c1>c2 && o2>o3 && o1>o2)
    { SetPattern("3 WHITE SOLDIERS", true, 5, c1); return; }
 
    // THREE BLACK CROWS
-   if(o3>c3 && o2>c2 && o1>c1 && c2<c3 && c1<c2)
+   if(o3>c3 && o2>c2 && o1>c1 && c2<c3 && c1<c2 && o2<o3 && o1<o2)
    { SetPattern("3 BLACK CROWS", false, 5, c1); return; }
 
-   // BULLISH MARUBOZU
+   // BULLISH MARUBOZU - Full body, no wicks
    if(uw1 < range1*0.05 && lw1 < range1*0.05 && body1 > range1*0.85 && c1 > o1)
    { SetPattern("BULL MARUBOZU", true, 5, h1); return; }
 
    // BEARISH MARUBOZU
    if(uw1 < range1*0.05 && lw1 < range1*0.05 && body1 > range1*0.85 && c1 < o1)
    { SetPattern("BEAR MARUBOZU", false, 5, l1); return; }
+
+   // ═══════════════════════════════════════════════════════════════
+   // PRIORITY 2: STRONG PATTERNS (4 STARS)
+   // ═══════════════════════════════════════════════════════════════
+
+   // HAMMER - Long lower wick
+   if(lw1 > body1*2.0 && uw1 < body1*0.3 && body1 > 0 && br < 0.4)
+   { SetPattern("HAMMER", true, (lw1>body1*3)?5:4, l1); return; }
+
+   // SHOOTING STAR - Long upper wick
+   if(uw1 > body1*2.0 && lw1 < body1*0.3 && body1 > 0 && br < 0.4)
+   { SetPattern("SHOOTING STAR", false, (uw1>body1*3)?5:4, h1); return; }
 
    // BULLISH HARAMI
    if(o2>c2 && c1>o1 && o1>c2 && c1<o2 && body1<body2*0.5)
@@ -771,34 +934,65 @@ void ScanPatterns()
    if(o2>c2 && c1>o1 && o1<c2 && c1>(o2+c2)/2 && c1<o2)
    { SetPattern("PIERCING LINE", true, 4, c1); return; }
 
-   // DARK CLOUD
+   // DARK CLOUD COVER
    if(c2>o2 && o1>c1 && o1>c2 && c1<(o2+c2)/2 && c1>o2)
    { SetPattern("DARK CLOUD", false, 4, c1); return; }
 
-   // DRAGONFLY DOJI
+   // DRAGONFLY DOJI - Bullish
    if(br < 0.1 && uw1 < range1*0.1 && lw1 > range1*0.6)
    { SetPattern("DRAGONFLY DOJI", true, 4, l1); return; }
 
-   // GRAVESTONE DOJI
+   // GRAVESTONE DOJI - Bearish
    if(br < 0.1 && lw1 < range1*0.1 && uw1 > range1*0.6)
    { SetPattern("GRAVESTONE DOJI", false, 4, h1); return; }
 
+   // ═══════════════════════════════════════════════════════════════
+   // PRIORITY 3: MODERATE PATTERNS (3 STARS)
+   // ═══════════════════════════════════════════════════════════════
+
    // TWEEZER BOTTOM
    double tol = iATR(Symbol(), Timeframe, 14, 0) * 0.1;
-   if(MathAbs(l1-l2) < tol)
+   if(MathAbs(l1-l2) < tol && o2 > c2 && c1 > o1)
    { SetPattern("TWEEZER BOTTOM", true, 3, l1); return; }
 
    // TWEEZER TOP
-   if(MathAbs(h1-h2) < tol)
+   if(MathAbs(h1-h2) < tol && c2 > o2 && o1 > c1)
    { SetPattern("TWEEZER TOP", false, 3, h1); return; }
 
-   // SPINNING TOP
+   // SPINNING TOP - Indecision
    if(br < 0.3 && uw1 > body1 && lw1 > body1 && body1 > 0)
-   { SetPattern("SPINNING TOP", (g_bias==BULL), 3, c1); return; }
+   { SetPattern("SPINNING TOP", (g_bias==BULL), 2, c1); return; }
 
-   // DOJI
-   if(br < 0.1)
-   { SetPattern("DOJI", (g_bias==BULL), 3, c1); return; }
+   // DOJI - Indecision
+   if(br < 0.1 && range1 > Point * 10)
+   { SetPattern("DOJI", (g_bias==BULL), 2, c1); return; }
+
+   // ═══════════════════════════════════════════════════════════════
+   // PRIORITY 4: WEAK PATTERNS (1-2 STARS) - Only at Level 5
+   // ═══════════════════════════════════════════════════════════════
+
+   // INVERTED HAMMER
+   if(uw1 > body1*2.0 && lw1 < body1*0.3 && c1 > o1 && br < 0.4)
+   { SetPattern("INV HAMMER", true, 2, h1); return; }
+
+   // HANGING MAN
+   if(lw1 > body1*2.0 && uw1 < body1*0.3 && o1 > c1 && br < 0.4)
+   { SetPattern("HANGING MAN", false, 2, l1); return; }
+
+   // BULLISH BELT HOLD
+   if(lw1 < range1*0.05 && c1 > o1 && body1 > range1*0.6)
+   { SetPattern("BULL BELT", true, 2, o1); return; }
+
+   // BEARISH BELT HOLD
+   if(uw1 < range1*0.05 && o1 > c1 && body1 > range1*0.6)
+   { SetPattern("BEAR BELT", false, 2, o1); return; }
+
+   // Simple bullish/bearish candle as last resort (strength 1)
+   if(c1 > o1 && body1 > range1 * 0.5)
+   { SetPattern("BULL CANDLE", true, 1, c1); return; }
+
+   if(o1 > c1 && body1 > range1 * 0.5)
+   { SetPattern("BEAR CANDLE", false, 1, c1); return; }
 }
 
 void SetPattern(string name, bool bull, int str, double price)
@@ -860,43 +1054,43 @@ int GetHigherTF()
 }
 
 //+------------------------------------------------------------------+
-//| CONFLUENCE                                                        |
+//| CONFLUENCE CALCULATION                                            |
 //+------------------------------------------------------------------+
 int CalcConfluence()
 {
    int score = 0;
 
-   // 1. Regime
+   // 1. Regime is clear (not transition)
    if(g_regime != TRANSITION) score++;
 
-   // 2. Bias alignment
+   // 2. Bias alignment with pattern
    if((g_bias == BULL && g_pattern.is_bull) || (g_bias == BEAR && !g_pattern.is_bull)) score++;
 
-   // 3. Volume
+   // 3. Volume confirmation
    if(g_vol_ok) score++;
 
-   // 4. Spread
+   // 4. Spread acceptable
    if(g_spread_ok) score++;
 
-   // 5. Session
+   // 5. Session active
    if(g_session_ok) score++;
 
-   // 6. MTF
+   // 6. MTF alignment
    if(g_mtf_ok) score++;
 
-   // 7. Correlation
+   // 7. Correlation acceptable
    if(g_corr_ok) score++;
 
-   // 8. Pattern strength
+   // 8. Pattern strength >= 4
    if(g_pattern.strength >= 4) score++;
 
-   // 9. Market structure
+   // 9. Market structure alignment
    if(UseMarketStructure)
    {
       if((g_pattern.is_bull && g_bias == BULL) || (!g_pattern.is_bull && g_bias == BEAR)) score++;
    }
 
-   // 10. Extra for strong pattern
+   // 10. Extra point for 5-star pattern
    if(g_pattern.strength == 5) score++;
 
    return score;
@@ -907,7 +1101,7 @@ int CalcConfluence()
 //+------------------------------------------------------------------+
 bool CheckRiskLimits()
 {
-   // Daily loss
+   // Daily loss check
    double dl = ((g_daily_start - AccountBalance()) / g_daily_start) * 100.0;
    if(dl >= g_daily_lim)
    {
@@ -915,7 +1109,7 @@ bool CheckRiskLimits()
       return false;
    }
 
-   // Weekly loss
+   // Weekly loss check
    double wl = ((g_weekly_start - AccountBalance()) / g_weekly_start) * 100.0;
    if(wl >= g_weekly_lim)
    {
@@ -923,11 +1117,12 @@ bool CheckRiskLimits()
       return false;
    }
 
-   // Max trades
+   // Max trades check - USE AGGRESSION SETTING
    int total = CountAllTrades();
-   if(total >= g_max_trades)
+   int max_allowed = MathMin(g_max_trades, g_agg.max_trades);
+   if(total >= max_allowed)
    {
-      Print("Max trades: ", total, "/", g_max_trades);
+      Print("Max trades: ", total, "/", max_allowed, " (Level ", AggressionLevel, ")");
       return false;
    }
 
@@ -1007,25 +1202,41 @@ double CalcLot(double sl_pips, double risk_pct)
 //+------------------------------------------------------------------+
 //| TRADE EXECUTION                                                   |
 //+------------------------------------------------------------------+
-void ExecuteTrade(double risk_pct)
+bool ExecuteTrade(double risk_pct)
 {
    bool is_buy = g_pattern.is_bull;
    double entry = is_buy ? Ask : Bid;
 
-   // Stop loss
-   double atr = iATR(Symbol(), Timeframe, 14, 0);
-   double sl_dist = atr * g_sl_atr;
+   // Stop loss calculation - BASED ON MODE
+   double sl_dist;
 
-   double sw;
-   if(is_buy)
+   if(SL_Mode == SL_MODE_ATR)
    {
-      sw = GetSwingLow(20);
-      sl_dist = MathMax(sl_dist, entry - sw + 5*Point);
+      // ATR-based stop loss
+      double atr = iATR(Symbol(), Timeframe, 14, 0);
+      sl_dist = atr * g_sl_atr;
+
+      // Also consider swing points
+      double sw;
+      if(is_buy)
+      {
+         sw = GetSwingLow(20);
+         sl_dist = MathMax(sl_dist, entry - sw + 5*Point);
+      }
+      else
+      {
+         sw = GetSwingHigh(20);
+         sl_dist = MathMax(sl_dist, sw - entry + 5*Point);
+      }
    }
    else
    {
-      sw = GetSwingHigh(20);
-      sl_dist = MathMax(sl_dist, sw - entry + 5*Point);
+      // Fixed pips stop loss
+      sl_dist = g_sl_pips * Point;
+
+      // Adjust for 5-digit brokers
+      if(Digits == 5 || Digits == 3)
+         sl_dist = g_sl_pips * Point * 10;
    }
 
    double sl = is_buy ? entry - sl_dist : entry + sl_dist;
@@ -1038,9 +1249,16 @@ void ExecuteTrade(double risk_pct)
    double sl_pips = sl_dist / Point;
    double lot = CalcLot(sl_pips, risk_pct);
 
-   Print("═══ TRADE ═══");
-   Print(is_buy ? "BUY" : "SELL", " ", Symbol());
-   Print("Lot: ", lot, " Entry: ", entry, " SL: ", sl, " TP: ", tp);
+   Print("═══════════════════════════════════════════════════════════");
+   Print("  EXECUTING TRADE - LEVEL ", AggressionLevel);
+   Print("═══════════════════════════════════════════════════════════");
+   Print("  Direction: ", is_buy ? "BUY" : "SELL");
+   Print("  Pattern: ", g_pattern.name, " [", g_pattern.strength, " stars]");
+   Print("  Lot: ", lot);
+   Print("  Entry: ", entry);
+   Print("  SL: ", sl, " (", SL_Mode == SL_MODE_ATR ? "ATR-based" : "Fixed pips", ")");
+   Print("  TP: ", tp);
+   Print("═══════════════════════════════════════════════════════════");
 
    string comment = "IGTR|" + g_pattern.name + "|L" + IntegerToString((int)AggressionLevel);
    int ticket;
@@ -1052,14 +1270,16 @@ void ExecuteTrade(double risk_pct)
 
    if(ticket > 0)
    {
-      Print("EXECUTED #", ticket);
+      Print("*** TRADE EXECUTED #", ticket, " ***");
       g_has_pattern = false;
       g_consec_loss = 0;
+      return true;
    }
    else
    {
       int err = GetLastError();
-      Print("FAILED Error: ", err);
+      Print("*** TRADE FAILED - Error: ", err, " ***");
+      return false;
    }
 }
 
@@ -1213,5 +1433,146 @@ double GetSwingLow(int lb)
       if(v < l) l = v;
    }
    return l;
+}
+
+//+------------------------------------------------------------------+
+//| TRADE REASON HISTORY                                              |
+//+------------------------------------------------------------------+
+void AddTradeReason(string direction, string pattern, int confluence, string reasons)
+{
+   // Shift array down
+   for(int i = 9; i > 0; i--)
+   {
+      g_trade_reasons[i] = g_trade_reasons[i-1];
+   }
+
+   // Add new reason at position 0
+   g_trade_reasons[0].time = TimeCurrent();
+   g_trade_reasons[0].symbol = Symbol();
+   g_trade_reasons[0].direction = direction;
+   g_trade_reasons[0].pattern = pattern;
+   g_trade_reasons[0].confluence = confluence;
+   g_trade_reasons[0].reasons = reasons;
+
+   if(g_trade_reason_count < 10) g_trade_reason_count++;
+}
+
+//+------------------------------------------------------------------+
+//| PATTERN HISTORY                                                   |
+//+------------------------------------------------------------------+
+void AddPatternToHistory(string name, bool is_bull, int strength)
+{
+   // Shift array down
+   for(int i = 4; i > 0; i--)
+   {
+      g_pattern_history[i] = g_pattern_history[i-1];
+   }
+
+   // Add new pattern at position 0
+   g_pattern_history[0].time = TimeCurrent();
+   g_pattern_history[0].name = name;
+   g_pattern_history[0].is_bull = is_bull;
+   g_pattern_history[0].strength = strength;
+
+   if(g_pattern_history_count < 5) g_pattern_history_count++;
+}
+
+//+------------------------------------------------------------------+
+//| CHART DISPLAY                                                     |
+//+------------------------------------------------------------------+
+void CreateChartDisplay()
+{
+   // Create background rectangles and labels
+   if(ShowAggressionInfo)
+   {
+      CreateLabel("IGTR_AGG_TITLE", 10, 30, "═══ AGGRESSION LEVEL " + IntegerToString((int)AggressionLevel) + " ═══", clrGold, 10);
+      CreateLabel("IGTR_AGG_CONF", 10, 50, "Confluence Required: " + IntegerToString(g_agg.confluence), clrWhite, 9);
+      CreateLabel("IGTR_AGG_STR", 10, 65, "Min Pattern Strength: " + IntegerToString(g_agg.min_strength), clrWhite, 9);
+      CreateLabel("IGTR_AGG_MTF", 10, 80, "MTF Required: " + (g_agg.need_mtf ? "YES" : "NO"), g_agg.need_mtf ? clrOrange : clrLime, 9);
+      CreateLabel("IGTR_AGG_VOL", 10, 95, "Volume Required: " + (g_agg.need_vol ? "YES" : "NO"), g_agg.need_vol ? clrOrange : clrLime, 9);
+      CreateLabel("IGTR_AGG_RISK", 10, 110, "Risk Mult: " + DoubleToString(g_agg.risk_mult, 2) + "x", clrWhite, 9);
+   }
+
+   if(ShowPatternHistory)
+   {
+      CreateLabel("IGTR_PAT_TITLE", 10, 140, "═══ LAST 5 PATTERNS ═══", clrCyan, 10);
+      for(int i = 0; i < 5; i++)
+      {
+         CreateLabel("IGTR_PAT_" + IntegerToString(i), 10, 160 + i*15, "---", clrGray, 8);
+      }
+   }
+
+   if(ShowTradeReasons)
+   {
+      CreateLabel("IGTR_TR_TITLE", 10, 250, "═══ LAST 10 TRADES ═══", clrYellow, 10);
+      for(int i = 0; i < 10; i++)
+      {
+         CreateLabel("IGTR_TR_" + IntegerToString(i), 10, 270 + i*15, "---", clrGray, 8);
+      }
+   }
+
+   // Current conditions
+   CreateLabel("IGTR_COND_TITLE", 10, 440, "═══ CURRENT STATUS ═══", clrMagenta, 10);
+   CreateLabel("IGTR_COND", 10, 460, "Initializing...", clrWhite, 9);
+}
+
+void UpdateChartDisplay()
+{
+   // Update pattern history
+   if(ShowPatternHistory)
+   {
+      for(int i = 0; i < 5; i++)
+      {
+         string name = "IGTR_PAT_" + IntegerToString(i);
+         if(i < g_pattern_history_count)
+         {
+            string txt = TimeToString(g_pattern_history[i].time, TIME_MINUTES) + " | " +
+                        g_pattern_history[i].name + " [" +
+                        IntegerToString(g_pattern_history[i].strength) + "*] " +
+                        (g_pattern_history[i].is_bull ? "BUY" : "SELL");
+            color clr = g_pattern_history[i].is_bull ? clrLime : clrRed;
+            ObjectSetString(0, name, OBJPROP_TEXT, txt);
+            ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+         }
+      }
+   }
+
+   // Update trade reasons
+   if(ShowTradeReasons)
+   {
+      for(int i = 0; i < 10; i++)
+      {
+         string name = "IGTR_TR_" + IntegerToString(i);
+         if(i < g_trade_reason_count)
+         {
+            string txt = TimeToString(g_trade_reasons[i].time, TIME_MINUTES) + " | " +
+                        g_trade_reasons[i].symbol + " " +
+                        g_trade_reasons[i].direction + " | " +
+                        g_trade_reasons[i].pattern + " | Conf:" +
+                        IntegerToString(g_trade_reasons[i].confluence);
+            color clr = (g_trade_reasons[i].direction == "BUY") ? clrLime : clrRed;
+            ObjectSetString(0, name, OBJPROP_TEXT, txt);
+            ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+         }
+      }
+   }
+
+   // Update current conditions
+   if(g_current_conditions != "")
+   {
+      ObjectSetString(0, "IGTR_COND", OBJPROP_TEXT, g_current_conditions);
+   }
+}
+
+void CreateLabel(string name, int x, int y, string text, color clr, int size)
+{
+   ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetString(0, name, OBJPROP_FONT, "Consolas");
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, size);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
 }
 //+------------------------------------------------------------------+
