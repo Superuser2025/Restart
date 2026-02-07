@@ -746,7 +746,7 @@ void CheckSession()
    else if(gmt_hour >= 13 && gmt_hour < 17)
    {
       g_session = OVERLAP;
-      g_session_ok = (TradeLondon && TradeNY);
+      g_session_ok = (TradeLondon || TradeNY);  // Either session enabled allows overlap trading
    }
    else if(gmt_hour >= 17 && gmt_hour < 22)
    {
@@ -988,11 +988,15 @@ void ScanPatterns()
    { SetPattern("BEAR BELT", false, 2, o1); return; }
 
    // Simple bullish/bearish candle as last resort (strength 1)
-   if(c1 > o1 && body1 > range1 * 0.5)
+   // ANY bullish or bearish candle - ensures Level 5 always finds a pattern
+   if(c1 > o1)
    { SetPattern("BULL CANDLE", true, 1, c1); return; }
 
-   if(o1 > c1 && body1 > range1 * 0.5)
+   if(o1 > c1)
    { SetPattern("BEAR CANDLE", false, 1, c1); return; }
+
+   // Absolute fallback - flat candle, use bias
+   SetPattern("FLAT", (g_bias == BULL), 1, c1);
 }
 
 void SetPattern(string name, bool bull, int str, double price)
