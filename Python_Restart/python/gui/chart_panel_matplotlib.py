@@ -115,6 +115,20 @@ class ChartPanel(QWidget):
         self.show_overlays = False  # FVG, OB, Liquidity zones - user turns ON when needed
         self.show_levels = False    # S/R, Pivots, PDH/PDL/PDC - user turns ON when needed
 
+        # EMA Ribbon settings - ALWAYS VISIBLE (fractal halving periods)
+        # 216 → 108 → 54 → 27 → 9 → 3 (each ~half the previous)
+        self.show_emas = True  # Always visible by default - your signature setup!
+        self.ema_periods = [216, 108, 54, 27, 9, 3]
+        # Beautiful gradient colors: Deep purple (slow) → Cyan (fast)
+        self.ema_colors = [
+            '#8B5CF6',  # 216 - Deep Purple (slowest - major trend)
+            '#A855F7',  # 108 - Purple
+            '#D946EF',  # 54 - Magenta
+            '#F472B6',  # 27 - Pink
+            '#38BDF8',  # 9 - Sky Blue
+            '#06B6D4',  # 3 - Cyan (fastest - immediate momentum)
+        ]
+
         # MT5 connection status
         self.mt5_initialized = False
         self.init_mt5_connection()
@@ -447,6 +461,30 @@ class ChartPanel(QWidget):
         # Spacing between time and overlays
         layout.addSpacing(30)
 
+        # EMA Ribbon toggle button - ON/GREEN by default (your signature setup!)
+        self.ema_toggle_btn = QPushButton("📈 EMAs: ON")
+        self.ema_toggle_btn.clicked.connect(self.toggle_emas)
+        self.ema_toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #10B981;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: {settings.theme.font_size_sm}px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #059669;
+            }}
+            QPushButton:pressed {{
+                background-color: #047857;
+            }}
+        """)
+        layout.addWidget(self.ema_toggle_btn)
+
+        layout.addSpacing(10)
+
         # Overlay toggle button - OFF/RED by default
         self.overlay_toggle_btn = QPushButton("📊 Overlays: OFF")
         self.overlay_toggle_btn.clicked.connect(self.toggle_overlays)
@@ -747,6 +785,13 @@ class ChartPanel(QWidget):
                 fontweight='bold',
                 pad=10
             )
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # EMA RIBBON - ALWAYS VISIBLE (your signature setup!)
+        # EMAs: 216, 108, 54, 27, 9, 3 (fractal halving pattern)
+        # ═══════════════════════════════════════════════════════════════════════
+        if self.show_emas:
+            self.draw_ema_ribbon()
 
         # Draw overlays based on user toggle settings
         if self.show_overlays:
@@ -1136,6 +1181,257 @@ class ChartPanel(QWidget):
 
         except Exception as e:
             pass
+
+    def calculate_ema(self, closes: list, period: int) -> list:
+        """
+        Calculate Exponential Moving Average for given period.
+
+        EMA = (Close - EMA_prev) * multiplier + EMA_prev
+        Multiplier = 2 / (period + 1)
+
+        Returns list of EMA values (None for insufficient data)
+        """
+        if not closes or len(closes) < period:
+            return [None] * len(closes)
+
+        multiplier = 2.0 / (period + 1)
+        ema_values = [None] * len(closes)
+
+        # First EMA value is SMA of first 'period' values
+        sma = sum(closes[:period]) / period
+        ema_values[period - 1] = sma
+
+        # Calculate subsequent EMA values
+        for i in range(period, len(closes)):
+            ema_values[i] = (closes[i] - ema_values[i-1]) * multiplier + ema_values[i-1]
+
+        return ema_values
+
+    def analyze_ema_trend(self) -> dict:
+        """
+        Analyze EMA ribbon for trend strength and direction.
+
+        Returns dict with:
+        - trend: 'STRONG_BULL', 'BULL', 'NEUTRAL', 'BEAR', 'STRONG_BEAR'
+        - stacked: True if EMAs are perfectly ordered
+        - ribbon_width: distance between fastest and slowest EMA (momentum indicator)
+        - signal: trading signal based on EMA analysis
+        """
+        if not self.candle_data or len(self.candle_data) < 220:
+            return {'trend': 'NEUTRAL', 'stacked': False, 'ribbon_width': 0, 'signal': 'WAIT'}
+
+        closes = [c['close'] for c in self.candle_data]
+        current_idx = len(closes) - 1
+
+        # Get current EMA values
+        ema_values = {}
+        for period in self.ema_periods:
+            ema = self.calculate_ema(closes, period)
+            if ema[current_idx] is not None:
+                ema_values[period] = ema[current_idx]
+
+        if len(ema_values) < 6:
+            return {'trend': 'NEUTRAL', 'stacked': False, 'ribbon_width': 0, 'signal': 'WAIT'}
+
+        # Check if EMAs are stacked bullish: 3 > 9 > 27 > 54 > 108 > 216
+        bullish_stack = all(
+            ema_values[self.ema_periods[i]] > ema_values[self.ema_periods[i+1]]
+            for i in range(len(self.ema_periods) - 1)
+        )
+
+        # Check if EMAs are stacked bearish: 3 < 9 < 27 < 54 < 108 < 216
+        bearish_stack = all(
+            ema_values[self.ema_periods[i]] < ema_values[self.ema_periods[i+1]]
+            for i in range(len(self.ema_periods) - 1)
+        )
+
+        # Calculate ribbon width (momentum indicator)
+        ribbon_width = abs(ema_values[3] - ema_values[216])
+        current_price = closes[-1]
+        ribbon_pct = (ribbon_width / current_price) * 100  # As percentage
+
+        # Determine trend strength
+        if bullish_stack:
+            trend = 'STRONG_BULL' if ribbon_pct > 0.5 else 'BULL'
+            signal = 'BUY_PULLBACK' if current_price < ema_values[9] else 'HOLD_LONG'
+        elif bearish_stack:
+            trend = 'STRONG_BEAR' if ribbon_pct > 0.5 else 'BEAR'
+            signal = 'SELL_PULLBACK' if current_price > ema_values[9] else 'HOLD_SHORT'
+        else:
+            trend = 'NEUTRAL'
+            signal = 'WAIT_CONSOLIDATION'
+
+        return {
+            'trend': trend,
+            'stacked': bullish_stack or bearish_stack,
+            'ribbon_width': ribbon_pct,
+            'signal': signal,
+            'ema_values': ema_values
+        }
+
+    def draw_ema_ribbon(self):
+        """
+        Draw the signature EMA Ribbon on the chart.
+
+        EMAs: 216, 108, 54, 27, 9, 3 (fractal halving pattern)
+
+        Trading Uses:
+        1. TREND: All EMAs stacked in order = strong trend
+        2. ENTRIES: Price pullback to short EMAs (3,9) = entry in trend
+        3. SUPPORT/RESISTANCE: Each EMA acts as dynamic S/R
+        4. MOMENTUM: Wide ribbon = strong momentum, narrow = weakening
+        5. REVERSALS: EMAs crossing/tangling = trend change brewing
+        """
+        if not self.candle_data or len(self.candle_data) < 10:
+            return
+
+        try:
+            closes = [c['close'] for c in self.candle_data]
+            indices = list(range(len(closes)))
+
+            # Calculate and draw each EMA
+            for i, (period, color) in enumerate(zip(self.ema_periods, self.ema_colors)):
+                ema = self.calculate_ema(closes, period)
+
+                # Filter out None values for plotting
+                valid_indices = []
+                valid_ema = []
+                for idx, val in enumerate(ema):
+                    if val is not None:
+                        valid_indices.append(idx)
+                        valid_ema.append(val)
+
+                if valid_ema:
+                    # Line width: thicker for slower EMAs (more significant)
+                    linewidth = 2.5 - (i * 0.3)  # 2.5 for 216, down to 1.0 for 3
+
+                    # Alpha: slightly more opaque for slower EMAs
+                    alpha = 0.9 - (i * 0.05)
+
+                    # Draw the EMA line
+                    self.canvas.axes.plot(
+                        valid_indices,
+                        valid_ema,
+                        color=color,
+                        linewidth=linewidth,
+                        alpha=alpha,
+                        label=f'EMA {period}',
+                        zorder=30 + i  # Faster EMAs on top
+                    )
+
+            # Draw EMA ribbon fill between 216 and 3 for visual effect
+            ema_slow = self.calculate_ema(closes, 216)
+            ema_fast = self.calculate_ema(closes, 3)
+
+            # Find valid range where both have values
+            valid_range = []
+            slow_vals = []
+            fast_vals = []
+            for idx in range(len(closes)):
+                if ema_slow[idx] is not None and ema_fast[idx] is not None:
+                    valid_range.append(idx)
+                    slow_vals.append(ema_slow[idx])
+                    fast_vals.append(ema_fast[idx])
+
+            if valid_range:
+                # Fill between fast and slow EMA with gradient effect
+                # Green fill when fast > slow (bullish), Red when fast < slow (bearish)
+                self.canvas.axes.fill_between(
+                    valid_range,
+                    slow_vals,
+                    fast_vals,
+                    where=[f > s for f, s in zip(fast_vals, slow_vals)],
+                    color='#10B981',  # Green for bullish
+                    alpha=0.08,
+                    zorder=5
+                )
+                self.canvas.axes.fill_between(
+                    valid_range,
+                    slow_vals,
+                    fast_vals,
+                    where=[f <= s for f, s in zip(fast_vals, slow_vals)],
+                    color='#EF4444',  # Red for bearish
+                    alpha=0.08,
+                    zorder=5
+                )
+
+            # Get trend analysis for display
+            analysis = self.analyze_ema_trend()
+
+            # Draw trend indicator in top-right corner
+            ylim = self.canvas.axes.get_ylim()
+            xlim = self.canvas.axes.get_xlim()
+
+            # Trend color
+            trend = analysis['trend']
+            if 'BULL' in trend:
+                trend_color = '#10B981'
+                trend_symbol = '▲'
+            elif 'BEAR' in trend:
+                trend_color = '#EF4444'
+                trend_symbol = '▼'
+            else:
+                trend_color = '#F59E0B'
+                trend_symbol = '◆'
+
+            # Draw EMA trend status box (top-right)
+            status_text = f"{trend_symbol} EMA: {trend}"
+            if analysis['stacked']:
+                status_text += " (STACKED)"
+
+            self.canvas.axes.text(
+                xlim[1] - (xlim[1] - xlim[0]) * 0.02,
+                ylim[1] - (ylim[1] - ylim[0]) * 0.03,
+                status_text,
+                fontsize=9,
+                color='#FFFFFF',
+                weight='bold',
+                ha='right',
+                va='top',
+                bbox=dict(
+                    boxstyle='round,pad=0.5',
+                    facecolor=trend_color,
+                    edgecolor='#FFFFFF',
+                    alpha=0.92,
+                    linewidth=1.5
+                ),
+                zorder=200
+            )
+
+            # Draw signal hint below trend status
+            signal = analysis['signal']
+            signal_colors = {
+                'BUY_PULLBACK': '#10B981',
+                'HOLD_LONG': '#059669',
+                'SELL_PULLBACK': '#EF4444',
+                'HOLD_SHORT': '#DC2626',
+                'WAIT_CONSOLIDATION': '#F59E0B',
+                'WAIT': '#94A3B8'
+            }
+
+            self.canvas.axes.text(
+                xlim[1] - (xlim[1] - xlim[0]) * 0.02,
+                ylim[1] - (ylim[1] - ylim[0]) * 0.09,
+                f"Signal: {signal.replace('_', ' ')}",
+                fontsize=8,
+                color='#FFFFFF',
+                weight='bold',
+                ha='right',
+                va='top',
+                bbox=dict(
+                    boxstyle='round,pad=0.4',
+                    facecolor=signal_colors.get(signal, '#94A3B8'),
+                    edgecolor='#FFFFFF',
+                    alpha=0.85,
+                    linewidth=1
+                ),
+                zorder=200
+            )
+
+        except Exception as e:
+            vprint(f"[Chart] Error drawing EMA ribbon: {e}")
+            import traceback
+            traceback.print_exc()
 
     def update_last_candle_only(self):
         """Update only the last (forming) candle with current price"""
@@ -2373,6 +2669,52 @@ class ChartPanel(QWidget):
 
         # Emit signal to main window
         self.display_mode_changed.emit(self.is_max_mode)
+
+    def toggle_emas(self):
+        """Toggle EMA Ribbon visibility on/off (default: ON)"""
+        self.show_emas = not self.show_emas
+
+        if self.show_emas:
+            self.ema_toggle_btn.setText("📈 EMAs: ON")
+            self.ema_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #10B981;
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-size: {settings.theme.font_size_sm}px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #059669;
+                }}
+                QPushButton:pressed {{
+                    background-color: #047857;
+                }}
+            """)
+        else:
+            self.ema_toggle_btn.setText("📈 EMAs: OFF")
+            self.ema_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #EF4444;
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-size: {settings.theme.font_size_sm}px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #DC2626;
+                }}
+                QPushButton:pressed {{
+                    background-color: #B91C1C;
+                }}
+            """)
+
+        # Redraw chart
+        self.plot_candlesticks()
 
     def toggle_overlays(self):
         """Toggle FVG/OB/Liquidity overlays on/off"""
