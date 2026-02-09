@@ -23,6 +23,7 @@ from widgets.news_impact_widget import NewsImpactWidget
 from widgets.risk_reward_widget import RiskRewardWidget
 from widgets.equity_curve_widget import EquityCurveWidget
 from widgets.trade_journal_widget import TradeJournalWidget
+from widgets.ema_guide_widget import EMAGuideWidget
 from gui.chart_panel_matplotlib import ChartPanel
 from gui.controls_panel import ControlsPanel
 from gui.symbol_manager_dialog import SymbolManagerDialog
@@ -237,6 +238,15 @@ class MainWindow(QMainWindow):
         news_layout.addWidget(self.news_widget)
         tabs.addTab(news_tab, "📰 News")
 
+        # Tab 7: EMA GUIDE (Your signature EMA trading system!)
+        ema_guide_tab = QWidget()
+        ema_guide_layout = QVBoxLayout(ema_guide_tab)
+        self.ema_guide_widget = EMAGuideWidget()
+        self.ema_guide_widget.set_symbol(self.current_symbol)
+        self.ema_guide_widget.set_timeframe(self.current_timeframe)
+        ema_guide_layout.addWidget(self.ema_guide_widget)
+        tabs.addTab(ema_guide_tab, "📈 EMA Guide")
+
         return tabs
 
     def create_right_panel(self) -> QWidget:
@@ -376,6 +386,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'journal_widget'):
             self.journal_widget.set_symbol(symbol)
 
+        if hasattr(self, 'ema_guide_widget'):
+            self.ema_guide_widget.set_symbol(symbol)
+
         # Request fresh data for this symbol from MT5
         self.update_all_data()
 
@@ -392,6 +405,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'max_mode_chart') and self.max_mode_chart.current_timeframe != timeframe:
             self.max_mode_chart.current_timeframe = timeframe
             self.max_mode_chart.timeframe_combo.setCurrentText(timeframe)
+
+        if hasattr(self, 'ema_guide_widget'):
+            self.ema_guide_widget.set_timeframe(timeframe)
 
         self.update_all_data()
 

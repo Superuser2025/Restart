@@ -31,6 +31,7 @@ from widgets.dashboard_cards_widget import DashboardCardsWidget
 from widgets.trade_validator_widget import TradeValidatorWidget
 from widgets.wyckoff_chart_widget import WyckoffChartWidget
 from widgets.statistical_analysis_widget import StatisticalAnalysisWidget
+from widgets.ema_guide_widget import EMAGuideWidget
 
 from core.mt5_connector import MT5Connector
 from core.demo_mode_manager import demo_mode_manager, is_demo_mode
@@ -216,6 +217,16 @@ class EnhancedMainWindow(QMainWindow):
         wyckoff_chart_layout.addWidget(self.wyckoff_chart_widget)
         self.analysis_tabs.addTab(wyckoff_chart_tab, "📊 Wyckoff Chart")
 
+        # Tab 9: EMA GUIDE (Your signature EMA trading system!)
+        ema_guide_tab = QWidget()
+        ema_guide_layout = QVBoxLayout(ema_guide_tab)
+        ema_guide_layout.setContentsMargins(0, 0, 0, 0)
+        self.ema_guide_widget = EMAGuideWidget()
+        self.ema_guide_widget.set_symbol(self.current_symbol)
+        self.ema_guide_widget.set_timeframe(self.current_timeframe)
+        ema_guide_layout.addWidget(self.ema_guide_widget)
+        self.analysis_tabs.addTab(ema_guide_tab, "📈 EMA Guide")
+
         # Connect validator to chart widget
         self.validator_widget.wyckoff_analysis_ready.connect(self.on_wyckoff_analysis_ready)
 
@@ -324,6 +335,9 @@ class EnhancedMainWindow(QMainWindow):
         if hasattr(self, 'journal_widget'):
             self.journal_widget.set_symbol(symbol)
 
+        if hasattr(self, 'ema_guide_widget'):
+            self.ema_guide_widget.set_symbol(symbol)
+
         # Note: Wyckoff chart widget doesn't need set_symbol() - it updates via signal
 
         self.update_all_data()
@@ -341,6 +355,10 @@ class EnhancedMainWindow(QMainWindow):
                 self.wyckoff_chart_widget.wyckoff_data,
                 timeframe
             )
+
+        # Update EMA Guide with new timeframe
+        if hasattr(self, 'ema_guide_widget'):
+            self.ema_guide_widget.set_timeframe(timeframe)
 
         self.update_all_data()
 
