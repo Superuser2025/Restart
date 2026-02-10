@@ -291,8 +291,12 @@ class TimeframeGroup(QWidget):
         scroll.setWidget(scroll_content)
         layout.addWidget(scroll)
 
-    def update_opportunities(self, opportunities: List[Dict]):
-        """Update opportunities - LIMIT TO 12 CARDS MAX, 3 rows × 4 columns"""
+    def update_opportunities(self, opportunities: List[Dict]) -> set:
+        """Update opportunities - LIMIT TO 12 CARDS MAX, 3 rows × 4 columns
+
+        Returns:
+            set: Keys (symbol, timeframe, direction) of NEW opportunities that started blinking
+        """
         # CRITICAL: Hard limit to 12 cards per timeframe section
         self.opportunities = opportunities[:12]
 
@@ -382,6 +386,9 @@ class TimeframeGroup(QWidget):
             row = idx // 4
             col = idx % 4
             self.grid_layout.addWidget(spacer, row, col)
+
+        # Return new opportunity keys so parent can track them for "Blink Again"
+        return new_opportunity_keys
 
     def show_mini_chart(self, opportunity: Dict):
         """Show mini chart popup for the clicked opportunity"""
@@ -635,6 +642,10 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         # Signal persistence
         self.signal_persist_duration = 300  # 5 minutes
 
+        # CRITICAL: Track which cards were NEW (for "Blink Again" feature)
+        # These are the cards that should blink when user clicks "Blink Again"
+        self.last_new_card_keys = set()  # Store keys: (symbol, timeframe, direction)
+
         self.init_ui()
         self.setup_ai_assist("opportunity_scanner")
 
@@ -708,12 +719,32 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
                 self.scan_market()
 
     def trigger_blink_all(self):
-        """Trigger blinking animation on all visible opportunity cards"""
+        """Trigger blinking animation ONLY on cards that were previously flagged as NEW
+
+        FIX: Previously this was blinking ALL cards. Now it only blinks the cards
+        that matched `self.last_new_card_keys` (the cards that blinked originally).
+        """
+        if not self.last_new_card_keys:
+            vprint("[Scanner] Blink Again: No new cards stored - nothing to blink")
+            return
+
+        blink_count = 0
+
         # Iterate through all timeframe groups and their cards
         for group in [self.short_group, self.mid_group, self.long_group]:
             # Find all OpportunityCard widgets in this group
             for card in group.findChildren(OpportunityCard):
-                card.start_blinking()
+                # Get this card's key
+                opp = card.opportunity
+                card_key = (opp['symbol'], opp['timeframe'], opp['direction'])
+
+                # Only blink if this card was in the original NEW set
+                if card_key in self.last_new_card_keys:
+                    card.blink_count = 0  # Reset blink counter for full animation
+                    card.start_blinking()
+                    blink_count += 1
+
+        vprint(f"[Scanner] Blink Again: {blink_count} cards blinking (out of {len(self.last_new_card_keys)} stored keys)")
 
     def init_ui(self):
         """Initialize the user interface - NO HEADER"""
@@ -1298,9 +1329,19 @@ class OpportunityScannerWidget(AIAssistMixin, QWidget):
         vprint(f"[Scanner] Timeframe split: Short={len(short_term)}, Medium={len(medium_term)}, Long={len(long_term)}")
 
         # Update each group (max 12 per group = 3 rows x 4 columns)
-        self.short_group.update_opportunities(short_term[:12])
-        self.mid_group.update_opportunities(medium_term[:12])
-        self.long_group.update_opportunities(long_term[:12])
+        # CRITICAL: Capture new card keys from each group for "Blink Again" feature
+        new_short_keys = self.short_group.update_opportunities(short_term[:12])
+        new_mid_keys = self.mid_group.update_opportunities(medium_term[:12])
+        new_long_keys = self.long_group.update_opportunities(long_term[:12])
+
+        # Combine all new keys for "Blink Again" feature
+        all_new_keys = (new_short_keys or set()) | (new_mid_keys or set()) | (new_long_keys or set())
+
+        # Only update last_new_card_keys if there are new cards
+        # This preserves the previous set for "Blink Again" when no new cards appear
+        if all_new_keys:
+            self.last_new_card_keys = all_new_keys
+            vprint(f"[Scanner] NEW cards detected: {len(all_new_keys)} - stored for 'Blink Again'")
 
         vprint(f"[Scanner] Total opportunities: {len(self.opportunities)}, After filters: {len(filtered_opportunities)}")
 

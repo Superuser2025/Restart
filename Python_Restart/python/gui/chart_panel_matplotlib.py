@@ -133,6 +133,12 @@ class ChartPanel(QWidget):
         self.mt5_initialized = False
         self.init_mt5_connection()
 
+        # Connection stability tracking - prevents status flapping
+        # FIX: Only change connection status after multiple consecutive failures
+        self.mt5_consecutive_failures = 0
+        self.mt5_max_failures_before_disconnect = 3  # Need 3 failures before showing disconnected
+        self.mt5_display_connected = False  # Current display status (debounced)
+
         self.init_ui()
 
         # Update timer
@@ -2398,32 +2404,48 @@ class ChartPanel(QWidget):
             if hasattr(self, 'time_label'):
                 self.time_label.setText(datetime.now().strftime("%H:%M:%S"))
 
-            # Update MT5 connection status
+            # Update MT5 connection status WITH DEBOUNCING (prevents flapping)
+            # FIX: Only change display status after multiple consecutive failures
             if hasattr(self, 'connection_label'):
-                if self.mt5_initialized and mt5.terminal_info() is not None:
-                    self.connection_label.setText("🟢 MT5: Connected")
-                    self.connection_label.setStyleSheet(f"""
-                        QLabel {{
-                            color: {settings.theme.success};
-                            font-size: {settings.theme.font_size_sm}px;
-                            font-weight: bold;
-                            background-color: {settings.theme.surface};
-                            padding: 5px 10px;
-                            border-radius: 5px;
-                        }}
-                    """)
+                is_connected_now = self.mt5_initialized and mt5.terminal_info() is not None
+
+                if is_connected_now:
+                    # Success - reset failure counter
+                    self.mt5_consecutive_failures = 0
+
+                    # Only update display if status changed to connected
+                    if not self.mt5_display_connected:
+                        self.mt5_display_connected = True
+                        self.connection_label.setText("🟢 MT5: Connected")
+                        self.connection_label.setStyleSheet(f"""
+                            QLabel {{
+                                color: {settings.theme.success};
+                                font-size: {settings.theme.font_size_sm}px;
+                                font-weight: bold;
+                                background-color: {settings.theme.surface};
+                                padding: 5px 10px;
+                                border-radius: 5px;
+                            }}
+                        """)
                 else:
-                    self.connection_label.setText("🔴 MT5: Disconnected")
-                    self.connection_label.setStyleSheet(f"""
-                        QLabel {{
-                            color: {settings.theme.danger};
-                            font-size: {settings.theme.font_size_sm}px;
-                            font-weight: bold;
-                            background-color: {settings.theme.surface};
-                            padding: 5px 10px;
-                            border-radius: 5px;
-                        }}
-                    """)
+                    # Failure - increment counter but don't immediately change status
+                    self.mt5_consecutive_failures += 1
+
+                    # Only show disconnected after multiple consecutive failures (prevents flapping)
+                    if self.mt5_consecutive_failures >= self.mt5_max_failures_before_disconnect:
+                        if self.mt5_display_connected:  # Only update if status actually changed
+                            self.mt5_display_connected = False
+                            self.connection_label.setText("🔴 MT5: Disconnected")
+                            self.connection_label.setStyleSheet(f"""
+                                QLabel {{
+                                    color: {settings.theme.danger};
+                                    font-size: {settings.theme.font_size_sm}px;
+                                    font-weight: bold;
+                                    background-color: {settings.theme.surface};
+                                    padding: 5px 10px;
+                                    border-radius: 5px;
+                                }}
+                            """)
 
             # Skip update if we're currently loading new data (symbol/timeframe change)
             if self.is_loading:
@@ -2443,18 +2465,22 @@ class ChartPanel(QWidget):
 
         except Exception as e:
             vprint(f"[Chart] Error updating: {e}")
-            if hasattr(self, 'connection_label'):
-                self.connection_label.setText("🔴 MT5: Error")
-                self.connection_label.setStyleSheet(f"""
-                    QLabel {{
-                        color: {settings.theme.danger};
-                        font-size: {settings.theme.font_size_sm}px;
-                        font-weight: bold;
-                        background-color: {settings.theme.surface};
-                        padding: 5px 10px;
-                        border-radius: 5px;
-                    }}
-                """)
+            # Treat exceptions as connection failures (debounced)
+            self.mt5_consecutive_failures += 1
+            if self.mt5_consecutive_failures >= self.mt5_max_failures_before_disconnect:
+                if hasattr(self, 'connection_label') and self.mt5_display_connected:
+                    self.mt5_display_connected = False
+                    self.connection_label.setText("🔴 MT5: Error")
+                    self.connection_label.setStyleSheet(f"""
+                        QLabel {{
+                            color: {settings.theme.danger};
+                            font-size: {settings.theme.font_size_sm}px;
+                            font-weight: bold;
+                            background-color: {settings.theme.surface};
+                            padding: 5px 10px;
+                            border-radius: 5px;
+                        }}
+                    """)
 
     def on_timeframe_changed(self, timeframe: str):
         """Handle timeframe change"""
