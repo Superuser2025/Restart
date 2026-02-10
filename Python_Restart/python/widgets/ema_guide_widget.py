@@ -50,7 +50,8 @@ class EMAGuideWidget(QWidget):
         self.current_timeframe = "H4"
 
         # EMA configuration (your signature setup)
-        self.ema_periods = [216, 108, 54, 27, 9, 3]
+        # Ordered small to large for correct bullish/bearish stack comparison
+        self.ema_periods = [3, 9, 27, 54, 108, 216]
         self.ema_colors = {
             216: '#8B5CF6',  # Deep Purple
             108: '#A855F7',  # Purple
