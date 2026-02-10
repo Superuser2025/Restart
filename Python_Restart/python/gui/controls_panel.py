@@ -185,6 +185,12 @@ class ControlsPanel(QWidget):
         layout.addWidget(mode_section)
 
         # ============================================================
+        # AGGRESSIVENESS LEVEL (CRITICAL - controls filter thresholds)
+        # ============================================================
+        aggressiveness_section = self.create_aggressiveness_section()
+        layout.addWidget(aggressiveness_section)
+
+        # ============================================================
         # UPDATE SPEED SELECTOR
         # ============================================================
         speed_section = self.create_update_speed_section()
@@ -294,6 +300,164 @@ class ControlsPanel(QWidget):
         layout.addWidget(self.mode_button)
 
         return frame
+
+    def create_aggressiveness_section(self) -> QFrame:
+        """Create aggressiveness level slider section
+
+        This is the CRITICAL control that determines filter strictness:
+        - Level 1 (Ultra Conservative): Strictest, needs 6/10 confluence
+        - Level 3 (Balanced): Default, needs 4/10 confluence
+        - Level 5 (Maximum): Most lenient, needs 2/10 confluence
+        """
+        from core.aggressiveness_manager import aggressiveness_manager
+
+        frame = QFrame()
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {settings.theme.surface};
+                border: 2px solid {settings.theme.warning};
+                border-radius: 12px;
+                padding: 16px;
+            }}
+        """)
+
+        layout = QVBoxLayout(frame)
+        layout.setSpacing(12)
+
+        # Title
+        title = QLabel("🎚️ AGGRESSIVENESS LEVEL")
+        title.setStyleSheet(f"""
+            QLabel {{
+                color: {settings.theme.warning};
+                font-size: {settings.theme.font_size_lg}px;
+                font-weight: 700;
+                background: transparent;
+                border: none;
+            }}
+        """)
+        layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Current level display
+        current_level = aggressiveness_manager.get_level()
+        current_name = aggressiveness_manager.get_level_name()
+        current_desc = aggressiveness_manager.get_level_description()
+
+        self.aggression_level_label = QLabel(f"Level {current_level}: {current_name}")
+        self.aggression_level_label.setStyleSheet(f"""
+            QLabel {{
+                color: {settings.theme.text_primary};
+                font-size: {settings.theme.font_size_xl}px;
+                font-weight: 700;
+                background: transparent;
+                border: none;
+            }}
+        """)
+        layout.addWidget(self.aggression_level_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Slider (1-5)
+        self.aggression_slider = QSlider(Qt.Orientation.Horizontal)
+        self.aggression_slider.setRange(1, 5)
+        self.aggression_slider.setValue(current_level)
+        self.aggression_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.aggression_slider.setTickInterval(1)
+        self.aggression_slider.valueChanged.connect(self.on_aggressiveness_changed)
+        self.aggression_slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {settings.theme.success},
+                    stop:0.5 {settings.theme.warning},
+                    stop:1 {settings.theme.danger});
+                height: 12px;
+                border-radius: 6px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {settings.theme.text_primary};
+                border: 3px solid {settings.theme.background};
+                width: 24px;
+                height: 24px;
+                margin: -6px 0;
+                border-radius: 12px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: {settings.theme.accent};
+            }}
+        """)
+        layout.addWidget(self.aggression_slider)
+
+        # Labels under slider
+        labels_layout = QHBoxLayout()
+        labels = ['1\nConserv.', '2\nCautious', '3\nBalanced', '4\nAggress.', '5\nMaximum']
+        for i, text in enumerate(labels):
+            lbl = QLabel(text)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(f"""
+                QLabel {{
+                    color: {settings.theme.text_secondary};
+                    font-size: 9px;
+                    background: transparent;
+                    border: none;
+                }}
+            """)
+            labels_layout.addWidget(lbl)
+        layout.addLayout(labels_layout)
+
+        # Description text
+        self.aggression_desc_label = QLabel(current_desc)
+        self.aggression_desc_label.setWordWrap(True)
+        self.aggression_desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.aggression_desc_label.setStyleSheet(f"""
+            QLabel {{
+                color: {settings.theme.text_secondary};
+                font-size: {settings.theme.font_size_sm}px;
+                background: transparent;
+                border: none;
+                padding: 8px;
+            }}
+        """)
+        layout.addWidget(self.aggression_desc_label)
+
+        # Confluence indicator
+        preset = aggressiveness_manager.get_current_preset()
+        confluence_text = f"Confluence required: {preset.confluence_required}/10 factors"
+        self.aggression_confluence_label = QLabel(confluence_text)
+        self.aggression_confluence_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.aggression_confluence_label.setStyleSheet(f"""
+            QLabel {{
+                color: {settings.theme.accent};
+                font-size: {settings.theme.font_size_sm}px;
+                font-weight: 600;
+                background: {settings.theme.surface_light};
+                border: 1px solid {settings.theme.border_color};
+                border-radius: 4px;
+                padding: 6px;
+            }}
+        """)
+        layout.addWidget(self.aggression_confluence_label)
+
+        return frame
+
+    def on_aggressiveness_changed(self, value: int):
+        """Handle aggressiveness slider change"""
+        from core.aggressiveness_manager import aggressiveness_manager
+
+        # Update the aggressiveness level
+        aggressiveness_manager.set_level(value)
+
+        # Update UI labels
+        name = aggressiveness_manager.get_level_name()
+        desc = aggressiveness_manager.get_level_description()
+        preset = aggressiveness_manager.get_current_preset()
+
+        self.aggression_level_label.setText(f"Level {value}: {name}")
+        self.aggression_desc_label.setText(desc)
+        self.aggression_confluence_label.setText(f"Confluence required: {preset.confluence_required}/10 factors")
+
+        # Log the change
+        self._log_status(f"✓ Aggressiveness set to Level {value} ({name})")
+        self._log_status(f"  → Min quality: {preset.min_quality_score}, Confluence: {preset.confluence_required}/10")
+
+        # Emit signal so opportunity scanner refreshes
+        self.setting_changed.emit('aggressiveness_level', value)
 
     def create_update_speed_section(self) -> QFrame:
         """Create update speed selector"""

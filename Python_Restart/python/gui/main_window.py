@@ -650,6 +650,16 @@ class MainWindow(QMainWindow):
                 self.data_timer.start()
                 print(f"[Main Window] Data update rate changed to {interval}ms ({value})")
 
+        # Handle aggressiveness level changes (CRITICAL - affects all filtering)
+        elif setting_name == 'aggressiveness_level':
+            print(f"[Main Window] Aggressiveness level changed to {value}")
+            self.status_label.setText(f"Aggressiveness: Level {value}")
+
+            # Trigger scanner refresh with new aggressiveness thresholds
+            if hasattr(self, 'scanner_widget'):
+                self.scanner_widget.scan_market()
+                print(f"[Main Window] Scanner refreshed with new aggressiveness level")
+
         # Handle filter changes
         elif setting_name in ['use_fvg_filter', 'use_ob_filter', 'use_liquidity_filter']:
             if hasattr(self, 'scanner_widget'):
