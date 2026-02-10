@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Institutional Grade Trading"
 #property link      "https://www.mql5.com"
-#property version   "4.30"
+#property version   "4.31"
 #property description "MQL4 Robot - Proper Calibration - Pattern-Driven Trading"
 #property strict
 
@@ -319,8 +319,8 @@ bool g_trend_aligned = false;
 int OnInit()
 {
    Print("═══════════════════════════════════════════════════════════════");
-   Print("  INSTITUTIONAL TRADING ROBOT v4.30 MQL4");
-   Print("  PATTERN-DRIVEN TRADING - PROPER CALIBRATION");
+   Print("  INSTITUTIONAL TRADING ROBOT v4.31 MQL4");
+   Print("  PATTERN-DRIVEN TRADING - LEVEL 5 FIX");
    Print("═══════════════════════════════════════════════════════════════");
 
    // Convert inputs
@@ -413,9 +413,9 @@ void ApplyAggressionLevel()
          g_allow_counter_trend = true;  // Counter-trend allowed
          break;
 
-      case 5:  // Level 5: Trade on ANY valid pattern
+      case 5:  // Level 5: Trade on ANY valid pattern - MAX AGGRESSION
          g_min_pattern_strength = 2;    // Still need real patterns (2-5 stars)
-         g_min_confluence = 1;          // Just need 1 factor (the pattern itself)
+         g_min_confluence = 0;          // Pattern detection alone is sufficient
          g_require_mtf = false;         // MTF optional
          g_require_volume = false;      // Volume optional
          g_allow_counter_trend = true;  // Counter-trend allowed
@@ -749,10 +749,13 @@ void ScanPatterns()
    // 2-STAR PATTERNS - Lower reliability, need more confluence
    // ═══════════════════════════════════════════════════════════════
 
-   // DOJI - Indecision, direction from context
+   // DOJI - Indecision, direction from prior candle context
    if(body_ratio < 0.1 && range1 > atr * 0.3)
    {
-      bool is_bull = (g_regime == TREND_DOWN);  // Doji in downtrend = potential reversal up
+      // Look at prior candles to determine potential reversal direction
+      // If prior candle was bearish, doji signals potential bullish reversal
+      bool prior_bearish = (c2 < o2);
+      bool is_bull = prior_bearish;
       SetPattern("DOJI", is_bull, 2, c1, is_bull ? l1 - atr * 0.3 : h1 + atr * 0.3);
       return;
    }
@@ -760,7 +763,9 @@ void ScanPatterns()
    // SPINNING TOP - Indecision with longer wicks
    if(body_ratio < 0.35 && uw1 > body1 * 0.8 && lw1 > body1 * 0.8 && body1 > 0)
    {
-      bool is_bull = (g_regime == TREND_DOWN);
+      // Same logic - reversal of prior direction
+      bool prior_bearish = (c2 < o2);
+      bool is_bull = prior_bearish;
       SetPattern("SPINNING TOP", is_bull, 2, c1, is_bull ? l1 - atr * 0.3 : h1 + atr * 0.3);
       return;
    }
@@ -836,8 +841,24 @@ void CheckMTF()
    g_mtf_aligned = false;
 
    int htf = GetHigherTF();
+
+   // Safety check for backtesting - if HTF data not available, assume aligned
+   int htf_bars = iBars(Symbol(), htf);
+   if(htf_bars < 50)
+   {
+      g_mtf_aligned = true;  // Assume aligned if data not available
+      return;
+   }
+
    double ema = iMA(Symbol(), htf, 50, 0, MODE_EMA, PRICE_CLOSE, 0);
    double price = iClose(Symbol(), htf, 0);
+
+   // Check for invalid values (common in backtesting)
+   if(ema <= 0 || price <= 0)
+   {
+      g_mtf_aligned = true;  // Assume aligned if data invalid
+      return;
+   }
 
    if(g_pattern.is_bull && price > ema)
       g_mtf_aligned = true;
