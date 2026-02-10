@@ -116,17 +116,17 @@ class ChartPanel(QWidget):
         self.show_levels = False    # S/R, Pivots, PDH/PDL/PDC - user turns ON when needed
 
         # EMA Ribbon settings - ALWAYS VISIBLE (fractal halving periods)
-        # 216 → 108 → 54 → 27 → 9 → 3 (each ~half the previous)
+        # 3 → 9 → 27 → 54 → 108 → 216 (ordered small to large for correct stacking comparisons)
         self.show_emas = True  # Always visible by default - your signature setup!
-        self.ema_periods = [216, 108, 54, 27, 9, 3]
-        # Beautiful gradient colors: Deep purple (slow) → Cyan (fast)
+        self.ema_periods = [3, 9, 27, 54, 108, 216]
+        # Beautiful gradient colors: Cyan (fast) → Deep purple (slow)
         self.ema_colors = [
-            '#8B5CF6',  # 216 - Deep Purple (slowest - major trend)
-            '#A855F7',  # 108 - Purple
-            '#D946EF',  # 54 - Magenta
-            '#F472B6',  # 27 - Pink
-            '#38BDF8',  # 9 - Sky Blue
             '#06B6D4',  # 3 - Cyan (fastest - immediate momentum)
+            '#38BDF8',  # 9 - Sky Blue
+            '#F472B6',  # 27 - Pink
+            '#D946EF',  # 54 - Magenta
+            '#A855F7',  # 108 - Purple
+            '#8B5CF6',  # 216 - Deep Purple (slowest - major trend)
         ]
 
         # MT5 connection status
