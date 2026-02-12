@@ -387,10 +387,10 @@ color g_avail_status_color = clrGray;  // Status color for display
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
    Print("  INSTITUTIONAL TRADING ROBOT v4.40 MQL4");
    Print("  PROFESSIONAL AVAILABILITY CHECKING SYSTEM");
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
 
    // Convert inputs
    g_risk = (double)RiskPercent / 100.0;
@@ -416,18 +416,18 @@ int OnInit()
    g_weekly_start = AccountBalance();
 
    // Print configuration
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
    Print("  AGGRESSION LEVEL: ", AggressionLevel);
    Print("  → Min Pattern Strength: ", g_min_pattern_strength, " stars");
    Print("  → Min Confluence: ", g_min_confluence, " factors");
    Print("  → MTF Required: ", g_require_mtf ? "YES" : "NO");
    Print("  → Volume Required: ", g_require_volume ? "YES" : "NO");
    Print("  → Counter-Trend: ", g_allow_counter_trend ? "ALLOWED" : "BLOCKED");
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
    Print("  Stop Loss: ", SL_Mode == SL_MODE_ATR ? DoubleToString(g_sl_atr, 1) + "x ATR" : DoubleToString(g_sl_pips, 0) + " pips");
    Print("  Take Profit: ", DoubleToString(g_tp_rr, 1), " R:R");
    Print("  Risk: ", DoubleToString(g_risk * 100, 2), "%");
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
 
    if(!EnableTrading)
       Print("*** WARNING: TRADING DISABLED ***");
@@ -440,7 +440,7 @@ int OnInit()
    // Perform initial availability check
    if(EnableAvailabilityCheck)
    {
-      Print("═══════════════════════════════════════════════════════════════");
+      Print("===============================================================");
       Print("  PERFORMING INITIAL AVAILABILITY CHECK...");
       PerformAvailabilityCheck();
       PrintAvailabilityReport();
@@ -634,11 +634,11 @@ void OnTick()
    }
 
    // All checks passed - EXECUTE TRADE
-   Print("═══════════════════════════════════════════════════════════════");
-   Print("  SIGNAL: ", g_pattern.name, " [", g_pattern.strength, "★]");
+   Print("===============================================================");
+   Print("  SIGNAL: ", g_pattern.name, " [", g_pattern.strength, "*]");
    Print("  Direction: ", g_pattern.is_bull ? "BUY" : "SELL");
    Print("  Confluence: ", confluence, "/", g_min_confluence, " (Level ", AggressionLevel, ")");
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
 
    ExecuteTrade();
 
@@ -1864,29 +1864,29 @@ void AggregateAvailabilityResults()
 
    g_avail_report.can_trade = g_availability_ok;
 
-   // Build summary
+   // Build summary (using ASCII symbols - MT4 can't render Unicode)
    if(worst_status == AVAIL_OK)
    {
       g_avail_report.summary = "All systems operational";
-      g_avail_status_text = "● READY";
+      g_avail_status_text = "[+] READY";
       g_avail_status_color = clrLime;
    }
    else if(worst_status == AVAIL_WARNING)
    {
       g_avail_report.summary = IntegerToString(g_avail_report.checks_warning) + " warnings - trading with caution";
-      g_avail_status_text = "◐ CAUTION";
+      g_avail_status_text = "[!] CAUTION";
       g_avail_status_color = clrYellow;
    }
    else if(worst_status == AVAIL_ERROR)
    {
       g_avail_report.summary = issues;
-      g_avail_status_text = "○ LIMITED";
+      g_avail_status_text = "[-] LIMITED";
       g_avail_status_color = clrOrange;
    }
    else
    {
       g_avail_report.summary = issues;
-      g_avail_status_text = "✖ UNAVAILABLE";
+      g_avail_status_text = "[X] UNAVAILABLE";
       g_avail_status_color = clrRed;
    }
 }
@@ -1896,18 +1896,18 @@ void AggregateAvailabilityResults()
 //+------------------------------------------------------------------+
 void PrintAvailabilityReport()
 {
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
    Print("  AVAILABILITY REPORT - ", TimeToString(g_avail_report.report_time, TIME_DATE | TIME_SECONDS));
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
 
    for(int i = 0; i < 10; i++)
    {
       string status_str;
       switch(g_checks[i].status)
       {
-         case AVAIL_OK:       status_str = "[✓] "; break;
+         case AVAIL_OK:       status_str = "[+] "; break;
          case AVAIL_WARNING:  status_str = "[!] "; break;
-         case AVAIL_ERROR:    status_str = "[✗] "; break;
+         case AVAIL_ERROR:    status_str = "[-] "; break;
          case AVAIL_CRITICAL: status_str = "[X] "; break;
       }
 
@@ -1915,14 +1915,14 @@ void PrintAvailabilityReport()
       Print("  ", status_str, check_name, ": ", g_checks[i].message);
    }
 
-   Print("───────────────────────────────────────────────────────────────");
+   Print("---------------------------------------------------------------");
    Print("  SUMMARY: ", g_avail_report.summary);
    Print("  Passed: ", g_avail_report.checks_passed,
          " | Warnings: ", g_avail_report.checks_warning,
          " | Failed: ", g_avail_report.checks_failed,
          " | Critical: ", g_avail_report.checks_critical);
    Print("  CAN TRADE: ", g_avail_report.can_trade ? "YES" : "NO");
-   Print("═══════════════════════════════════════════════════════════════");
+   Print("===============================================================");
 }
 
 //+------------------------------------------------------------------+
@@ -1953,9 +1953,9 @@ string GetStatusIcon(ENUM_AVAILABILITY_STATUS status)
 {
    switch(status)
    {
-      case AVAIL_OK:       return "✓";
+      case AVAIL_OK:       return "+";  // MT4 can't render Unicode ✓
       case AVAIL_WARNING:  return "!";
-      case AVAIL_ERROR:    return "✗";
+      case AVAIL_ERROR:    return "-";  // MT4 can't render Unicode ✗
       case AVAIL_CRITICAL: return "X";
       default:             return "?";
    }
