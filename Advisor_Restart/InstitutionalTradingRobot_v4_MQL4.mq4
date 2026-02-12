@@ -5,8 +5,8 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Institutional Grade Trading"
 #property link      "https://www.mql5.com"
-#property version   "4.40"
-#property description "MQL4 Robot - Professional Availability Checking - Pattern-Driven Trading"
+#property version   "4.50"
+#property description "MQL4 Robot - Professional Control Panel - Pattern-Driven Trading"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -276,6 +276,14 @@ input double           MinMarginLevel = 200.0;                  // Min Margin Le
 input int              MaxDataAgeSeconds = 60;                  // Max Price Data Age (sec)
 input bool             RequireAllChecksPass = false;            // Require ALL Checks Pass
 
+input string           _13 = "═══════ CONTROL PANEL ═══════";
+input bool             ShowControlPanel = true;                  // Show Control Panel
+input int              ControlPanelX = 250;                      // Panel X Position
+input int              ControlPanelY = 50;                       // Panel Y Position
+input double           ScaleInMultiplier = 0.5;                  // Scale-In Lot Multiplier
+input int              TP_Adjust_Pips = 10;                      // TP Adjust Amount (pips)
+input int              SL_Adjust_Pips = 10;                      // SL Adjust Amount (pips)
+
 //+------------------------------------------------------------------+
 //| AVAILABILITY CHECK ENUMS                                          |
 //+------------------------------------------------------------------+
@@ -382,14 +390,22 @@ int g_consecutive_failures = 0;        // Track consecutive check failures
 string g_avail_status_text = "";       // Status text for display
 color g_avail_status_color = clrGray;  // Status color for display
 
+// Control Panel state
+bool g_trading_paused = false;         // Trading paused by user
+bool g_trailing_enabled = true;        // Trailing stop toggle (inherits from UseTrailingStop)
+bool g_control_panel_visible = true;   // Control panel visibility
+double g_day_start_equity = 0;         // Equity at start of day for P&L calculation
+double g_peak_equity = 0;              // Peak equity for drawdown calculation
+datetime g_last_day = 0;               // Track day changes
+
 //+------------------------------------------------------------------+
 //| INIT                                                              |
 //+------------------------------------------------------------------+
 int OnInit()
 {
    Print("===============================================================");
-   Print("  INSTITUTIONAL TRADING ROBOT v4.40 MQL4");
-   Print("  PROFESSIONAL AVAILABILITY CHECKING SYSTEM");
+   Print("  INSTITUTIONAL TRADING ROBOT v4.50 MQL4");
+   Print("  PROFESSIONAL CONTROL PANEL + AVAILABILITY SYSTEM");
    Print("===============================================================");
 
    // Convert inputs
@@ -437,6 +453,13 @@ int OnInit()
    // Initialize availability checking system
    InitAvailabilitySystem();
 
+   // Initialize control panel state
+   g_trailing_enabled = UseTrailingStop;
+   g_day_start_equity = AccountEquity();
+   g_peak_equity = AccountEquity();
+   g_last_day = TimeCurrent() / 86400;
+   g_control_panel_visible = ShowControlPanel;
+
    // Perform initial availability check
    if(EnableAvailabilityCheck)
    {
@@ -449,6 +472,10 @@ int OnInit()
          CreateAvailabilityPanel();
    }
 
+   // Create control panel
+   if(ShowControlPanel)
+      CreateControlPanel();
+
    return(INIT_SUCCEEDED);
 }
 
@@ -456,6 +483,7 @@ void OnDeinit(const int reason)
 {
    ObjectsDeleteAll(0, "IGTR_");
    ObjectsDeleteAll(0, "AVAIL_");  // Clean up availability panel
+   ObjectsDeleteAll(0, "CTRL_");   // Clean up control panel
 }
 
 //+------------------------------------------------------------------+
@@ -524,7 +552,14 @@ void ApplyAggressionLevel()
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   // Manage existing trades first
+   // Update P&L tracking
+   UpdatePnLTracking();
+
+   // Update control panel display
+   if(g_control_panel_visible)
+      UpdateControlPanelInfo();
+
+   // Manage existing trades first (always run, even when paused)
    ManageTrades();
 
    // Periodic availability check
@@ -553,6 +588,9 @@ void OnTick()
 
    // Pre-flight checks
    if(!EnableTrading) return;
+
+   // Check if trading is paused by user
+   if(g_trading_paused) return;
 
    // Additional availability gate check (even if not RequireAllChecksPass)
    if(EnableAvailabilityCheck && g_avail_report.overall_status == AVAIL_CRITICAL)
@@ -1263,7 +1301,7 @@ void ManageTrades()
       }
 
       // Trailing stop at 1.5R
-      if(UseTrailingStop && r_multiple >= 1.5)
+      if(g_trailing_enabled && r_multiple >= 1.5)
       {
          double trail_sl;
          if(is_buy)
@@ -2103,6 +2141,776 @@ void RefreshAvailability()
 
    if(ShowAvailabilityPanel)
       UpdateAvailabilityPanel();
+}
+
+//+------------------------------------------------------------------+
+//|                    CONTROL PANEL SYSTEM                           |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Create the control panel with tiered buttons                      |
+//+------------------------------------------------------------------+
+void CreateControlPanel()
+{
+   if(!g_control_panel_visible) return;
+
+   int x = ControlPanelX;
+   int y = ControlPanelY;
+   int btn_width = 85;
+   int btn_height = 22;
+   int btn_spacing = 4;
+   int row_height = btn_height + btn_spacing;
+   int panel_width = btn_width * 3 + btn_spacing * 4;
+   int panel_height = row_height * 10 + 100;  // 10 rows of buttons + info area
+
+   // Panel background
+   CreatePanelBackground("CTRL_Background", x - 5, y - 5, panel_width + 10, panel_height);
+
+   // === INFO DISPLAY SECTION ===
+   int info_y = y;
+   CreateInfoLabel("CTRL_Title", x, info_y, "CONTROL PANEL", clrWhite, 10);
+   info_y += 20;
+
+   // P&L Display
+   CreateInfoLabel("CTRL_PnL_Label", x, info_y, "Daily P&L:", clrGray, 8);
+   CreateInfoLabel("CTRL_PnL_Value", x + 70, info_y, "$0.00", clrWhite, 8);
+   info_y += 16;
+
+   // Drawdown Display
+   CreateInfoLabel("CTRL_DD_Label", x, info_y, "Drawdown:", clrGray, 8);
+   CreateInfoLabel("CTRL_DD_Value", x + 70, info_y, "0.00%", clrWhite, 8);
+   info_y += 16;
+
+   // Session Display
+   CreateInfoLabel("CTRL_Session_Label", x, info_y, "Session:", clrGray, 8);
+   CreateInfoLabel("CTRL_Session_Value", x + 70, info_y, "---", clrWhite, 8);
+   info_y += 16;
+
+   // Spread Display
+   CreateInfoLabel("CTRL_Spread_Label", x, info_y, "Spread:", clrGray, 8);
+   CreateInfoLabel("CTRL_Spread_Value", x + 70, info_y, "0.0", clrWhite, 8);
+   info_y += 20;
+
+   // Separator
+   CreateInfoLabel("CTRL_Sep1", x, info_y, "--- ADVANCED ---", clrDimGray, 8);
+   info_y += 18;
+
+   // === ADVANCED TIER (Top) ===
+   int col1 = x;
+   int col2 = x + btn_width + btn_spacing;
+   int col3 = x + (btn_width + btn_spacing) * 2;
+
+   // Row 1: Manual trading
+   CreateButton("CTRL_BuyManual", col1, info_y, btn_width, btn_height, "BUY", clrWhite, clrDarkGreen);
+   CreateButton("CTRL_SellManual", col2, info_y, btn_width, btn_height, "SELL", clrWhite, clrDarkRed);
+   CreateButton("CTRL_ScaleIn", col3, info_y, btn_width, btn_height, "Scale In", clrWhite, clrDarkSlateGray);
+   info_y += row_height;
+
+   // Row 2: Position management
+   CreateButton("CTRL_Hedge", col1, info_y, btn_width, btn_height, "Hedge", clrWhite, clrDarkOrange);
+   CreateButton("CTRL_Reverse", col2, info_y, btn_width, btn_height, "Reverse", clrWhite, clrDarkMagenta);
+   CreateButton("CTRL_Trailing", col3, info_y, btn_width, btn_height, "Trail: ON", clrBlack, clrLime);
+   info_y += row_height;
+
+   // Row 3: TP/SL adjustments
+   CreateButton("CTRL_TP_Plus", col1, info_y, btn_width, btn_height, "TP +"+IntegerToString(TP_Adjust_Pips), clrWhite, clrSeaGreen);
+   CreateButton("CTRL_TP_Minus", col2, info_y, btn_width, btn_height, "TP -"+IntegerToString(TP_Adjust_Pips), clrWhite, clrIndianRed);
+   CreateButton("CTRL_SL_Plus", col3, info_y, btn_width, btn_height, "SL +"+IntegerToString(SL_Adjust_Pips), clrWhite, clrSteelBlue);
+   info_y += row_height;
+
+   // Row 4: More SL adjust
+   CreateButton("CTRL_SL_Minus", col1, info_y, btn_width, btn_height, "SL -"+IntegerToString(SL_Adjust_Pips), clrWhite, clrSlateGray);
+   info_y += row_height;
+
+   // Separator
+   CreateInfoLabel("CTRL_Sep2", x, info_y, "--- USEFUL ---", clrDimGray, 8);
+   info_y += 18;
+
+   // === USEFUL TIER (Middle) ===
+   // Row 5: Partial management
+   CreateButton("CTRL_CloseLosses", col1, info_y, btn_width, btn_height, "Close Losses", clrWhite, clrMaroon);
+   CreateButton("CTRL_Partial50", col2, info_y, btn_width, btn_height, "Close 50%", clrBlack, clrGold);
+   CreateButton("CTRL_Refresh", col3, info_y, btn_width, btn_height, "Refresh", clrWhite, clrDodgerBlue);
+   info_y += row_height;
+
+   // Row 6: Toggle panel
+   CreateButton("CTRL_ToggleAvail", col1, info_y, btn_width * 2 + btn_spacing, btn_height, "Toggle Status Panel", clrWhite, clrDarkCyan);
+   info_y += row_height;
+
+   // Separator
+   CreateInfoLabel("CTRL_Sep3", x, info_y, "--- ESSENTIAL ---", clrLime, 8);
+   info_y += 18;
+
+   // === ESSENTIAL TIER (Bottom) ===
+   // Row 7: Quick closes
+   CreateButton("CTRL_CloseProfits", col1, info_y, btn_width, btn_height, "Close Profits", clrBlack, clrLime);
+   CreateButton("CTRL_BreakEven", col2, info_y, btn_width, btn_height, "Break-Even", clrBlack, clrYellow);
+   CreateButton("CTRL_CloseSymbol", col3, info_y, btn_width, btn_height, "Close Symbol", clrWhite, clrOrangeRed);
+   info_y += row_height;
+
+   // Row 8: Critical controls
+   CreateButton("CTRL_Pause", col1, info_y, btn_width * 2 + btn_spacing, btn_height, "PAUSE TRADING", clrWhite, clrDarkOrange);
+   CreateButton("CTRL_CloseAll", col3, info_y, btn_width, btn_height, "CLOSE ALL", clrWhite, clrRed);
+
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Create panel background                                           |
+//+------------------------------------------------------------------+
+void CreatePanelBackground(string name, int x, int y, int width, int height)
+{
+   ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, height);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, C'25,25,35');
+   ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, C'60,60,80');
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+}
+
+//+------------------------------------------------------------------+
+//| Create info label                                                 |
+//+------------------------------------------------------------------+
+void CreateInfoLabel(string name, int x, int y, string text, color clr, int font_size)
+{
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+}
+
+//+------------------------------------------------------------------+
+//| Create button                                                     |
+//+------------------------------------------------------------------+
+void CreateButton(string name, int x, int y, int width, int height, string text, color txt_clr, color bg_clr)
+{
+   ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, height);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, txt_clr);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_clr);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrGray);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_STATE, false);
+}
+
+//+------------------------------------------------------------------+
+//| Update P&L tracking                                               |
+//+------------------------------------------------------------------+
+void UpdatePnLTracking()
+{
+   // Check for new day
+   datetime today = TimeCurrent() / 86400;
+   if(today != g_last_day)
+   {
+      g_day_start_equity = AccountEquity();
+      g_last_day = today;
+   }
+
+   // Update peak equity for drawdown
+   double current_equity = AccountEquity();
+   if(current_equity > g_peak_equity)
+      g_peak_equity = current_equity;
+}
+
+//+------------------------------------------------------------------+
+//| Update control panel info displays                                |
+//+------------------------------------------------------------------+
+void UpdateControlPanelInfo()
+{
+   // Daily P&L
+   double daily_pnl = AccountEquity() - g_day_start_equity;
+   string pnl_text = (daily_pnl >= 0 ? "+" : "") + DoubleToString(daily_pnl, 2);
+   color pnl_color = daily_pnl >= 0 ? clrLime : clrRed;
+   ObjectSetString(0, "CTRL_PnL_Value", OBJPROP_TEXT, "$" + pnl_text);
+   ObjectSetInteger(0, "CTRL_PnL_Value", OBJPROP_COLOR, pnl_color);
+
+   // Drawdown
+   double drawdown = 0;
+   if(g_peak_equity > 0)
+      drawdown = (g_peak_equity - AccountEquity()) / g_peak_equity * 100;
+   color dd_color = drawdown < 5 ? clrLime : (drawdown < 10 ? clrYellow : clrRed);
+   ObjectSetString(0, "CTRL_DD_Value", OBJPROP_TEXT, DoubleToString(drawdown, 2) + "%");
+   ObjectSetInteger(0, "CTRL_DD_Value", OBJPROP_COLOR, dd_color);
+
+   // Session
+   string session_text = GetSessionName();
+   ObjectSetString(0, "CTRL_Session_Value", OBJPROP_TEXT, session_text);
+
+   // Spread
+   double spread = MarketInfo(Symbol(), MODE_SPREAD) / 10.0;
+   color spread_color = spread < 2 ? clrLime : (spread < 5 ? clrYellow : clrRed);
+   ObjectSetString(0, "CTRL_Spread_Value", OBJPROP_TEXT, DoubleToString(spread, 1) + " pips");
+   ObjectSetInteger(0, "CTRL_Spread_Value", OBJPROP_COLOR, spread_color);
+
+   // Update pause button state
+   if(g_trading_paused)
+   {
+      ObjectSetString(0, "CTRL_Pause", OBJPROP_TEXT, "RESUME TRADING");
+      ObjectSetInteger(0, "CTRL_Pause", OBJPROP_BGCOLOR, clrGreen);
+   }
+   else
+   {
+      ObjectSetString(0, "CTRL_Pause", OBJPROP_TEXT, "PAUSE TRADING");
+      ObjectSetInteger(0, "CTRL_Pause", OBJPROP_BGCOLOR, clrDarkOrange);
+   }
+
+   // Update trailing button state
+   if(g_trailing_enabled)
+   {
+      ObjectSetString(0, "CTRL_Trailing", OBJPROP_TEXT, "Trail: ON");
+      ObjectSetInteger(0, "CTRL_Trailing", OBJPROP_BGCOLOR, clrLime);
+      ObjectSetInteger(0, "CTRL_Trailing", OBJPROP_COLOR, clrBlack);
+   }
+   else
+   {
+      ObjectSetString(0, "CTRL_Trailing", OBJPROP_TEXT, "Trail: OFF");
+      ObjectSetInteger(0, "CTRL_Trailing", OBJPROP_BGCOLOR, clrGray);
+      ObjectSetInteger(0, "CTRL_Trailing", OBJPROP_COLOR, clrWhite);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Get current session name                                          |
+//+------------------------------------------------------------------+
+string GetSessionName()
+{
+   int hour = TimeHour(TimeCurrent()) - (int)BrokerGMT;
+   if(hour < 0) hour += 24;
+   if(hour >= 24) hour -= 24;
+
+   if(hour >= 0 && hour < 8) return "Tokyo";
+   if(hour >= 8 && hour < 12) return "London";
+   if(hour >= 12 && hour < 17) return "NY/London";
+   if(hour >= 17 && hour < 22) return "New York";
+   return "Sydney";
+}
+
+//+------------------------------------------------------------------+
+//| Chart event handler for button clicks                             |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   if(id != CHARTEVENT_OBJECT_CLICK) return;
+
+   // Reset button state
+   ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+
+   // === ESSENTIAL TIER ===
+   if(sparam == "CTRL_CloseAll")
+   {
+      CloseAllPositions();
+   }
+   else if(sparam == "CTRL_Pause")
+   {
+      ToggleTradingPause();
+   }
+   else if(sparam == "CTRL_CloseProfits")
+   {
+      CloseProfitablePositions();
+   }
+   else if(sparam == "CTRL_BreakEven")
+   {
+      MoveAllToBreakeven();
+   }
+   else if(sparam == "CTRL_CloseSymbol")
+   {
+      CloseSymbolPositions();
+   }
+   // === USEFUL TIER ===
+   else if(sparam == "CTRL_CloseLosses")
+   {
+      CloseLosingPositions();
+   }
+   else if(sparam == "CTRL_Partial50")
+   {
+      PartialCloseAll(50);
+   }
+   else if(sparam == "CTRL_Refresh")
+   {
+      RefreshAvailability();
+      Print("STATUS: Availability refreshed");
+   }
+   else if(sparam == "CTRL_ToggleAvail")
+   {
+      ToggleAvailabilityPanel();
+   }
+   // === ADVANCED TIER ===
+   else if(sparam == "CTRL_BuyManual")
+   {
+      OpenManualTrade(OP_BUY);
+   }
+   else if(sparam == "CTRL_SellManual")
+   {
+      OpenManualTrade(OP_SELL);
+   }
+   else if(sparam == "CTRL_ScaleIn")
+   {
+      ScaleIntoPosition();
+   }
+   else if(sparam == "CTRL_Hedge")
+   {
+      HedgePositions();
+   }
+   else if(sparam == "CTRL_Reverse")
+   {
+      ReversePositions();
+   }
+   else if(sparam == "CTRL_Trailing")
+   {
+      ToggleTrailing();
+   }
+   else if(sparam == "CTRL_TP_Plus")
+   {
+      AdjustAllTP(TP_Adjust_Pips);
+   }
+   else if(sparam == "CTRL_TP_Minus")
+   {
+      AdjustAllTP(-TP_Adjust_Pips);
+   }
+   else if(sparam == "CTRL_SL_Plus")
+   {
+      AdjustAllSL(SL_Adjust_Pips);
+   }
+   else if(sparam == "CTRL_SL_Minus")
+   {
+      AdjustAllSL(-SL_Adjust_Pips);
+   }
+
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| ESSENTIAL: Close all positions                                    |
+//+------------------------------------------------------------------+
+void CloseAllPositions()
+{
+   int closed = 0;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      double price = (OrderType() == OP_BUY) ? Bid : Ask;
+      if(OrderClose(OrderTicket(), OrderLots(), price, 10, clrYellow))
+         closed++;
+   }
+   Print("CLOSE ALL: Closed ", closed, " positions");
+   Alert("Closed ALL ", closed, " positions");
+}
+
+//+------------------------------------------------------------------+
+//| ESSENTIAL: Toggle trading pause                                   |
+//+------------------------------------------------------------------+
+void ToggleTradingPause()
+{
+   g_trading_paused = !g_trading_paused;
+   if(g_trading_paused)
+   {
+      Print("TRADING PAUSED by user");
+      Alert("Trading PAUSED - No new trades will be opened");
+   }
+   else
+   {
+      Print("TRADING RESUMED by user");
+      Alert("Trading RESUMED - EA will trade normally");
+   }
+}
+
+//+------------------------------------------------------------------+
+//| ESSENTIAL: Close profitable positions                             |
+//+------------------------------------------------------------------+
+void CloseProfitablePositions()
+{
+   int closed = 0;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+      if(OrderProfit() <= 0) continue;
+
+      double price = (OrderType() == OP_BUY) ? Bid : Ask;
+      if(OrderClose(OrderTicket(), OrderLots(), price, 10, clrLime))
+         closed++;
+   }
+   Print("CLOSE PROFITS: Closed ", closed, " profitable positions");
+}
+
+//+------------------------------------------------------------------+
+//| ESSENTIAL: Move all to breakeven                                  |
+//+------------------------------------------------------------------+
+void MoveAllToBreakeven()
+{
+   int modified = 0;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      double entry = OrderOpenPrice();
+      double sl = OrderStopLoss();
+      double tp = OrderTakeProfit();
+      bool is_buy = (OrderType() == OP_BUY);
+      double price = is_buy ? Bid : Ask;
+
+      // Only move to breakeven if in profit
+      double profit_dist = is_buy ? (price - entry) : (entry - price);
+      if(profit_dist <= 0) continue;
+
+      // Set SL slightly above/below entry
+      double new_sl = entry + (is_buy ? 1 : -1) * Point * 5;
+
+      // Only if it improves the SL
+      if((is_buy && new_sl > sl) || (!is_buy && new_sl < sl))
+      {
+         if(OrderModify(OrderTicket(), entry, new_sl, tp, 0, clrBlue))
+            modified++;
+      }
+   }
+   Print("BREAKEVEN: Modified ", modified, " positions");
+}
+
+//+------------------------------------------------------------------+
+//| ESSENTIAL: Close positions for current symbol only                |
+//+------------------------------------------------------------------+
+void CloseSymbolPositions()
+{
+   int closed = 0;
+   string sym = Symbol();
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderSymbol() != sym) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      double price = (OrderType() == OP_BUY) ? Bid : Ask;
+      if(OrderClose(OrderTicket(), OrderLots(), price, 10, clrOrange))
+         closed++;
+   }
+   Print("CLOSE SYMBOL: Closed ", closed, " positions on ", sym);
+}
+
+//+------------------------------------------------------------------+
+//| USEFUL: Close losing positions                                    |
+//+------------------------------------------------------------------+
+void CloseLosingPositions()
+{
+   int closed = 0;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+      if(OrderProfit() >= 0) continue;
+
+      double price = (OrderType() == OP_BUY) ? Bid : Ask;
+      if(OrderClose(OrderTicket(), OrderLots(), price, 10, clrRed))
+         closed++;
+   }
+   Print("CLOSE LOSSES: Closed ", closed, " losing positions");
+}
+
+//+------------------------------------------------------------------+
+//| USEFUL: Partial close all positions                               |
+//+------------------------------------------------------------------+
+void PartialCloseAll(int percent)
+{
+   int closed = 0;
+   double min_lot = MarketInfo(Symbol(), MODE_MINLOT);
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      double close_lots = NormalizeDouble(OrderLots() * percent / 100.0, 2);
+      if(close_lots < min_lot) continue;
+
+      double price = (OrderType() == OP_BUY) ? Bid : Ask;
+      if(OrderClose(OrderTicket(), close_lots, price, 10, clrGold))
+         closed++;
+   }
+   Print("PARTIAL CLOSE: Closed ", percent, "% of ", closed, " positions");
+}
+
+//+------------------------------------------------------------------+
+//| USEFUL: Toggle availability panel                                 |
+//+------------------------------------------------------------------+
+void ToggleAvailabilityPanel()
+{
+   // Check if panel exists
+   if(ObjectFind(0, "AVAIL_Background") >= 0)
+   {
+      ObjectsDeleteAll(0, "AVAIL_");
+      Print("STATUS: Availability panel hidden");
+   }
+   else
+   {
+      CreateAvailabilityPanel();
+      Print("STATUS: Availability panel shown");
+   }
+}
+
+//+------------------------------------------------------------------+
+//| ADVANCED: Open manual trade                                       |
+//+------------------------------------------------------------------+
+void OpenManualTrade(int order_type)
+{
+   double lot = g_min_lot;
+   double price = (order_type == OP_BUY) ? Ask : Bid;
+
+   // Calculate SL/TP based on ATR
+   double atr = iATR(Symbol(), Timeframe, 14, 1);
+   double sl_dist = atr * g_sl_atr;
+   double tp_dist = sl_dist * g_tp_rr;
+
+   double sl, tp;
+   if(order_type == OP_BUY)
+   {
+      sl = price - sl_dist;
+      tp = price + tp_dist;
+   }
+   else
+   {
+      sl = price + sl_dist;
+      tp = price - tp_dist;
+   }
+
+   string comment = "Manual_" + (order_type == OP_BUY ? "Buy" : "Sell");
+   int ticket = OrderSend(Symbol(), order_type, lot, price, 10, sl, tp, comment, MagicNumber, 0,
+                          order_type == OP_BUY ? clrGreen : clrRed);
+
+   if(ticket > 0)
+      Print("MANUAL: Opened ", (order_type == OP_BUY ? "BUY" : "SELL"), " #", ticket);
+   else
+      Print("MANUAL: Failed to open trade, error ", GetLastError());
+}
+
+//+------------------------------------------------------------------+
+//| ADVANCED: Scale into existing position                            |
+//+------------------------------------------------------------------+
+void ScaleIntoPosition()
+{
+   // Find existing position on current symbol
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      int order_type = OrderType();
+      double base_lot = OrderLots();
+      double scale_lot = NormalizeDouble(base_lot * ScaleInMultiplier, 2);
+      double min_lot = MarketInfo(Symbol(), MODE_MINLOT);
+      if(scale_lot < min_lot) scale_lot = min_lot;
+
+      double price = (order_type == OP_BUY) ? Ask : Bid;
+      double sl = OrderStopLoss();
+      double tp = OrderTakeProfit();
+
+      string comment = "ScaleIn_" + IntegerToString(OrderTicket());
+      int ticket = OrderSend(Symbol(), order_type, scale_lot, price, 10, sl, tp, comment, MagicNumber, 0, clrAqua);
+
+      if(ticket > 0)
+         Print("SCALE IN: Added ", scale_lot, " lots to position");
+      else
+         Print("SCALE IN: Failed, error ", GetLastError());
+
+      return;  // Only scale into first found position
+   }
+   Print("SCALE IN: No existing position found on ", Symbol());
+}
+
+//+------------------------------------------------------------------+
+//| ADVANCED: Hedge current positions                                 |
+//+------------------------------------------------------------------+
+void HedgePositions()
+{
+   double buy_lots = 0, sell_lots = 0;
+
+   // Calculate net exposure on current symbol
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      if(OrderType() == OP_BUY)
+         buy_lots += OrderLots();
+      else
+         sell_lots += OrderLots();
+   }
+
+   double net = buy_lots - sell_lots;
+   if(MathAbs(net) < MarketInfo(Symbol(), MODE_MINLOT))
+   {
+      Print("HEDGE: Position already hedged or no position");
+      return;
+   }
+
+   // Open opposite position to hedge
+   int order_type = (net > 0) ? OP_SELL : OP_BUY;
+   double hedge_lots = MathAbs(net);
+   double price = (order_type == OP_BUY) ? Ask : Bid;
+
+   string comment = "Hedge_" + Symbol();
+   int ticket = OrderSend(Symbol(), order_type, hedge_lots, price, 10, 0, 0, comment, MagicNumber, 0, clrOrange);
+
+   if(ticket > 0)
+      Print("HEDGE: Opened ", (order_type == OP_BUY ? "BUY" : "SELL"), " ", hedge_lots, " lots to hedge");
+   else
+      Print("HEDGE: Failed, error ", GetLastError());
+}
+
+//+------------------------------------------------------------------+
+//| ADVANCED: Reverse all positions                                   |
+//+------------------------------------------------------------------+
+void ReversePositions()
+{
+   double buy_lots = 0, sell_lots = 0;
+
+   // Calculate current exposure
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      if(OrderType() == OP_BUY)
+         buy_lots += OrderLots();
+      else
+         sell_lots += OrderLots();
+   }
+
+   // Close all positions on this symbol first
+   CloseSymbolPositions();
+
+   // Open opposite position
+   double net = buy_lots - sell_lots;
+   if(MathAbs(net) < MarketInfo(Symbol(), MODE_MINLOT))
+   {
+      Print("REVERSE: No net position to reverse");
+      return;
+   }
+
+   int order_type = (net > 0) ? OP_SELL : OP_BUY;  // Reverse direction
+   double lots = MathAbs(net);
+   double price = (order_type == OP_BUY) ? Ask : Bid;
+
+   // Calculate SL/TP based on ATR
+   double atr = iATR(Symbol(), Timeframe, 14, 1);
+   double sl_dist = atr * g_sl_atr;
+   double tp_dist = sl_dist * g_tp_rr;
+
+   double sl, tp;
+   if(order_type == OP_BUY)
+   {
+      sl = price - sl_dist;
+      tp = price + tp_dist;
+   }
+   else
+   {
+      sl = price + sl_dist;
+      tp = price - tp_dist;
+   }
+
+   string comment = "Reverse_" + Symbol();
+   int ticket = OrderSend(Symbol(), order_type, lots, price, 10, sl, tp, comment, MagicNumber, 0, clrMagenta);
+
+   if(ticket > 0)
+      Print("REVERSE: Opened ", (order_type == OP_BUY ? "BUY" : "SELL"), " ", lots, " lots (reversed)");
+   else
+      Print("REVERSE: Failed, error ", GetLastError());
+}
+
+//+------------------------------------------------------------------+
+//| ADVANCED: Toggle trailing stop                                    |
+//+------------------------------------------------------------------+
+void ToggleTrailing()
+{
+   g_trailing_enabled = !g_trailing_enabled;
+   Print("TRAILING: ", g_trailing_enabled ? "ENABLED" : "DISABLED");
+}
+
+//+------------------------------------------------------------------+
+//| ADVANCED: Adjust all TPs by pips                                  |
+//+------------------------------------------------------------------+
+void AdjustAllTP(int pips)
+{
+   int modified = 0;
+   double pip_value = Point * 10;  // For 5-digit brokers
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      double tp = OrderTakeProfit();
+      if(tp == 0) continue;  // No TP set
+
+      double new_tp;
+      if(OrderType() == OP_BUY)
+         new_tp = tp + pips * pip_value;
+      else
+         new_tp = tp - pips * pip_value;
+
+      if(OrderModify(OrderTicket(), OrderOpenPrice(), OrderStopLoss(), new_tp, 0, clrAqua))
+         modified++;
+   }
+   Print("TP ADJUST: Modified ", modified, " positions by ", pips, " pips");
+}
+
+//+------------------------------------------------------------------+
+//| ADVANCED: Adjust all SLs by pips                                  |
+//+------------------------------------------------------------------+
+void AdjustAllSL(int pips)
+{
+   int modified = 0;
+   double pip_value = Point * 10;  // For 5-digit brokers
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      double sl = OrderStopLoss();
+      if(sl == 0) continue;  // No SL set
+
+      double new_sl;
+      if(OrderType() == OP_BUY)
+         new_sl = sl + pips * pip_value;  // Positive = tighter for buys
+      else
+         new_sl = sl - pips * pip_value;  // Positive = tighter for sells
+
+      if(OrderModify(OrderTicket(), OrderOpenPrice(), new_sl, OrderTakeProfit(), 0, clrYellow))
+         modified++;
+   }
+   Print("SL ADJUST: Modified ", modified, " positions by ", pips, " pips");
 }
 
 //+------------------------------------------------------------------+
