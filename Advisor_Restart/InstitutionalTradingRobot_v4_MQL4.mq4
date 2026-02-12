@@ -5,8 +5,8 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Institutional Grade Trading"
 #property link      "https://www.mql5.com"
-#property version   "4.31"
-#property description "MQL4 Robot - Proper Calibration - Pattern-Driven Trading"
+#property version   "4.40"
+#property description "MQL4 Robot - Professional Availability Checking - Pattern-Driven Trading"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -265,6 +265,43 @@ input string           _11 = "═══════ ALERTS ═══════
 input bool             AlertOnTrade = false;                    // Alert on Trade
 input bool             AlertOnPattern = false;                  // Alert on Pattern
 
+input string           _12 = "═══════ AVAILABILITY ═══════";
+input bool             EnableAvailabilityCheck = true;          // Enable Availability Checks
+input bool             ShowAvailabilityPanel = true;            // Show Status Panel on Chart
+input bool             AlertOnUnavailable = true;               // Alert When Unavailable
+input int              AvailCheckInterval = 30;                 // Check Interval (seconds)
+input int              MaxRetryAttempts = 3;                    // Max Retry on Failure
+input int              RetryDelaySeconds = 5;                   // Retry Delay (seconds)
+input double           MinMarginLevel = 200.0;                  // Min Margin Level %
+input int              MaxDataAgeSeconds = 60;                  // Max Price Data Age (sec)
+input bool             RequireAllChecksPass = false;            // Require ALL Checks Pass
+
+//+------------------------------------------------------------------+
+//| AVAILABILITY CHECK ENUMS                                          |
+//+------------------------------------------------------------------+
+enum ENUM_AVAILABILITY_STATUS
+{
+   AVAIL_OK = 0,              // All systems operational
+   AVAIL_WARNING = 1,         // Minor issues - trading possible with caution
+   AVAIL_ERROR = 2,           // Trading not recommended
+   AVAIL_CRITICAL = 3         // Trading impossible
+};
+
+enum ENUM_CHECK_TYPE
+{
+   CHK_BROKER_CONNECTION,     // Broker/server connectivity
+   CHK_SYMBOL_VALID,          // Symbol exists and valid
+   CHK_SYMBOL_TRADEABLE,      // Symbol can be traded
+   CHK_MARKET_OPEN,           // Market is open for trading
+   CHK_TRADING_ALLOWED,       // Account allows trading
+   CHK_EA_TRADING,            // EA trading enabled
+   CHK_ACCOUNT_VALID,         // Account is valid and active
+   CHK_MARGIN_SUFFICIENT,     // Enough margin for minimum trade
+   CHK_SPREAD_ACCEPTABLE,     // Spread within limits
+   CHK_DATA_AVAILABLE,        // Price data is current
+   CHK_TOTAL                  // Total number of checks
+};
+
 //+------------------------------------------------------------------+
 //| INTERNAL TYPES                                                    |
 //+------------------------------------------------------------------+
@@ -280,6 +317,29 @@ struct Pattern
    double   sl_price;
    datetime time;
    int      bar_index;
+};
+
+// Availability check result for individual checks
+struct AvailabilityCheck
+{
+   ENUM_CHECK_TYPE           check_type;
+   ENUM_AVAILABILITY_STATUS  status;
+   string                    message;
+   datetime                  last_check;
+   int                       retry_count;
+};
+
+// Overall availability report
+struct AvailabilityReport
+{
+   ENUM_AVAILABILITY_STATUS  overall_status;
+   int                       checks_passed;
+   int                       checks_warning;
+   int                       checks_failed;
+   int                       checks_critical;
+   string                    summary;
+   datetime                  report_time;
+   bool                      can_trade;
 };
 
 //+------------------------------------------------------------------+
@@ -313,14 +373,23 @@ bool g_spread_ok = true;
 bool g_session_ok = true;
 bool g_trend_aligned = false;
 
+// Availability checking system
+AvailabilityCheck g_checks[10];       // Array of individual checks (CHK_TOTAL = 10)
+AvailabilityReport g_avail_report;    // Current availability report
+datetime g_last_avail_check = 0;      // Last availability check time
+bool g_availability_ok = false;        // Quick flag: can we trade?
+int g_consecutive_failures = 0;        // Track consecutive check failures
+string g_avail_status_text = "";       // Status text for display
+color g_avail_status_color = clrGray;  // Status color for display
+
 //+------------------------------------------------------------------+
 //| INIT                                                              |
 //+------------------------------------------------------------------+
 int OnInit()
 {
    Print("═══════════════════════════════════════════════════════════════");
-   Print("  INSTITUTIONAL TRADING ROBOT v4.31 MQL4");
-   Print("  PATTERN-DRIVEN TRADING - LEVEL 5 FIX");
+   Print("  INSTITUTIONAL TRADING ROBOT v4.40 MQL4");
+   Print("  PROFESSIONAL AVAILABILITY CHECKING SYSTEM");
    Print("═══════════════════════════════════════════════════════════════");
 
    // Convert inputs
@@ -365,12 +434,28 @@ int OnInit()
    else
       Print("*** TRADING ENABLED ***");
 
+   // Initialize availability checking system
+   InitAvailabilitySystem();
+
+   // Perform initial availability check
+   if(EnableAvailabilityCheck)
+   {
+      Print("═══════════════════════════════════════════════════════════════");
+      Print("  PERFORMING INITIAL AVAILABILITY CHECK...");
+      PerformAvailabilityCheck();
+      PrintAvailabilityReport();
+
+      if(ShowAvailabilityPanel)
+         CreateAvailabilityPanel();
+   }
+
    return(INIT_SUCCEEDED);
 }
 
 void OnDeinit(const int reason)
 {
    ObjectsDeleteAll(0, "IGTR_");
+   ObjectsDeleteAll(0, "AVAIL_");  // Clean up availability panel
 }
 
 //+------------------------------------------------------------------+
@@ -442,6 +527,24 @@ void OnTick()
    // Manage existing trades first
    ManageTrades();
 
+   // Periodic availability check
+   if(EnableAvailabilityCheck)
+   {
+      if(TimeCurrent() - g_last_avail_check >= AvailCheckInterval)
+      {
+         PerformAvailabilityCheck();
+
+         if(ShowAvailabilityPanel)
+            UpdateAvailabilityPanel();
+      }
+
+      // Block trading if availability check fails
+      if(!g_availability_ok && RequireAllChecksPass)
+      {
+         return;
+      }
+   }
+
    // New bar check - only analyze on new bars
    static datetime last_bar = 0;
    datetime cur_bar = iTime(Symbol(), Timeframe, 0);
@@ -450,6 +553,14 @@ void OnTick()
 
    // Pre-flight checks
    if(!EnableTrading) return;
+
+   // Additional availability gate check (even if not RequireAllChecksPass)
+   if(EnableAvailabilityCheck && g_avail_report.overall_status == AVAIL_CRITICAL)
+   {
+      // Critical issues - do not attempt to trade
+      return;
+   }
+
    if(!CheckRiskLimits()) return;
    if(!CheckTradeCount()) return;
 
@@ -1183,4 +1294,815 @@ void ManageTrades()
       }
    }
 }
+
+//+------------------------------------------------------------------+
+//|              AVAILABILITY CHECKING SYSTEM                         |
+//+------------------------------------------------------------------+
+//| Professional-grade pre-trade validation system                    |
+//| Ensures all prerequisites are met before trading                  |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Initialize the availability checking system                       |
+//+------------------------------------------------------------------+
+void InitAvailabilitySystem()
+{
+   // Initialize all checks to unknown state
+   for(int i = 0; i < 10; i++)
+   {
+      g_checks[i].check_type = (ENUM_CHECK_TYPE)i;
+      g_checks[i].status = AVAIL_OK;
+      g_checks[i].message = "Not checked";
+      g_checks[i].last_check = 0;
+      g_checks[i].retry_count = 0;
+   }
+
+   // Initialize report
+   g_avail_report.overall_status = AVAIL_OK;
+   g_avail_report.checks_passed = 0;
+   g_avail_report.checks_warning = 0;
+   g_avail_report.checks_failed = 0;
+   g_avail_report.checks_critical = 0;
+   g_avail_report.summary = "Initializing...";
+   g_avail_report.report_time = TimeCurrent();
+   g_avail_report.can_trade = false;
+
+   g_availability_ok = false;
+   g_consecutive_failures = 0;
+   g_last_avail_check = 0;
+
+   Print("  Availability checking system initialized");
+}
+
+//+------------------------------------------------------------------+
+//| Master function: Perform all availability checks                  |
+//+------------------------------------------------------------------+
+void PerformAvailabilityCheck()
+{
+   g_last_avail_check = TimeCurrent();
+
+   // Reset counters
+   g_avail_report.checks_passed = 0;
+   g_avail_report.checks_warning = 0;
+   g_avail_report.checks_failed = 0;
+   g_avail_report.checks_critical = 0;
+
+   // Run all individual checks
+   CheckBrokerConnection();
+   CheckSymbolValid();
+   CheckSymbolTradeable();
+   CheckMarketOpen();
+   CheckTradingAllowed();
+   CheckEATrading();
+   CheckAccountValid();
+   CheckMarginSufficient();
+   CheckSpreadAcceptable();
+   CheckDataAvailable();
+
+   // Aggregate results
+   AggregateAvailabilityResults();
+
+   // Handle failures with retry logic
+   if(!g_availability_ok)
+   {
+      g_consecutive_failures++;
+
+      if(g_consecutive_failures <= MaxRetryAttempts)
+      {
+         Print("  AVAILABILITY: Check failed (attempt ", g_consecutive_failures,
+               "/", MaxRetryAttempts, ") - will retry in ", RetryDelaySeconds, "s");
+      }
+      else if(g_consecutive_failures == MaxRetryAttempts + 1)
+      {
+         Print("  AVAILABILITY: Max retries exceeded - trading suspended");
+         if(AlertOnUnavailable)
+            Alert(Symbol(), " - Trading unavailable: ", g_avail_report.summary);
+      }
+   }
+   else
+   {
+      // Reset failure counter on success
+      if(g_consecutive_failures > 0)
+      {
+         Print("  AVAILABILITY: System recovered after ", g_consecutive_failures, " failures");
+         g_consecutive_failures = 0;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check 1: Broker/Server Connection                                 |
+//+------------------------------------------------------------------+
+void CheckBrokerConnection()
+{
+   int idx = CHK_BROKER_CONNECTION;
+   g_checks[idx].last_check = TimeCurrent();
+
+   // Check if connected to server
+   if(!IsConnected())
+   {
+      g_checks[idx].status = AVAIL_CRITICAL;
+      g_checks[idx].message = "Not connected to broker server";
+      return;
+   }
+
+   // Check ping/latency through recent tick
+   datetime last_tick = MarketInfo(Symbol(), MODE_TIME);
+   int data_age = (int)(TimeCurrent() - last_tick);
+
+   if(data_age > MaxDataAgeSeconds * 3)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Server connection unstable (data age: " + IntegerToString(data_age) + "s)";
+      return;
+   }
+
+   if(data_age > MaxDataAgeSeconds)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Possible connection issues (data age: " + IntegerToString(data_age) + "s)";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "Connected (data age: " + IntegerToString(data_age) + "s)";
+}
+
+//+------------------------------------------------------------------+
+//| Check 2: Symbol Validity                                          |
+//+------------------------------------------------------------------+
+void CheckSymbolValid()
+{
+   int idx = CHK_SYMBOL_VALID;
+   g_checks[idx].last_check = TimeCurrent();
+
+   string sym = Symbol();
+
+   // Check if symbol exists in Market Watch
+   double bid = MarketInfo(sym, MODE_BID);
+   double ask = MarketInfo(sym, MODE_ASK);
+
+   if(bid <= 0 || ask <= 0)
+   {
+      g_checks[idx].status = AVAIL_CRITICAL;
+      g_checks[idx].message = "Symbol not found or no price data";
+      return;
+   }
+
+   // Check for valid digits
+   int digits = (int)MarketInfo(sym, MODE_DIGITS);
+   if(digits < 0 || digits > 8)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Invalid symbol configuration (digits: " + IntegerToString(digits) + ")";
+      return;
+   }
+
+   // Check point value
+   double point = MarketInfo(sym, MODE_POINT);
+   if(point <= 0)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Invalid point value";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "Symbol valid (" + sym + ", " + IntegerToString(digits) + " digits)";
+}
+
+//+------------------------------------------------------------------+
+//| Check 3: Symbol Tradeable                                         |
+//+------------------------------------------------------------------+
+void CheckSymbolTradeable()
+{
+   int idx = CHK_SYMBOL_TRADEABLE;
+   g_checks[idx].last_check = TimeCurrent();
+
+   string sym = Symbol();
+
+   // Check trade mode
+   int trade_mode = (int)MarketInfo(sym, MODE_TRADEALLOWED);
+
+   if(trade_mode == 0)
+   {
+      g_checks[idx].status = AVAIL_CRITICAL;
+      g_checks[idx].message = "Trading disabled for this symbol";
+      return;
+   }
+
+   // Check minimum lot
+   double min_lot = MarketInfo(sym, MODE_MINLOT);
+   double max_lot = MarketInfo(sym, MODE_MAXLOT);
+   double lot_step = MarketInfo(sym, MODE_LOTSTEP);
+
+   if(min_lot <= 0 || max_lot <= 0 || lot_step <= 0)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Invalid lot specifications";
+      return;
+   }
+
+   // Check tick value
+   double tick_value = MarketInfo(sym, MODE_TICKVALUE);
+   if(tick_value <= 0)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Cannot calculate tick value - may affect position sizing";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "Tradeable (lot: " + DoubleToString(min_lot, 2) + "-" + DoubleToString(max_lot, 2) + ")";
+}
+
+//+------------------------------------------------------------------+
+//| Check 4: Market Open                                              |
+//+------------------------------------------------------------------+
+void CheckMarketOpen()
+{
+   int idx = CHK_MARKET_OPEN;
+   g_checks[idx].last_check = TimeCurrent();
+
+   // Check spread as indicator of market state
+   // Very high spread often indicates market closed or illiquid
+   double spread = MarketInfo(Symbol(), MODE_SPREAD) * Point;
+   double atr = iATR(Symbol(), Timeframe, 14, 0);
+
+   // If spread is extremely high (> 500% ATR), market is likely closed
+   if(atr > 0 && spread > atr * 5.0)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Market appears closed (extreme spread)";
+      return;
+   }
+
+   // Check recent price movement
+   datetime last_tick = MarketInfo(Symbol(), MODE_TIME);
+   int seconds_since_tick = (int)(TimeCurrent() - last_tick);
+
+   // If no tick for more than 5 minutes, market might be closed
+   if(seconds_since_tick > 300)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "No recent ticks (" + IntegerToString(seconds_since_tick) + "s) - market may be closed";
+      return;
+   }
+
+   // Check if it's weekend
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+
+   // Saturday = 6, Sunday = 0
+   if(dt.day_of_week == 0 || dt.day_of_week == 6)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Weekend - limited liquidity expected";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "Market open";
+}
+
+//+------------------------------------------------------------------+
+//| Check 5: Account Trading Allowed                                  |
+//+------------------------------------------------------------------+
+void CheckTradingAllowed()
+{
+   int idx = CHK_TRADING_ALLOWED;
+   g_checks[idx].last_check = TimeCurrent();
+
+   // Check if trading is allowed for the account
+   if(!IsTradeAllowed())
+   {
+      g_checks[idx].status = AVAIL_CRITICAL;
+      g_checks[idx].message = "Trading not allowed (check account/context)";
+      return;
+   }
+
+   // Check for trade context availability
+   if(IsTradeContextBusy())
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Trade context busy - another EA may be trading";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "Trading allowed";
+}
+
+//+------------------------------------------------------------------+
+//| Check 6: EA Trading Enabled                                       |
+//+------------------------------------------------------------------+
+void CheckEATrading()
+{
+   int idx = CHK_EA_TRADING;
+   g_checks[idx].last_check = TimeCurrent();
+
+   // Check if EA trading is enabled globally
+   if(!IsExpertEnabled())
+   {
+      g_checks[idx].status = AVAIL_CRITICAL;
+      g_checks[idx].message = "Expert Advisors disabled (check AutoTrading button)";
+      return;
+   }
+
+   // Check if DLLs are allowed (sometimes needed for advanced features)
+   if(!IsDllsAllowed())
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "DLLs not allowed - some features may be limited";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "EA trading enabled";
+}
+
+//+------------------------------------------------------------------+
+//| Check 7: Account Valid                                            |
+//+------------------------------------------------------------------+
+void CheckAccountValid()
+{
+   int idx = CHK_ACCOUNT_VALID;
+   g_checks[idx].last_check = TimeCurrent();
+
+   // Check account number
+   int account = AccountNumber();
+   if(account <= 0)
+   {
+      g_checks[idx].status = AVAIL_CRITICAL;
+      g_checks[idx].message = "Invalid account - not logged in";
+      return;
+   }
+
+   // Check account type info
+   string account_name = AccountName();
+   string account_company = AccountCompany();
+
+   if(StringLen(account_name) == 0 || StringLen(account_company) == 0)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Account information incomplete";
+      return;
+   }
+
+   // Check balance
+   double balance = AccountBalance();
+   if(balance <= 0)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Zero or negative balance";
+      return;
+   }
+
+   // Check account currency
+   string currency = AccountCurrency();
+   if(StringLen(currency) == 0)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Account currency not set";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "Account #" + IntegerToString(account) + " (" + currency + ")";
+}
+
+//+------------------------------------------------------------------+
+//| Check 8: Margin Sufficient                                        |
+//+------------------------------------------------------------------+
+void CheckMarginSufficient()
+{
+   int idx = CHK_MARGIN_SUFFICIENT;
+   g_checks[idx].last_check = TimeCurrent();
+
+   double balance = AccountBalance();
+   double equity = AccountEquity();
+   double free_margin = AccountFreeMargin();
+   double margin_level = 0;
+
+   // Calculate margin level if there are open positions
+   double used_margin = AccountMargin();
+   if(used_margin > 0)
+      margin_level = (equity / used_margin) * 100.0;
+
+   // Check if we can open minimum lot
+   double min_lot = MarketInfo(Symbol(), MODE_MINLOT);
+   double margin_required = MarketInfo(Symbol(), MODE_MARGINREQUIRED) * min_lot;
+
+   if(margin_required <= 0)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Cannot calculate margin requirements";
+      return;
+   }
+
+   // Check if free margin is sufficient for minimum trade
+   if(free_margin < margin_required * 1.5)  // 50% buffer
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Insufficient margin (need: " + DoubleToString(margin_required, 2) +
+                              ", have: " + DoubleToString(free_margin, 2) + ")";
+      return;
+   }
+
+   // Check margin level against minimum
+   if(used_margin > 0 && margin_level < MinMarginLevel)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Margin level low (" + DoubleToString(margin_level, 1) +
+                              "% < " + DoubleToString(MinMarginLevel, 1) + "%)";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   if(used_margin > 0)
+      g_checks[idx].message = "Margin OK (level: " + DoubleToString(margin_level, 1) + "%)";
+   else
+      g_checks[idx].message = "Margin OK (free: " + DoubleToString(free_margin, 2) + ")";
+}
+
+//+------------------------------------------------------------------+
+//| Check 9: Spread Acceptable                                        |
+//+------------------------------------------------------------------+
+void CheckSpreadAcceptable()
+{
+   int idx = CHK_SPREAD_ACCEPTABLE;
+   g_checks[idx].last_check = TimeCurrent();
+
+   double spread_points = MarketInfo(Symbol(), MODE_SPREAD);
+   double spread_value = spread_points * Point;
+   double atr = iATR(Symbol(), Timeframe, 14, 0);
+
+   if(atr <= 0)
+   {
+      // Can't evaluate relative to ATR, use absolute check
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Cannot evaluate spread (ATR unavailable)";
+      return;
+   }
+
+   double spread_atr_ratio = spread_value / atr;
+
+   // Critical: spread > 200% ATR
+   if(spread_atr_ratio > 2.0)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Extreme spread (" + DoubleToString(spread_atr_ratio * 100, 0) + "% ATR)";
+      return;
+   }
+
+   // Warning: spread > 100% ATR
+   if(spread_atr_ratio > 1.0)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "High spread (" + DoubleToString(spread_atr_ratio * 100, 0) + "% ATR)";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "Spread OK (" + DoubleToString(spread_points, 1) + " pts / " +
+                           DoubleToString(spread_atr_ratio * 100, 0) + "% ATR)";
+}
+
+//+------------------------------------------------------------------+
+//| Check 10: Price Data Available                                    |
+//+------------------------------------------------------------------+
+void CheckDataAvailable()
+{
+   int idx = CHK_DATA_AVAILABLE;
+   g_checks[idx].last_check = TimeCurrent();
+
+   // Check if we have enough bars for analysis
+   int bars = iBars(Symbol(), Timeframe);
+
+   if(bars < 200)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "Insufficient history (" + IntegerToString(bars) + " bars, need 200+)";
+      return;
+   }
+
+   // Check data freshness
+   datetime last_bar_time = iTime(Symbol(), Timeframe, 0);
+   int bar_age = (int)(TimeCurrent() - last_bar_time);
+
+   // Calculate expected max age based on timeframe
+   int tf_seconds = PeriodSeconds(Timeframe);
+   int max_expected_age = tf_seconds * 2;  // Allow 2x timeframe
+
+   if(bar_age > max_expected_age)
+   {
+      g_checks[idx].status = AVAIL_WARNING;
+      g_checks[idx].message = "Data may be stale (bar age: " + IntegerToString(bar_age) + "s)";
+      return;
+   }
+
+   // Check ATR availability (indicator we use for calculations)
+   double atr = iATR(Symbol(), Timeframe, 14, 0);
+   if(atr <= 0)
+   {
+      g_checks[idx].status = AVAIL_ERROR;
+      g_checks[idx].message = "ATR indicator failed - check data";
+      return;
+   }
+
+   g_checks[idx].status = AVAIL_OK;
+   g_checks[idx].message = "Data OK (" + IntegerToString(bars) + " bars available)";
+}
+
+//+------------------------------------------------------------------+
+//| Aggregate all check results                                       |
+//+------------------------------------------------------------------+
+void AggregateAvailabilityResults()
+{
+   g_avail_report.checks_passed = 0;
+   g_avail_report.checks_warning = 0;
+   g_avail_report.checks_failed = 0;
+   g_avail_report.checks_critical = 0;
+
+   string issues = "";
+   ENUM_AVAILABILITY_STATUS worst_status = AVAIL_OK;
+
+   for(int i = 0; i < 10; i++)
+   {
+      switch(g_checks[i].status)
+      {
+         case AVAIL_OK:
+            g_avail_report.checks_passed++;
+            break;
+         case AVAIL_WARNING:
+            g_avail_report.checks_warning++;
+            if(worst_status < AVAIL_WARNING) worst_status = AVAIL_WARNING;
+            break;
+         case AVAIL_ERROR:
+            g_avail_report.checks_failed++;
+            if(worst_status < AVAIL_ERROR) worst_status = AVAIL_ERROR;
+            if(StringLen(issues) > 0) issues += "; ";
+            issues += g_checks[i].message;
+            break;
+         case AVAIL_CRITICAL:
+            g_avail_report.checks_critical++;
+            worst_status = AVAIL_CRITICAL;
+            if(StringLen(issues) > 0) issues += "; ";
+            issues += g_checks[i].message;
+            break;
+      }
+   }
+
+   g_avail_report.overall_status = worst_status;
+   g_avail_report.report_time = TimeCurrent();
+
+   // Determine if trading is possible
+   g_availability_ok = (g_avail_report.checks_critical == 0);
+
+   if(RequireAllChecksPass)
+      g_availability_ok = (g_avail_report.checks_passed == 10);
+
+   g_avail_report.can_trade = g_availability_ok;
+
+   // Build summary
+   if(worst_status == AVAIL_OK)
+   {
+      g_avail_report.summary = "All systems operational";
+      g_avail_status_text = "● READY";
+      g_avail_status_color = clrLime;
+   }
+   else if(worst_status == AVAIL_WARNING)
+   {
+      g_avail_report.summary = IntegerToString(g_avail_report.checks_warning) + " warnings - trading with caution";
+      g_avail_status_text = "◐ CAUTION";
+      g_avail_status_color = clrYellow;
+   }
+   else if(worst_status == AVAIL_ERROR)
+   {
+      g_avail_report.summary = issues;
+      g_avail_status_text = "○ LIMITED";
+      g_avail_status_color = clrOrange;
+   }
+   else
+   {
+      g_avail_report.summary = issues;
+      g_avail_status_text = "✖ UNAVAILABLE";
+      g_avail_status_color = clrRed;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Print detailed availability report to log                         |
+//+------------------------------------------------------------------+
+void PrintAvailabilityReport()
+{
+   Print("═══════════════════════════════════════════════════════════════");
+   Print("  AVAILABILITY REPORT - ", TimeToString(g_avail_report.report_time, TIME_DATE | TIME_SECONDS));
+   Print("═══════════════════════════════════════════════════════════════");
+
+   for(int i = 0; i < 10; i++)
+   {
+      string status_str;
+      switch(g_checks[i].status)
+      {
+         case AVAIL_OK:       status_str = "[✓] "; break;
+         case AVAIL_WARNING:  status_str = "[!] "; break;
+         case AVAIL_ERROR:    status_str = "[✗] "; break;
+         case AVAIL_CRITICAL: status_str = "[X] "; break;
+      }
+
+      string check_name = GetCheckName((ENUM_CHECK_TYPE)i);
+      Print("  ", status_str, check_name, ": ", g_checks[i].message);
+   }
+
+   Print("───────────────────────────────────────────────────────────────");
+   Print("  SUMMARY: ", g_avail_report.summary);
+   Print("  Passed: ", g_avail_report.checks_passed,
+         " | Warnings: ", g_avail_report.checks_warning,
+         " | Failed: ", g_avail_report.checks_failed,
+         " | Critical: ", g_avail_report.checks_critical);
+   Print("  CAN TRADE: ", g_avail_report.can_trade ? "YES" : "NO");
+   Print("═══════════════════════════════════════════════════════════════");
+}
+
+//+------------------------------------------------------------------+
+//| Get human-readable name for check type                            |
+//+------------------------------------------------------------------+
+string GetCheckName(ENUM_CHECK_TYPE check)
+{
+   switch(check)
+   {
+      case CHK_BROKER_CONNECTION: return "Broker Connection";
+      case CHK_SYMBOL_VALID:      return "Symbol Valid";
+      case CHK_SYMBOL_TRADEABLE:  return "Symbol Tradeable";
+      case CHK_MARKET_OPEN:       return "Market Open";
+      case CHK_TRADING_ALLOWED:   return "Trading Allowed";
+      case CHK_EA_TRADING:        return "EA Trading";
+      case CHK_ACCOUNT_VALID:     return "Account Valid";
+      case CHK_MARGIN_SUFFICIENT: return "Margin Sufficient";
+      case CHK_SPREAD_ACCEPTABLE: return "Spread Acceptable";
+      case CHK_DATA_AVAILABLE:    return "Data Available";
+      default:                    return "Unknown Check";
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Get status icon for display                                       |
+//+------------------------------------------------------------------+
+string GetStatusIcon(ENUM_AVAILABILITY_STATUS status)
+{
+   switch(status)
+   {
+      case AVAIL_OK:       return "✓";
+      case AVAIL_WARNING:  return "!";
+      case AVAIL_ERROR:    return "✗";
+      case AVAIL_CRITICAL: return "X";
+      default:             return "?";
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Get status color for display                                      |
+//+------------------------------------------------------------------+
+color GetStatusColor(ENUM_AVAILABILITY_STATUS status)
+{
+   switch(status)
+   {
+      case AVAIL_OK:       return clrLime;
+      case AVAIL_WARNING:  return clrYellow;
+      case AVAIL_ERROR:    return clrOrange;
+      case AVAIL_CRITICAL: return clrRed;
+      default:             return clrGray;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Create availability status panel on chart                         |
+//+------------------------------------------------------------------+
+void CreateAvailabilityPanel()
+{
+   if(!ShowAvailabilityPanel) return;
+
+   int x_start = 10;
+   int y_start = 50;
+   int line_height = 16;
+   int panel_width = 220;
+   int panel_height = 200;
+
+   // Panel background
+   string bg_name = "AVAIL_Background";
+   ObjectCreate(0, bg_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, bg_name, OBJPROP_XDISTANCE, x_start - 5);
+   ObjectSetInteger(0, bg_name, OBJPROP_YDISTANCE, y_start - 5);
+   ObjectSetInteger(0, bg_name, OBJPROP_XSIZE, panel_width);
+   ObjectSetInteger(0, bg_name, OBJPROP_YSIZE, panel_height);
+   ObjectSetInteger(0, bg_name, OBJPROP_BGCOLOR, C'20,20,30');
+   ObjectSetInteger(0, bg_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, bg_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, bg_name, OBJPROP_COLOR, C'50,50,70');
+   ObjectSetInteger(0, bg_name, OBJPROP_WIDTH, 1);
+
+   // Title
+   CreateLabel("AVAIL_Title", x_start, y_start, "SYSTEM STATUS", clrWhite, 9);
+
+   // Overall status
+   CreateLabel("AVAIL_Status", x_start, y_start + line_height + 5, g_avail_status_text, g_avail_status_color, 10);
+
+   // Individual checks
+   int y = y_start + line_height * 3;
+   for(int i = 0; i < 10; i++)
+   {
+      string icon = GetStatusIcon(g_checks[i].status);
+      color clr = GetStatusColor(g_checks[i].status);
+      string name = GetCheckName((ENUM_CHECK_TYPE)i);
+
+      // Truncate name if too long
+      if(StringLen(name) > 18)
+         name = StringSubstr(name, 0, 18);
+
+      CreateLabel("AVAIL_Check_" + IntegerToString(i), x_start, y,
+                  icon + " " + name, clr, 8);
+      y += line_height;
+   }
+
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Update availability panel                                         |
+//+------------------------------------------------------------------+
+void UpdateAvailabilityPanel()
+{
+   if(!ShowAvailabilityPanel) return;
+
+   // Update overall status
+   ObjectSetString(0, "AVAIL_Status", OBJPROP_TEXT, g_avail_status_text);
+   ObjectSetInteger(0, "AVAIL_Status", OBJPROP_COLOR, g_avail_status_color);
+
+   // Update individual checks
+   for(int i = 0; i < 10; i++)
+   {
+      string obj_name = "AVAIL_Check_" + IntegerToString(i);
+      string icon = GetStatusIcon(g_checks[i].status);
+      color clr = GetStatusColor(g_checks[i].status);
+      string name = GetCheckName((ENUM_CHECK_TYPE)i);
+
+      if(StringLen(name) > 18)
+         name = StringSubstr(name, 0, 18);
+
+      ObjectSetString(0, obj_name, OBJPROP_TEXT, icon + " " + name);
+      ObjectSetInteger(0, obj_name, OBJPROP_COLOR, clr);
+   }
+
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Helper: Create text label                                         |
+//+------------------------------------------------------------------+
+void CreateLabel(string name, int x, int y, string text, color clr, int font_size)
+{
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+}
+
+//+------------------------------------------------------------------+
+//| Get availability status for external queries                      |
+//+------------------------------------------------------------------+
+bool IsSystemAvailable()
+{
+   return g_availability_ok;
+}
+
+//+------------------------------------------------------------------+
+//| Get detailed check result                                         |
+//+------------------------------------------------------------------+
+ENUM_AVAILABILITY_STATUS GetCheckStatus(ENUM_CHECK_TYPE check_type)
+{
+   if(check_type >= 0 && check_type < 10)
+      return g_checks[check_type].status;
+   return AVAIL_ERROR;
+}
+
+//+------------------------------------------------------------------+
+//| Force refresh availability (for manual trigger)                   |
+//+------------------------------------------------------------------+
+void RefreshAvailability()
+{
+   g_last_avail_check = 0;  // Force immediate recheck
+   PerformAvailabilityCheck();
+   PrintAvailabilityReport();
+
+   if(ShowAvailabilityPanel)
+      UpdateAvailabilityPanel();
+}
+
 //+------------------------------------------------------------------+
