@@ -1,12 +1,12 @@
 //+------------------------------------------------------------------+
 //|                        InstitutionalTradingRobot_v4_MQL4.mq4     |
-//|                    PROPERLY CALIBRATED AGGRESSION LEVELS         |
+//|                    DOLLAR-BASED PROFIT TAKING + OPTIONAL SL      |
 //|                         MQL4 - Strategy Tester Ready             |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Institutional Grade Trading"
 #property link      "https://www.mql5.com"
-#property version   "4.50"
-#property description "MQL4 Robot - Professional Control Panel - Pattern-Driven Trading"
+#property version   "4.60"
+#property description "MQL4 Robot - Dollar-Based Profit Taking - Optional SL"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -188,6 +188,12 @@ enum ENUM_BARS
    BR_10 = 10  // 10 Bars
 };
 
+enum ENUM_PROFIT_MODE
+{
+   PROFIT_MODE_DOLLAR,    // Fixed Dollar Amount
+   PROFIT_MODE_RISK       // Risk-Based (R-Multiple)
+};
+
 enum ENUM_GMT
 {
    GMT_N5 = -5,  // GMT-5
@@ -215,6 +221,7 @@ input ENUM_LOT         MinLot = LOT_010;                        // Min Lot
 input ENUM_LOT         MaxLot = LOT_100;                        // Max Lot
 
 input string           _3 = "═══════ STOP LOSS ═══════";
+input bool             UseStopLoss = false;                     // Enable Stop Loss (default: NO SL)
 input ENUM_SL_MODE     SL_Mode = SL_MODE_ATR;                   // Stop Loss Mode
 input ENUM_ATR         SL_ATR_Mult = ATR_20;                    // SL ATR Multiplier
 input ENUM_SL_PIPS     SL_Fixed_Pips = SLP_50;                  // SL Fixed Pips
@@ -228,6 +235,11 @@ input ENUM_LOSS_LIM    WeeklyLoss = LL_10;                      // Weekly Loss L
 
 input string           _5 = "═══════ TARGETS ═══════";
 input ENUM_RR          TP_RR = RR_20;                           // Take Profit R:R
+
+input string           _5b = "═══════ PROFIT TAKING ═══════";
+input ENUM_PROFIT_MODE ProfitTakingMode = PROFIT_MODE_DOLLAR;   // Profit Taking Mode
+input double           SymbolTakeProfit = 20.0;                 // Symbol Take Profit ($)
+input double           AccountTakeProfit = 100.0;               // Account Take Profit ($)
 
 input string           _6 = "═══════ FILTERS ═══════";
 input bool             UseVolumeFilter = true;                  // Volume Filter
@@ -404,8 +416,8 @@ datetime g_last_day = 0;               // Track day changes
 int OnInit()
 {
    Print("===============================================================");
-   Print("  INSTITUTIONAL TRADING ROBOT v4.50 MQL4");
-   Print("  PROFESSIONAL CONTROL PANEL + AVAILABILITY SYSTEM");
+   Print("  INSTITUTIONAL TRADING ROBOT v4.60 MQL4");
+   Print("  DOLLAR-BASED PROFIT TAKING + OPTIONAL STOP LOSS");
    Print("===============================================================");
 
    // Convert inputs
@@ -440,9 +452,13 @@ int OnInit()
    Print("  → Volume Required: ", g_require_volume ? "YES" : "NO");
    Print("  → Counter-Trend: ", g_allow_counter_trend ? "ALLOWED" : "BLOCKED");
    Print("===============================================================");
-   Print("  Stop Loss: ", SL_Mode == SL_MODE_ATR ? DoubleToString(g_sl_atr, 1) + "x ATR" : DoubleToString(g_sl_pips, 0) + " pips");
-   Print("  Take Profit: ", DoubleToString(g_tp_rr, 1), " R:R");
+   Print("  Stop Loss: ", UseStopLoss ? (SL_Mode == SL_MODE_ATR ? DoubleToString(g_sl_atr, 1) + "x ATR" : DoubleToString(g_sl_pips, 0) + " pips") : "DISABLED (No SL)");
+   Print("  Take Profit R:R: ", DoubleToString(g_tp_rr, 1), " R:R");
    Print("  Risk: ", DoubleToString(g_risk * 100, 2), "%");
+   Print("===============================================================");
+   Print("  PROFIT TAKING MODE: ", ProfitTakingMode == PROFIT_MODE_DOLLAR ? "FIXED DOLLAR" : "RISK-BASED");
+   Print("  Symbol Take Profit: $", DoubleToString(SymbolTakeProfit, 2));
+   Print("  Account Take Profit: $", DoubleToString(AccountTakeProfit, 2));
    Print("===============================================================");
 
    if(!EnableTrading)
@@ -561,6 +577,9 @@ void OnTick()
 
    // Manage existing trades first (always run, even when paused)
    ManageTrades();
+
+   // Check profit targets (dollar-based profit taking)
+   CheckProfitTargets();
 
    // Periodic availability check
    if(EnableAvailabilityCheck)
@@ -1212,7 +1231,7 @@ void ExecuteTrade()
    bool is_buy = g_pattern.is_bull;
    double entry = is_buy ? Ask : Bid;
 
-   // Calculate stop loss
+   // Calculate stop loss distance (still needed for lot sizing and TP calculation)
    double sl_distance;
 
    if(SL_Mode == SL_MODE_ATR)
@@ -1231,10 +1250,16 @@ void ExecuteTrade()
          sl_distance *= 10;
    }
 
-   double sl = is_buy ? entry - sl_distance : entry + sl_distance;
-   double tp = entry + (is_buy ? 1 : -1) * sl_distance * g_tp_rr;
+   // Only set SL if UseStopLoss is enabled (default: NO STOP LOSS)
+   double sl = 0;
+   if(UseStopLoss)
+   {
+      sl = is_buy ? entry - sl_distance : entry + sl_distance;
+      sl = NormalizeDouble(sl, Digits);
+   }
 
-   sl = NormalizeDouble(sl, Digits);
+   // Calculate TP based on R:R ratio (still uses sl_distance for calculation)
+   double tp = entry + (is_buy ? 1 : -1) * sl_distance * g_tp_rr;
    tp = NormalizeDouble(tp, Digits);
 
    // Calculate lot
@@ -1251,7 +1276,8 @@ void ExecuteTrade()
 
    if(ticket > 0)
    {
-      Print("TRADE EXECUTED #", ticket, " | ", g_pattern.name, " | ", is_buy ? "BUY" : "SELL", " | Lot: ", lot);
+      string sl_info = UseStopLoss ? DoubleToString(sl, Digits) : "NONE";
+      Print("TRADE EXECUTED #", ticket, " | ", g_pattern.name, " | ", is_buy ? "BUY" : "SELL", " | Lot: ", lot, " | SL: ", sl_info);
       g_has_pattern = false;
 
       if(AlertOnTrade)
@@ -1330,6 +1356,142 @@ void ManageTrades()
                Print("Partial close #", ticket);
          }
       }
+   }
+}
+
+//+------------------------------------------------------------------+
+//|              PROFIT TAKING SYSTEM                                  |
+//+------------------------------------------------------------------+
+//| Dollar-based and Risk-based profit target management               |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Calculate total profit for current symbol (EA trades only)         |
+//+------------------------------------------------------------------+
+double GetSymbolProfit()
+{
+   double total_profit = 0;
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      total_profit += OrderProfit() + OrderSwap() + OrderCommission();
+   }
+
+   return total_profit;
+}
+
+//+------------------------------------------------------------------+
+//| Calculate total profit for all symbols (EA trades only)            |
+//+------------------------------------------------------------------+
+double GetAccountProfit()
+{
+   double total_profit = 0;
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      total_profit += OrderProfit() + OrderSwap() + OrderCommission();
+   }
+
+   return total_profit;
+}
+
+//+------------------------------------------------------------------+
+//| Close all trades for current symbol (EA trades only)               |
+//+------------------------------------------------------------------+
+int CloseSymbolTrades()
+{
+   int closed = 0;
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      bool is_buy = (OrderType() == OP_BUY);
+      double price = is_buy ? Bid : Ask;
+
+      if(OrderClose(OrderTicket(), OrderLots(), price, 10, clrGold))
+         closed++;
+   }
+
+   return closed;
+}
+
+//+------------------------------------------------------------------+
+//| Close all trades on all symbols (EA trades only)                   |
+//+------------------------------------------------------------------+
+int CloseAllEATrades()
+{
+   int closed = 0;
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != MagicNumber) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      string sym = OrderSymbol();
+      bool is_buy = (OrderType() == OP_BUY);
+      double price = is_buy ? MarketInfo(sym, MODE_BID) : MarketInfo(sym, MODE_ASK);
+
+      if(OrderClose(OrderTicket(), OrderLots(), price, 10, clrGold))
+         closed++;
+   }
+
+   return closed;
+}
+
+//+------------------------------------------------------------------+
+//| Check and execute profit taking based on mode                      |
+//+------------------------------------------------------------------+
+void CheckProfitTargets()
+{
+   // Only use dollar-based profit taking when mode is PROFIT_MODE_DOLLAR
+   if(ProfitTakingMode != PROFIT_MODE_DOLLAR) return;
+
+   // Check symbol-level profit target
+   double symbol_profit = GetSymbolProfit();
+   if(symbol_profit >= SymbolTakeProfit && SymbolTakeProfit > 0)
+   {
+      Print("===============================================================");
+      Print("  SYMBOL PROFIT TARGET REACHED: $", DoubleToString(symbol_profit, 2));
+      Print("  Target: $", DoubleToString(SymbolTakeProfit, 2), " on ", Symbol());
+      Print("===============================================================");
+
+      int closed = CloseSymbolTrades();
+      Print("  Closed ", closed, " trades on ", Symbol());
+
+      if(AlertOnTrade)
+         Alert("Symbol profit target reached on ", Symbol(), ": $", DoubleToString(symbol_profit, 2));
+
+      return;  // Don't check account target if we just closed symbol trades
+   }
+
+   // Check account-level profit target
+   double account_profit = GetAccountProfit();
+   if(account_profit >= AccountTakeProfit && AccountTakeProfit > 0)
+   {
+      Print("===============================================================");
+      Print("  ACCOUNT PROFIT TARGET REACHED: $", DoubleToString(account_profit, 2));
+      Print("  Target: $", DoubleToString(AccountTakeProfit, 2));
+      Print("===============================================================");
+
+      int closed = CloseAllEATrades();
+      Print("  Closed ", closed, " trades across all symbols");
+
+      if(AlertOnTrade)
+         Alert("Account profit target reached: $", DoubleToString(account_profit, 2));
    }
 }
 
